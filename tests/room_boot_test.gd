@@ -89,20 +89,35 @@ func _run() -> void:
 	else:
 		print("check %d: printer with collision OK (%d printers)" % [checks, printers.size()])
 
-	# 7. Palette materials match the sage/honey/dark-steel spec.
+	# 7. Palette materials exist AND are actually used on scene meshes.
 	checks += 1
-	var ok_palette := true
+	var palette := {
+		"sage": Color("#738771"),
+		"honey": Color("#C3A076"),
+		"steel": Color("#202B2B"),
+		"terracotta": Color("#DA623A"),
+	}
 	var world = main.get("world")
-	if world == null or not (world is Dictionary) or world.is_empty():
-		ok_palette = false
+	if world == null or not (world is Dictionary):
+		printerr("FAIL: Main.world palette dictionary missing")
+		failures += 1
 	else:
-		for pair in [["sage", Color("#738771")], ["honey", Color("#C3A076")], ["steel", Color("#202B2B")], ["terracotta", Color("#DA623A")]]:
-			var mat: StandardMaterial3D = world.get(pair[0])
-			if mat == null or not mat is StandardMaterial3D or mat.albedo_color != pair[1]:
+		var used := {}
+		for mesh in _all_meshes(main):
+			var mat: Material = mesh.material_override
+			if mat is StandardMaterial3D:
+				for key in palette:
+					if mat.albedo_color == palette[key]:
+						used[key] = true
+		var ok_palette := true
+		for key in palette:
+			if not used.has(key):
 				ok_palette = false
-				printerr("FAIL: palette material '%s' missing or wrong color" % pair[0])
-	if ok_palette:
-		print("check %d: palette materials sage/honey/steel/terracotta OK" % checks)
+				printerr("FAIL: palette color '%s' not used on any mesh" % key)
+		if ok_palette:
+			print("check %d: palette materials used on meshes OK" % checks)
+		else:
+			failures += 1
 
 	print("%d checks — %s" % [checks, "ALL PASS" if failures == 0 else "FAILURES: %d" % failures])
 	_finish(0 if failures == 0 else 1)
@@ -120,6 +135,16 @@ func _all_bodies(main: Node) -> Array:
 	while not stack.is_empty():
 		var n: Node = stack.pop_back()
 		if n is StaticBody3D:
+			found.append(n)
+		stack.append_array(n.get_children())
+	return found
+
+func _all_meshes(main: Node) -> Array:
+	var found: Array = []
+	var stack: Array = [main]
+	while not stack.is_empty():
+		var n: Node = stack.pop_back()
+		if n is MeshInstance3D:
 			found.append(n)
 		stack.append_array(n.get_children())
 	return found

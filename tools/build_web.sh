@@ -1,15 +1,7 @@
 #!/bin/bash
-# Build the web export into web/build/ and stamp the git SHA into the Version autoload.
+# Reproducible release web export. Thin wrapper around tools/build_web.py.
+# Stamp/restore of scripts/Version.gd and output validation live in the
+# Python pipeline (see docs/worker-build-pipeline.md).
 set -euo pipefail
 cd "$(dirname "$0")/.."
-
-SHA=$(git rev-parse --short HEAD 2>/dev/null || echo "unknown")
-echo "Building web export for git $SHA ..."
-
-sed -i.bak "s/const GIT_SHA := \".*\"/const GIT_SHA := \"$SHA\"/" scripts/Version.gd
-rm -f scripts/Version.gd.bak
-
-mkdir -p web/build
-godot --headless --export-release "Web" web/build/index.html
-echo "Done: web/build/"
-ls -la web/build/
+exec python3 tools/build_web.py --engine "${GODOT_BIN:-godot}" "$@"

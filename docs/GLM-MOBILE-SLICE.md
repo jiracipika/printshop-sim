@@ -1,0 +1,14 @@
+# Mobile controls implementation — Astra-approved
+
+Work only /Volumes/HARD/projects/printshop-sim. Read AGENTS.md, scripts/Main.gd, tests/input_pause_test.gd and web_shell/index.html. Preserve all current uncommitted room/pause work. git pull already done by parent, up to date. No git mutations or deployment. Never touch automated-newsletter or pitchforge/pitch-therapy. No model/provider fallback. Stop on quota/auth error.
+
+Implement mobile touchscreen controls NOW, not a plan. Allowed files: scripts/Main.gd, new scripts/TouchControls.gd, tests/touch_controls_test.gd, UID files, web_shell/index.html if needed for touch-action/viewport sizing, docs/worker-mobile.md. Do not modify other tests or design docs. First read relevant files then write code early; bounded 600 seconds.
+
+Requirements:
+- Touch devices show left movement stick, right-side swipe look, E-equivalent Interact button and Pause/Resume. Landscape and portrait safe-area-aware responsive hit areas, labels and touch targets >=48px. Desktop mouse/keyboard retains working behavior, controls hidden there unless explicit test override.
+- Use InputEventScreenTouch/ScreenDrag finger indices, independent move/look ownership, simultaneous two-finger movement and look, clamp movement to unit vector and existing pitch bounds. UI touches must not also initiate look or interaction. Release/cancel clears motion; focus loss/pause clears fingers and axes; resume requires user gesture. Mobile never requires pointer lock. Disable accidental synthetic mouse capture from touch events without breaking desktop.
+- Separate mobile gameplay-active state from desktop captured state. No movement or Interact when paused. Existing desktop tests and room/sim tests must still pass.
+- A reusable TouchControls CanvasLayer can signal interaction/pause and expose move_axis/look delta. Integrate into real Main scene, not detached stub. Document API. Minimal changes, no unrelated refactor.
+- Behavioral RED/GREEN headless test: simultaneous two-finger move/look, releasing one preserves other, third finger not hijacking, deadzone/axis clamping, pause/focus clears touches, interaction gating, desktop regression. Tests must exercise actual handlers/state, not source-text regex or mocks replacing logic. Use test-only explicit enable override if headless cannot detect touch.
+- Run bounded Godot import --quit and touch/input_pause/room_boot/smoke tests with Python subprocess.run(timeout=60), capture output and scan SCRIPT ERROR/Parse Error as well as exits. Fix failures before completion. Do not claim headless proves real browser mobile.
+- Before exit checkpoint docs/worker-mobile.md with exact files, commands/outcomes, limitations, outstanding work; report actual evidence. No helpers outside allowed files. Parent handles browser verification, README, build stamping, commit/push and deployment.

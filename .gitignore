@@ -8,3 +8,10 @@ web/build/
 
 # System
 .DS_Store
+.vercel
+.env*
+.baseline_logs/
+__pycache__/
+tools/run_all_verify.py
+tools/run_one_test.py
+tools/run_probe.py
