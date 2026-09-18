@@ -1,0 +1,13 @@
+Godot Engine v4.7.1.stable.official.a13da4feb - https://godotengine.org
+
+check 1-2: Main.tscn loads and instantiates OK
+FAIL: player CharacterBody3D missing
+FAIL: player spawn not above floor (y<=0)
+check 5: floor StaticBody3D OK
+FAIL: expected >=4 wall collision bodies, got 0
+FAIL: workbench missing
+check 8: printer with collision OK (2 printers)
+SCRIPT ERROR: Invalid cast: could not convert value to 'Dictionary'.
+          at: _run (res://tests/room_boot_test.gd:95)
+          GDScript backtrace (most recent call first):
+              [0] _run (res://tests/room_boot_test.gd:95)

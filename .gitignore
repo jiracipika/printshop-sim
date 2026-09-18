@@ -1,0 +1,10 @@
+# Godot
+.godot/
+*.translation
+export_credentials.cfg
+
+# Web export output (deployed, built fresh each release)
+web/build/
+
+# System
+.DS_Store

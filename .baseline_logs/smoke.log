@@ -1,0 +1,10 @@
+Godot Engine v4.7.1.stable.official.a13da4feb - https://godotengine.org
+
+check 3: sim+board groups OK
+check 4: 2 printers OK
+check 5: job board stocked (3 jobs)
+check 6: job JOB-001 started (Gear Cover, 65 layers)
+check 7: print completed OK in 391 ticks
+check 8: material consumed 390 g
+check 9: job board refilled
+9 checks — ALL PASS
