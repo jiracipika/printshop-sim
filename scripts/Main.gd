@@ -6,6 +6,7 @@ extends Node3D
 const PLAYER_SPEED := 4.5
 const MOUSE_SENS := 0.0025
 const INTERACT_RANGE := 2.8
+const GRAB_RANGE := 2.2
 
 var sim: PrintSim
 var job_board: Node
@@ -13,6 +14,7 @@ var pitch := 0.0
 var yaw := 0.0
 var captured := false
 var paused := true
+var held: Grabbable = null
 
 var _player: CharacterBody3D
 var _camera: Camera3D
@@ -33,6 +35,7 @@ func _ready() -> void:
 	add_to_group("main")
 	_build_world()
 	_build_player()
+	_add_spool(Vector3(0.2, 0.14, 0.2))
 	_build_hud()
 	# Browser-safe start: mouse visible, gameplay paused until a deliberate
 	# left click captures the pointer.
@@ -182,6 +185,125 @@ func _build_world() -> void:
 	job_board.add_to_group("job_board")
 	add_child(job_board)
 
+func _add_spool(pos: Vector3) -> void:
+	var spool := Grabbable.new()
+	spool.name = "Spool"
+	var mesh := MeshInstance3D.new()
+	var cyl := CylinderMesh.new()
+	cyl.top_radius = 0.14
+	cyl.bottom_radius = 0.14
+	cyl.height = 0.28
+	mesh.mesh = cyl
+	var mat := StandardMaterial3D.new()
+	mat.albedo_color = Color("#DA623A")
+	mat.roughness = 0.6
+	mesh.material_override = mat
+	spool.add_child(mesh)
+	var shape := CollisionShape3D.new()
+	var col := CylinderShape3D.new()
+	col.radius = 0.14
+	col.height = 0.28
+	shape.shape = col
+	spool.add_child(shape)
+	# Hold marker: where a grabbed prop attaches, in front of the camera.
+	var hold := Marker3D.new()
+	hold.name = "HoldMarker"
+	hold.position = Vector3(0.25, -0.1, -0.55)
+	_camera.add_child(hold)
+	spool.position = pos
+	spool.mass = 1.0
+	add_child(spool)
+
+## Center-screen grab ray. Returns { "collider": Object, "grabbable": Grabbable }
+## for the first body hit within GRAB_RANGE; walls/bench bodies occlude.
+func _grab_raycast() -> Dictionary:
+	var space := get_world_3d().direct_space_state
+	var q := PhysicsRayQueryParameters3D.create(
+		_camera.global_position,
+		_camera.global_position - _camera.global_transform.basis.z * GRAB_RANGE)
+	q.collision_mask = 1 | 4  # world + grabbable; player (2) excluded
+	q.exclude = [_player.get_rid()]
+	var hit := space.intersect_ray(q)
+	if hit.is_empty():
+		return {}
+	var grab: Grabbable = hit.collider as Grabbable
+	return {"collider": hit.collider, "grabbable": grab}
+
+func _current_grabbable() -> Grabbable:
+	var r := _grab_raycast()
+	return r.get("grabbable", null)
+
+func _try_grab() -> bool:
+	# Second object cannot be grabbed while holding one.
+	if held != null:
+		return false
+	var g := _current_grabbable()
+	if g == null or not g.can_grab():
+		return false
+	g.on_grabbed()
+	held = g
+	g.get_parent().remove_child(g)
+	_camera.get_node("HoldMarker").add_child(g)
+	g.transform = Transform3D.IDENTITY
+	return true
+
+## Placement validator: floor or bench-top surface allowed; overlap with
+## wall/bench (or any world static) invalid. Returns "" if valid else reason.
+func _placement_error(world_pos: Vector3) -> String:
+	var space := get_world_3d().direct_space_state
+	var q := PhysicsShapeQueryParameters3D.new()
+	var shape := CylinderShape3D.new()
+	shape.radius = 0.15
+	shape.height = 0.3
+	q.shape = shape
+	q.transform = Transform3D(Basis.IDENTITY, world_pos)
+	q.collision_mask = 1  # world statics only
+	if not space.intersect_shape(q, 1).is_empty():
+		return "No room here"
+	return ""
+
+func _try_place() -> bool:
+	if held == null:
+		return false
+	var marker: Node3D = _camera.get_node("HoldMarker")
+	var drop_pos: Vector3 = marker.global_position
+	# Drop toward the floor from the hold point; ray finds the support surface.
+	var space := get_world_3d().direct_space_state
+	var rq := PhysicsRayQueryParameters3D.create(drop_pos, drop_pos + Vector3(0, -3.0, 0))
+	rq.collision_mask = 1
+	rq.exclude = [_player.get_rid()]
+	var hit := space.intersect_ray(rq)
+	var target: Vector3 = drop_pos
+	if not hit.is_empty():
+		target = hit.position + Vector3(0, 0.15, 0)  # spool half-height above surface
+	var err := _placement_error(target)
+	if err != "":
+		_set_prompt(err)
+		return false  # keeps the object held
+	var old_parent := held.get_parent()
+	old_parent.remove_child(held)
+	add_child(held)
+	held.global_position = target
+	held.on_released()
+	held = null
+	return true
+
+## E / touch Interact: grab when empty-handed, place when holding.
+## Falls through to printer interaction when empty-handed and nothing
+## grabbable is targeted (desktop pointer-lock / touch-active gating lives
+## in _try_interact; the key path is only reachable while unpaused).
+func _try_grab_or_place() -> void:
+	if paused:
+		return
+	if held != null:
+		_try_place()
+		return
+	if not _try_grab():
+		_try_interact()
+
+func _set_prompt(t: String) -> void:
+	_prompt.text = t
+
 func _make_printer(idx: int) -> Node3D:
 	var root := Node3D.new()
 	root.add_to_group("printers")
@@ -284,7 +406,7 @@ func _build_hud() -> void:
 func _on_touch_interact() -> void:
 	if paused:
 		return
-	_try_interact()
+	_try_grab_or_place()
 
 func _on_touch_pause() -> void:
 	paused = true
@@ -327,7 +449,7 @@ func _unhandled_input(event: InputEvent) -> void:
 		if event.physical_keycode == KEY_ESCAPE:
 			_release_capture()
 		elif event.physical_keycode == KEY_E:
-			_try_interact()
+			_try_grab_or_place()
 	# Deliberate (re)capture: allowed when paused, or when effectively
 	# unlocked (covers the browser case where pointer lock was denied or
 	# lost — raw mode fell back to VISIBLE while captured was still true —
@@ -437,6 +559,10 @@ func _try_interact() -> void:
 	# (resume state). Either gameplay-active path may interact.
 	if not get_mouse_locked() and not touch_controls.is_motion_enabled():
 		return
+	# Holding an object: E means place, not start a print.
+	if held != null:
+		_try_place()
+		return
 	if sim.is_running():
 		return
 	var printer := _nearest_printer()
@@ -446,6 +572,15 @@ func _try_interact() -> void:
 		return
 	var job: Dictionary = job_board.take_next()
 	sim.start_job(job.id, job.model, job.layers)
+
+## Contextual grab/place HUD line, appended to the status panel.
+func _grab_prompt_line() -> String:
+	if held != null:
+		return "[E] Place"
+	var g := _current_grabbable()
+	if g != null and g.can_grab():
+		return "[E] Grab spool"
+	return ""
 
 func _update_hud() -> void:
 	var lines: Array[String] = []
@@ -467,4 +602,7 @@ func _update_hud() -> void:
 			lines.append("Print complete! Jobs waiting: %d" % job_board.get_available_count())
 		PrintSim.State.DONE_FAIL:
 			lines.append("Print FAILED (part detached mid-print).")
+	var grab_line := _grab_prompt_line()
+	if grab_line != "":
+		lines.append(grab_line)
 	_status.text = "\n".join(lines)
