@@ -55,14 +55,14 @@ func _run() -> void:
 		print("check %d: job board stocked (%d jobs)" % [checks, board.get_available_count()])
 
 	# Drive a full print job with manual ticks
-	var job: Dictionary = board.take_next()
-	sim.start_job(job.id, job.model, job.layers)
+	var job: Contract = board.take_next()
+	sim.start_job(job.id, job.model_name, job.layers)
 	checks += 1
 	if not sim.is_running():
 		printerr("FAIL: sim not RUNNING after start_job")
 		failures += 1
 	else:
-		print("check %d: job %s started (%s, %d layers)" % [checks, job.id, job.model, job.layers])
+		print("check %d: job %s started (%s, %d layers)" % [checks, job.id, job.model_name, job.layers])
 
 	var steps := 0
 	while sim.is_running() and steps < 10000:

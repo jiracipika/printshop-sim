@@ -10,6 +10,8 @@ const GRAB_RANGE := 2.2
 
 var sim: PrintSim
 var job_board: Node
+var ledger: Ledger
+var active_contract: Contract = null
 var pitch := 0.0
 var yaw := 0.0
 var captured := false
@@ -34,6 +36,8 @@ const ROOM_H := 3.0
 
 func _ready() -> void:
 	add_to_group("main")
+	ledger = Ledger.new()
+	ledger.credit(2500, "opening funds")
 	_build_world()
 	_build_player()
 	_add_spool(Vector3(0.2, 0.14, 0.2))
@@ -183,6 +187,7 @@ func _build_world() -> void:
 	sim.add_to_group("print_sim")
 	add_child(sim)
 	sim.print_started.connect(_on_print_started)
+	sim.print_finished.connect(_on_print_done)
 	job_board = load("res://scripts/JobBoard.gd").new()
 	job_board.add_to_group("job_board")
 	add_child(job_board)
@@ -557,6 +562,18 @@ func _on_print_started() -> void:
 	for visual in _print_visuals:
 		visual.reset()
 
+## Sim finished: park the contract at INSPECTION (success) or FAILED.
+func _on_print_done(ok: bool) -> void:
+	if active_contract == null:
+		return
+	if ok and active_contract.state == Contract.State.PRINTING:
+		_advance(active_contract, Contract.State.INSPECTION)
+	elif not ok:
+		if active_contract.state in [Contract.State.PREPARING, Contract.State.PRINTING, Contract.State.INSPECTION]:
+			_advance(active_contract, Contract.State.FAILED)
+		_set_prompt("Print FAILED — %s lost. No payout." % active_contract.model_name)
+		active_contract = null
+
 func _nearest_printer() -> Node3D:
 	var best: Node3D = null
 	var best_d := INTERACT_RANGE
@@ -566,6 +583,64 @@ func _nearest_printer() -> Node3D:
 			best_d = d
 			best = p
 	return best
+
+## --- contract economy (task 09) ---
+
+## Legal transition helper. Contract owns the table; Main owns the write.
+func _advance(contract: Contract, to: Contract.State) -> bool:
+	if not Contract.can_transition(contract.state, to):
+		return false
+	contract.state = to
+	return true
+
+func _collect_print() -> bool:
+	var c := active_contract
+	if c == null or c.state != Contract.State.INSPECTION:
+		return false
+	if not _advance(c, Contract.State.PACKED):
+		return false
+	if not _advance(c, Contract.State.DELIVERED):
+		return false
+	if not ledger.pay_once(c.id, c.payout_cents, "payout %s" % c.id):
+		return false
+	active_contract = null
+	_set_prompt("Delivered %s — $%s" % [c.model_name, _cents_str(c.payout_cents)])
+	return true
+
+func _accept_print() -> void:
+	if not job_board.has_available():
+		return
+	var job: Contract = job_board.take_next()
+	# OFFERED -> ACCEPTED -> PREPARING -> PRINTING, all validated.
+	if not _advance(job, Contract.State.ACCEPTED):
+		job_board.put_back(job)
+		return
+	if not _advance(job, Contract.State.PREPARING):
+		_advance(job, Contract.State.FAILED)
+		job_board.put_back(job)
+		return
+	if not ledger.can_afford(job.material_cost_cents):
+		# Refuse BEFORE any irreversible step; hand the job back untouched.
+		job.state = Contract.State.OFFERED
+		job_board.put_back(job)
+		_set_prompt("Not enough funds for materials ($%s)" % _cents_str(job.material_cost_cents))
+		return
+	if not ledger.charge(job.material_cost_cents, "materials %s" % job.id):
+		job.state = Contract.State.OFFERED
+		job_board.put_back(job)
+		_set_prompt("Not enough funds for materials ($%s)" % _cents_str(job.material_cost_cents))
+		return
+	if not _advance(job, Contract.State.PRINTING):
+		_advance(job, Contract.State.FAILED)
+		job_board.put_back(job)
+		# Refund: the print never started.
+		ledger.credit(job.material_cost_cents, "refund materials %s" % job.id)
+		return
+	active_contract = job
+	sim.start_job(job.id, job.model_name, job.layers)
+
+func _cents_str(cents: int) -> String:
+	return "%d.%02d" % [cents / 100, absi(cents) % 100]
 
 func _try_interact() -> void:
 	if paused:
@@ -583,10 +658,14 @@ func _try_interact() -> void:
 	var printer := _nearest_printer()
 	if printer == null:
 		return
+	# Collect a finished print first (INSPECTION park from DONE_OK).
+	if _collect_print():
+		return
+	if active_contract != null:
+		return  # one contract at a time
 	if not job_board.has_available():
 		return
-	var job: Dictionary = job_board.take_next()
-	sim.start_job(job.id, job.model, job.layers)
+	_accept_print()
 
 ## Contextual grab/place HUD line, appended to the status panel.
 func _grab_prompt_line() -> String:
@@ -603,20 +682,35 @@ func _update_hud() -> void:
 	if Engine.has_singleton("Version") or get_node_or_null("/root/Version") != null:
 		version_label = get_node("/root/Version").label()
 	lines.append(version_label)
+	if ledger != null:
+		lines.append("Balance: $%s" % _cents_str(ledger.balance()))
+	if active_contract != null:
+		lines.append("Contract %s — %s [%s] pays $%s" % [
+			active_contract.id,
+			active_contract.model_name,
+			Contract.state_name(active_contract.state),
+			_cents_str(active_contract.payout_cents),
+		])
 	lines.append("Jobs waiting: %d" % job_board.get_available_count())
 	match sim.state:
 		PrintSim.State.IDLE:
 			var p := _nearest_printer()
 			if p != null and job_board.has_available():
-				lines.append("[E] Start print job")
+				if active_contract == null:
+					lines.append("[E] Accept job")
+				else:
+					lines.append("[E] Start print job")
 		PrintSim.State.RUNNING:
 			lines.append("Printing %s — layer %d/%d  %.0f%%" % [
 				sim.model_name, sim.layers_done, sim.layers_total, sim.progress() * 100.0])
 			lines.append("Material: %d g   Risks: %s" % [sim.material_used_g(), str(sim.current_risks())])
 		PrintSim.State.DONE_OK:
-			lines.append("Print complete! Jobs waiting: %d" % job_board.get_available_count())
+			if active_contract != null and active_contract.state == Contract.State.INSPECTION:
+				lines.append("Print complete — [E] Collect  $%s" % _cents_str(active_contract.payout_cents))
+			else:
+				lines.append("Print complete! Jobs waiting: %d" % job_board.get_available_count())
 		PrintSim.State.DONE_FAIL:
-			lines.append("Print FAILED (part detached mid-print).")
+			lines.append("Print FAILED (part detached mid-print). No payout.")
 	var grab_line := _grab_prompt_line()
 	if grab_line != "":
 		lines.append(grab_line)

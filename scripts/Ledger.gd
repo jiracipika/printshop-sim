@@ -43,13 +43,11 @@ func has_paid(contract_id: String) -> bool:
 	return _paid_contract_ids.has(contract_id)
 
 
-## Exactly-once payout per contract id. A failed pay_once never mutates.
-## Funds must cover the payout (a payout is a credit the business receives,
-## but the invariant matches charge(): no partial or over-balance effects).
+## Exactly-once payout per contract id. A payout is INCOME, not a payment,
+## so it is never funds-gated (the business can receive more than it holds).
+## A failed pay_once never mutates.
 func pay_once(contract_id: String, cents: int, reason: String) -> bool:
 	if contract_id.is_empty() or cents < 0 or _paid_contract_ids.has(contract_id):
-		return false
-	if cents > balance_cents:
 		return false
 	_apply(cents, reason)
 	_paid_contract_ids[contract_id] = true

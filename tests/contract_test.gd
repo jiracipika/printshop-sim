@@ -199,10 +199,9 @@ func _test_ledger_exactly_once() -> void:
 	var l := Ledger.new()
 	l.credit(5000, "opening deposit")
 	var n_before := l.transaction_count()
-	check(l.pay_once("C-014", 6400, "payout") == false, "pay_once without funds rejected")
-	check(l.transaction_count() == n_before, "failed pay_once added no transaction")
-	l.credit(5000, "second deposit")
-	check(l.pay_once("C-014", 6400, "payout"), "first pay_once succeeds")
+	# A payout is income: never funds-gated, so it succeeds even beyond the till.
+	check(l.pay_once("C-014", 6400, "payout"), "pay_once succeeds regardless of till")
+	check(l.transaction_count() == n_before + 1, "payout added exactly one transaction")
 	var bal := l.balance()
 	check(not l.pay_once("C-014", 6400, "payout"), "second pay_once rejected")
 	check(l.balance() == bal, "duplicate pay_once did not change balance")
