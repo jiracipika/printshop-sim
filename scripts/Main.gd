@@ -167,13 +167,13 @@ func _build_world() -> void:
 	_printers.append(printer_a)
 
 	var printer_b := _make_printer(1)
-	printer_b.position = Vector3(1.8, 0, -2.4)
+	printer_b.position = Vector3(1.8, 0.8, -2.4)
 	add_child(printer_b)
 	_printers.append(printer_b)
 
 	var stand := MeshInstance3D.new()
 	var stand_box := BoxMesh.new()
-	stand_box.size = Vector3(1.4, 0.8, 1.4)
+	stand_box.size = Vector3(0.8, 0.8, 0.8)
 	stand.mesh = stand_box
 	stand.material_override = steel
 	stand.position = Vector3(1.8, 0.4, -2.4)
