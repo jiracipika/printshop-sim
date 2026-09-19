@@ -12,6 +12,7 @@ var sim: PrintSim
 var job_board: Node
 var ledger: Ledger
 var active_contract: Contract = null
+var packing_station: PackingStation
 var pitch := 0.0
 var yaw := 0.0
 var captured := false
@@ -38,6 +39,7 @@ func _ready() -> void:
 	add_to_group("main")
 	ledger = Ledger.new()
 	ledger.credit(2500, "opening funds")
+	_load_save()
 	_build_world()
 	_build_player()
 	_add_spool(Vector3(0.2, 0.14, 0.2))
@@ -47,6 +49,20 @@ func _ready() -> void:
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 	captured = false
 	paused = true
+
+## --- persistence (task 12) ---
+
+func _load_save() -> void:
+	var payload: Dictionary = load("res://scripts/BrowserSave.gd").load_payload()
+	if payload.is_empty():
+		return
+	ledger.restore(payload.ledger)
+
+func _save_game() -> void:
+	var snapshot: Dictionary = ledger.snapshot()
+	var payload: Dictionary = load("res://scripts/SaveSystem.gd").build_payload(
+		snapshot, {}, snapshot.balance_cents, snapshot.paid_contract_ids)
+	load("res://scripts/BrowserSave.gd").save_payload(payload)
 
 func _build_world() -> void:
 	# Palette materials (sage / honey / dark steel / terracotta).
@@ -182,6 +198,11 @@ func _build_world() -> void:
 	stand.material_override = steel
 	stand.position = Vector3(1.8, 0.4, -2.4)
 	add_child(stand)
+
+	# Packing station against the right wall (task 11).
+	packing_station = load("res://scripts/PackingStation.gd").new()
+	packing_station.position = Vector3(2.4, 0, 1.2)
+	add_child(packing_station)
 
 	sim = PrintSim.new()
 	sim.add_to_group("print_sim")
@@ -597,14 +618,29 @@ func _collect_print() -> bool:
 	var c := active_contract
 	if c == null or c.state != Contract.State.INSPECTION:
 		return false
+	# Pack at the station: grade via QualityCheck (inside PackingStation),
+	# payout scaled by grade. F-grade prints can't be delivered.
+	var result := packing_station.try_pack(c, {
+		"final_layer": sim.layers_done,
+		"total_layers": sim.layers_total,
+		"risks": {
+			"support_need": sim.support_need,
+			"adhesion_risk": sim.adhesion_risk,
+			"stability_risk": sim.stability_risk,
+		},
+	})
+	if not result.get("packed", false):
+		_set_prompt("Quality %s — %s not deliverable" % [result.get("grade", "?"), c.model_name])
+		return false
 	if not _advance(c, Contract.State.PACKED):
 		return false
 	if not _advance(c, Contract.State.DELIVERED):
 		return false
-	if not ledger.pay_once(c.id, c.payout_cents, "payout %s" % c.id):
+	if not ledger.pay_once(c.id, result.payout_cents, "payout %s" % c.id):
 		return false
 	active_contract = null
-	_set_prompt("Delivered %s — $%s" % [c.model_name, _cents_str(c.payout_cents)])
+	_save_game()
+	_set_prompt("Delivered %s (%s) — $%s" % [c.model_name, result.grade, _cents_str(result.payout_cents)])
 	return true
 
 func _accept_print() -> void:

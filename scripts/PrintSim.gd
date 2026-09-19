@@ -27,6 +27,16 @@ var stability_risk := 0.20
 var failure_seeded := false
 var _failed := false
 
+## Task 09 seam: deterministic risk-driven failure. Main writes the evaluated
+## prep risks into these fields BEFORE start_job; start_job rolls ONE outcome
+## for the whole print (no per-tick RNG): a deterministic pseudo-random draw
+## keyed on job_id only, normalized 0..1 — no global RNG state, so the same
+## job_id + same risks always produce the same outcome across runs/instances.
+## failure_chance = max(0, max(risks) - 0.4) * failure_threshold; a roll below
+## that means the print fails mid-way (tick = _failure_roll * layers_total).
+var failure_threshold: float = 0.55
+var _failure_tick: int = -1
+
 var state: State = State.IDLE
 
 func get_state_name() -> String:
@@ -52,8 +62,27 @@ func start_job(id: String, model: String, layers: int) -> void:
 	elapsed_real_time_s = 0.0
 	_tick_accum = 0.0
 	_failed = false
+	_failure_tick = -1
+	if not failure_seeded:
+		_roll_failure_tick()
 	state = State.RUNNING
 	print_started.emit()
+
+## One deterministic outcome roll per print (task 09). Hash is Godot's builtin
+## String hash — stable for the same string across runs and platforms in a
+## session; no RandomNumberGenerator / global RNG state involved.
+func _roll_failure_tick() -> void:
+	var worst: float = maxf(maxf(support_need, adhesion_risk), stability_risk)
+	var chance: float = maxf(0.0, worst - 0.4) * failure_threshold
+	if chance <= 0.0:
+		_failure_tick = -1
+		return
+	var draw := float(absi(hash(job_id)) % 100000) / 100000.0
+	if draw < chance:
+		# Deterministic mid-print tick for the failure.
+		_failure_tick = maxi(1, int(draw / chance * float(layers_total)))
+	else:
+		_failure_tick = -1
 
 func estimated_print_time_s() -> float:
 	# simulated print seconds = ticks needed x sim-seconds per tick
@@ -104,6 +133,8 @@ func _step_tick() -> void:
 	layers_done += 1
 	if failure_seeded and layers_done == int(layers_total / 2):  # seeded mid-print failure
 		_failed = true
+	elif _failure_tick >= 0 and layers_done == _failure_tick:
+		_failed = true  # risk-rolled deterministic failure (task 09 seam)
 	if layers_done >= layers_total:
 		state = State.DONE_OK
 		print_finished.emit(true)
