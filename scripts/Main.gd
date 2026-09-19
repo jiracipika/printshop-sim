@@ -5,7 +5,7 @@ extends Node3D
 
 const PLAYER_SPEED := 4.5
 const MOUSE_SENS := 0.0025
-const INTERACT_RANGE := 2.8
+const INTERACT_RANGE := 3.0
 const GRAB_RANGE := 2.2
 
 var sim: PrintSim
@@ -19,6 +19,7 @@ var held: Grabbable = null
 var _player: CharacterBody3D
 var _camera: Camera3D
 var _printers: Array[Node3D] = []
+var _print_visuals: Array[Node3D] = []
 var _hud: CanvasLayer
 var _status: Label
 var _prompt: Label
@@ -181,6 +182,7 @@ func _build_world() -> void:
 	sim = PrintSim.new()
 	sim.add_to_group("print_sim")
 	add_child(sim)
+	sim.print_started.connect(_on_print_started)
 	job_board = load("res://scripts/JobBoard.gd").new()
 	job_board.add_to_group("job_board")
 	add_child(job_board)
@@ -305,44 +307,20 @@ func _set_prompt(t: String) -> void:
 	_prompt.text = t
 
 func _make_printer(idx: int) -> Node3D:
-	var root := Node3D.new()
-	root.add_to_group("printers")
+	var root: Node3D = load("res://scripts/Printer.gd").new()
+	root.name = "Printer%d" % idx
 	root.set_meta("printer_index", idx)
 
-	var body := MeshInstance3D.new()
-	var box := BoxMesh.new()
-	box.size = Vector3(1.2, 1.2, 1.2)
-	body.mesh = box
-	var mat := StandardMaterial3D.new()
-	mat.albedo_color = Color("#202B2B") if idx == 0 else Color("#DA623A")
-	mat.roughness = 0.6
-	body.material_override = mat
-	body.position = Vector3(0, 0.6, 0)
-	root.add_child(body)
-
-	var static_body := StaticBody3D.new()
-	static_body.collision_layer = 1
-	var col := CollisionShape3D.new()
-	var shape := BoxShape3D.new()
-	shape.size = Vector3(1.2, 1.2, 1.2)
-	col.shape = shape
-	static_body.add_child(col)
-	static_body.position = Vector3(0, 0.6, 0)
-	root.add_child(static_body)
-
-	var nozzle := MeshInstance3D.new()
-	var nozzle_mesh := BoxMesh.new()
-	nozzle_mesh.size = Vector3(0.16, 0.5, 0.16)
-	nozzle.mesh = nozzle_mesh
-	var nozzle_mat := StandardMaterial3D.new()
-	nozzle_mat.albedo_color = Color(0.85, 0.85, 0.9)
-	nozzle.material_override = nozzle_mat
-	nozzle.position = Vector3(0, 1.45, 0)
-	root.add_child(nozzle)
+	# PrintVisual sits on the bed plate (bed top = 0.10 above printer origin).
+	var visual: Node3D = load("res://scripts/PrintVisual.gd").new()
+	visual.name = "PrintVisual"
+	visual.position = Vector3(0, 0.10, 0)
+	root.add_child(visual)
+	_print_visuals.append(visual)
 
 	var label := Label3D.new()
 	label.text = "Printer %d" % (idx + 1)
-	label.position = Vector3(0, 1.9, 0)
+	label.position = Vector3(0, 0.85, 0)
 	label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
 	label.modulate = Color(1, 0.85, 0.4)
 	root.add_child(label)
@@ -540,7 +518,44 @@ func _physics_process(delta: float) -> void:
 		_player.velocity.y -= 14.0 * delta
 	_player.move_and_slide()
 	sim.tick(delta)
+	_update_print_visuals(delta)
 	_update_hud()
+
+## Drive the per-printer deposition visual from the sim (task 04).
+## Only one printer prints at a time; the visual shows on printer 0 unless
+## the nearest printer is closer than a small threshold while RUNNING.
+func _update_print_visuals(delta: float) -> void:
+	var target := 0  # nearest-active printer, else printer 0
+	if _print_visuals.is_empty():
+		return
+	var running := sim.is_running()
+	var done := sim.state == PrintSim.State.DONE_OK or sim.state == PrintSim.State.DONE_FAIL
+	for i in range(_print_visuals.size()):
+		var visual = _print_visuals[i]
+		var is_active_printer := (i == target) and (running or done)
+		if running and sim.state == PrintSim.State.RUNNING and is_active_printer:
+			visual.set_progress(sim.progress(), sim.model_name)
+		elif is_active_printer:
+			# DONE_OK: hold final shape. DONE_FAIL: gray it out once.
+			visual.set_progress(sim.progress(), sim.model_name)
+			if sim.state == PrintSim.State.DONE_FAIL and not visual.is_failed():
+				visual.mark_failed()
+		else:
+			visual.reset()
+
+	# Nozzle "life": slow oscillation while RUNNING, on the active printer.
+	if running:
+		var printer = _printers[target]
+		if printer != null and printer.get("set_nozzle_scan") != null:
+			printer.set_nozzle_scan(elapsed_nozzle_clock)
+	elapsed_nozzle_clock += delta
+
+var elapsed_nozzle_clock := 0.0
+
+## Called whenever a fresh job begins so the visual restarts clean.
+func _on_print_started() -> void:
+	for visual in _print_visuals:
+		visual.reset()
 
 func _nearest_printer() -> Node3D:
 	var best: Node3D = null
