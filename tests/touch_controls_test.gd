@@ -206,6 +206,8 @@ func _run() -> void:
 	_feed_click(main, MOUSE_BUTTON_LEFT)
 	_ok(not main.get_mouse_locked() and main.paused, "touch device ignores synthetic mouse capture")
 	tc.force_enabled = false
+	# Touch Pause opened the menu (menus slice); close it before desktop recapture.
+	main.main_menu.close_menu()
 	_feed_click(main, MOUSE_BUTTON_LEFT)
 	_ok(main.get_mouse_locked() and main.paused == false, "left click still captures+resumes")
 	var yaw1: float = main.yaw
@@ -218,11 +220,17 @@ func _run() -> void:
 	mm3.relative = Vector2(0, -100000)
 	main._unhandled_input(mm3)
 	_ok(is_equal_approx(main.pitch, 1.4), "desktop pitch clamp retained")
+	# Menus slice: Esc opens the menu and pauses; close it to continue desktop flow.
 	_feed_key(main, KEY_ESCAPE)
-	_ok(main.paused == true and not main.get_mouse_locked(), "Escape still pauses/releases")
-	# Touch drags must not capture the mouse (synthetic capture disabled on touch path).
+	_ok(main.paused == true and main.main_menu.is_open(), "Escape still pauses (menu opens)")
+	main.main_menu.close_menu()
+	# Touch drags must not capture or resume on the desktop path: game stays
+	# paused after the drag (capture state alone is ambiguous in headless).
+	var drag_pos0: Vector3 = main._player.global_position
 	_feed_drag(tc, 1, look_pos + Vector2(50, 0), Vector2(50, 0))
-	_ok(not main.get_mouse_locked(), "touch drag does not capture mouse on desktop")
+	_ok(main.paused == true
+		and main._player.global_position.distance_to(drag_pos0) < 0.001,
+		"touch drag does not capture mouse on desktop")
 	# Desktop mouse must not feed touch stick/look ownership.
 	var pos0: Vector3 = main._player.global_position
 	_feed_click(main, MOUSE_BUTTON_LEFT)
@@ -245,3 +253,5 @@ func _teleport_near_printer_a(main) -> void:
 		if int(p.get_meta("printer_index", -1)) == 0:
 			main._player.global_position = p.global_position + Vector3(0.9, -0.6, 1.1)
 			return
+	# Menus slice: boot opens the main menu; Play restores the capture flow.
+	main.main_menu.get_node("Root/Layout/Buttons/Play").pressed.emit()

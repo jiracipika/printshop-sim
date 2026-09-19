@@ -1,5 +1,7 @@
 extends SceneTree
 
+const BrowserSave = preload("res://scripts/BrowserSave.gd")
+
 ## Economy loop test (task 09): contracts + money wired into the real Main scene.
 ## Run: timeout 60 godot --headless --path . -s tests/economy_test.gd
 ## RED before Main/JobBoard economy wiring; GREEN after.
@@ -49,6 +51,7 @@ func _run() -> void:
 	if packed == null:
 		_finish(1)
 		return
+	BrowserSave.clear()  # fresh-boot economy assertions need no persisted save
 	main = packed.instantiate()
 	root.add_child(main)
 	await physics_frame

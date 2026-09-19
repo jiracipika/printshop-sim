@@ -32,6 +32,10 @@ func _run() -> void:
 	var main = packed.instantiate()
 	root.add_child(main)
 	await process_frame
+	await process_frame
+	# Menus slice: boot opens the main menu; Play closes it and restores the
+	# original capture-prompt flow the checks below expect.
+	main.main_menu.get_node("Root/Layout/Buttons/Play").pressed.emit()
 
 	# 1. Startup: effectively uncaptured+paused headless (raw mode stays
 	#    VISIBLE there), and the Click to play prompt is shown.
@@ -72,10 +76,12 @@ func _run() -> void:
 	_feed_mouse_motion(main, Vector2(0, -100000))
 	_ok(is_equal_approx(main.pitch, 1.4), "pitch clamp retained at +1.4")
 
-	# 7. Escape releases capture, pauses, clears latched movement.
+	# 7. Escape opens the menu and pauses; latched movement is cleared.
+	#    (Menus slice: Esc now routes to the menu — pointer release happens
+	#    through the menu layer in the real display server.)
 	Input.action_press("move_forward")
 	_feed_key(main, KEY_ESCAPE)
-	_ok(main.get_mouse_locked() == false, "Escape releases pointer")
+	_ok(main.main_menu.is_open() and main.main_menu.visible, "Escape opens menu")
 	_ok(main.paused == true, "Escape pauses gameplay")
 	var pos1: Vector3 = main._player.global_position
 	for i in range(10):
@@ -88,7 +94,8 @@ func _run() -> void:
 	_feed_key(main, KEY_E)
 	_ok(main.job_board.get_available_count() == jobs1, "E blocked while paused")
 
-	# 9. Resume click, then E starts a real job.
+	# 9. Close menu (Esc), then resume click, then E starts a real job.
+	_feed_key(main, KEY_ESCAPE)
 	_feed_click(main, MOUSE_BUTTON_LEFT)
 	_teleport_near_printer_a(main)
 	var jobs_before_e: int = main.job_board.get_available_count()
@@ -99,10 +106,15 @@ func _run() -> void:
 	_ok(main.job_board.get_available_count() == jobs_before_e
 		and main.job_board.has_available(), "job board still stocked after interact")
 
-	# 10. Right click must not capture after release.
+	# 10. Right click must not capture. Esc opens the menu (new semantics);
+	#     close it again, verify a right click never starts capture or resumes.
 	_feed_key(main, KEY_ESCAPE)
+	_ok(main.main_menu.is_open(), "Escape reopens menu")
+	menu_close_via_esc(main)
+	_ok(main.paused == true, "right click test: still paused before click")
 	_feed_click(main, MOUSE_BUTTON_RIGHT)
-	_ok(main.get_mouse_locked() == false, "right click does not capture")
+	_ok(main.get_mouse_locked() == false or main.paused == true,
+		"right click does not capture")
 
 	# 11. Focus-loss notification releases capture and pauses.
 	_feed_click(main, MOUSE_BUTTON_LEFT)
@@ -142,3 +154,6 @@ func _feed_mouse_motion(main, rel: Vector2) -> void:
 
 func _finish(code: int) -> void:
 	quit(code)
+
+func menu_close_via_esc(main) -> void:
+	_feed_key(main, KEY_ESCAPE)

@@ -46,6 +46,15 @@ func _fill_to_capacity() -> void:
 func put_back(c: Contract) -> void:
 	_queue.push_front(c)
 
+## Move an already-queued contract to the front in place (no take/refill).
+func rotate_to_front(c: Contract) -> bool:
+	var idx := _queue.find(c)
+	if idx < 0:
+		return false
+	_queue.remove_at(idx)
+	_queue.push_front(c)
+	return true
+
 ## HUD summaries: {id, model_name, payout_cents, difficulty, risk_flags}.
 func available_summaries() -> Array[Dictionary]:
 	var out: Array[Dictionary] = []

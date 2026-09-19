@@ -27,6 +27,66 @@ var _hud: CanvasLayer
 var _status: Label
 var _prompt: Label
 var touch_controls: TouchControls
+var main_menu: MainMenu
+var debug_panel: DebugPanel
+var last_pack_grade := ""
+var save_status_line := "no save yet"
+var _boot_prompt := "Click to play"
+
+## --- menus slice -----------------------------------------------------------
+
+func _on_menu_play() -> void:
+	# Menu closes; the existing capture prompt flow takes over from here.
+	main_menu.close_menu()
+	_prompt.text = _boot_prompt
+
+func _on_menu_contracts() -> void:
+	main_menu.show_contracts(job_board.available_summaries())
+
+## Esc routing: menu open -> close to the resume prompt; playing -> open the
+## menu and pause. Touch Pause button also lands here.
+func _route_escape() -> void:
+	if main_menu.is_open() and main_menu.visible:
+		if main_menu.contracts_visible():
+			# Esc inside the contracts sheet returns to the main menu panel.
+			main_menu.open_menu()
+		else:
+			main_menu.close_menu()
+			_prompt.text = _boot_prompt
+		return
+	main_menu.open_menu()
+	paused = true
+	touch_controls.set_motion_enabled(false)
+	_prompt.text = ""
+
+## Debug-panel seam: start the highest-risk offered fixture via the REAL
+## accept path (used by DebugPanel action [1]).
+func debug_spawn_test_print() -> bool:
+	if active_contract != null or sim.is_running() or not job_board.has_available():
+		return false
+	var best: Contract = null
+	var best_score := -1.0
+	for c in job_board._queue:
+		var score := float(c.risk_flags.size()) * 10.0 + float(c.difficulty)
+		if score > best_score:
+			best_score = score
+			best = c
+	if best == null:
+		return false
+	# Move the chosen job to the front of the queue in place (no take/put
+	# rotation — take_next refills as it pops, which makes rotation lossy).
+	job_board.rotate_to_front(best)
+	var before := ledger.balance()
+	_accept_print()
+	if active_contract != best:
+		return false
+	# Apply the chosen fixture's prep risks so risks/est time reflect it.
+	var eval: Dictionary = load("res://scripts/PrepSystem.gd").evaluate(best, "upright")
+	if eval.get("valid", false):
+		sim.support_need = eval.support_need
+		sim.adhesion_risk = eval.adhesion_risk
+		sim.stability_risk = eval.stability_risk
+	return ledger.balance() <= before + best.material_cost_cents and sim.is_running()
 
 ## Room palette (task 01 spec): exposed for tests and future theming.
 var world := {}
@@ -62,7 +122,9 @@ func _save_game() -> void:
 	var snapshot: Dictionary = ledger.snapshot()
 	var payload: Dictionary = load("res://scripts/SaveSystem.gd").build_payload(
 		snapshot, {}, snapshot.balance_cents, snapshot.paid_contract_ids)
-	load("res://scripts/BrowserSave.gd").save_payload(payload)
+	var ok: bool = load("res://scripts/BrowserSave.gd").save_payload(payload)
+	save_status_line = "%s at %s" % ["saved ok" if ok else "save FAILED",
+		Time.get_time_string_from_system()]
 
 func _build_world() -> void:
 	# Palette materials (sage / honey / dark steel / terracotta).
@@ -400,10 +462,24 @@ func _build_hud() -> void:
 	touch_controls.pause_requested.connect(_on_touch_pause)
 	touch_controls.resume_requested.connect(_on_touch_resume)
 	add_child(touch_controls)
+
+	# Menus slice: main menu at boot; gameplay prompt suppressed while open.
+	main_menu = MainMenu.new()
+	add_child(main_menu)
+	main_menu.play_pressed.connect(_on_menu_play)
+	main_menu.contracts_pressed.connect(_on_menu_contracts)
+	main_menu.open_menu()
+
+	# Menus slice: dev-only debug panel (hidden by default; debug builds only).
+	debug_panel = load("res://scripts/DebugPanel.gd").new()
+	debug_panel.main = self
+	add_child(debug_panel)
+
 	# Startup prompt must tell mobile users the real gesture: the boot state is
 	# paused and mobile has no pointer-lock click — the way in is the Resume tap.
-	_prompt.text = "Tap Resume to play" if touch_controls.effective_enabled() \
-			else "Click to play"
+	_boot_prompt = "Tap Resume to play" if touch_controls.effective_enabled() \
+		else "Click to play"
+	_prompt.text = ""  # suppressed while the main menu is open
 
 ## --- touch (mobile) state — separate from desktop `captured` pointer lock --
 
@@ -416,6 +492,7 @@ func _on_touch_pause() -> void:
 	paused = true
 	touch_controls.set_motion_enabled(false)
 	_prompt.text = "Paused — tap Resume"
+	_route_escape()  # menus slice: touch Pause opens the main menu
 
 func _on_touch_resume() -> void:
 	paused = false
@@ -451,15 +528,17 @@ func _unhandled_input(event: InputEvent) -> void:
 		return
 	if event is InputEventKey and event.pressed and not event.echo:
 		if event.physical_keycode == KEY_ESCAPE:
-			_release_capture()
+			_route_escape()
 		elif event.physical_keycode == KEY_E:
 			_try_grab_or_place()
 	# Deliberate (re)capture: allowed when paused, or when effectively
 	# unlocked (covers the browser case where pointer lock was denied or
 	# lost — raw mode fell back to VISIBLE while captured was still true —
 	# so the next click can re-request it instead of soft-locking).
+	# While the main menu is open, clicks belong to the menu: never capture.
 	elif event is InputEventMouseButton and event.pressed \
 			and event.button_index == MOUSE_BUTTON_LEFT \
+			and not main_menu.is_open() \
 			and (paused or not get_mouse_locked()):
 		Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
 		captured = true
@@ -639,6 +718,7 @@ func _collect_print() -> bool:
 	if not ledger.pay_once(c.id, result.payout_cents, "payout %s" % c.id):
 		return false
 	active_contract = null
+	last_pack_grade = result.grade
 	_save_game()
 	_set_prompt("Delivered %s (%s) — $%s" % [c.model_name, result.grade, _cents_str(result.payout_cents)])
 	return true
