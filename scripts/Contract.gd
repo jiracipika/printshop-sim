@@ -4,6 +4,10 @@ extends Resource
 ## Task 08 — one typed contract resource for the contract loop (design/implementation-plan.md).
 ## Pure data + validation + state machine. No gameplay integration in this slice.
 ##
+## Rush contracts: rush=true marks a premium job with a short deadline. Data-level
+## only — fixture rush jobs carry deadline_days <= 2 and a payout roughly 1.3-1.6x
+## the non-rush norm for their difficulty; Main applies any gameplay effects.
+##
 ## State transition table (documented; FAILED reachable exactly from PREPARING / PRINTING /
 ## INSPECTION; DELIVERED only from PACKED):
 ##
@@ -38,6 +42,7 @@ const VALID_RISK_FLAGS: Array[String] = ["overhangs", "bed adhesion", "stability
 @export var risk_flags: Array[String] = []
 @export var layers: int = 0
 @export var deadline_days: int = 0
+@export var rush: bool = false
 @export var state: State = State.OFFERED
 
 static var _RISK_FLAG_SET: Dictionary = {
@@ -99,8 +104,12 @@ static func state_name(s: State) -> String:
 	return State.keys()[s]
 
 
-## Deterministic fixture jobs (task 08). Values inspired by design/menu-contracts.html,
-## converted to integer cents. No RNG; the same list every call.
+## Deterministic fixture jobs (task 08, expanded). Values inspired by
+## design/menu-contracts.html, converted to integer cents. No RNG; the same
+## list every call. C-014..C-017 keep their original order and values (existing
+## suites depend on the rotation order); C-018..C-021 widen the pool with more
+## varied clients/models and two rush jobs (rush = deadline_days <= 2 plus a
+## payout roughly 1.3-1.6x the non-rush norm for the same difficulty).
 static func make_fixture_jobs() -> Array:
 	var jobs: Array = []
 
@@ -151,5 +160,55 @@ static func make_fixture_jobs() -> Array:
 	hook.layers = 310
 	hook.deadline_days = 4
 	jobs.append(hook)
+
+	var gauge := new()
+	gauge.id = "C-018"
+	gauge.client = "Theo / Farmers market"
+	gauge.model_name = "Event signage clip set"
+	gauge.payout_cents = 9000        # rush premium (~1.4x the diff-2 norm of 6400)
+	gauge.material_cost_cents = 700
+	gauge.difficulty = 2
+	gauge.risk_flags = ["overhangs"]
+	gauge.layers = 150
+	gauge.deadline_days = 2
+	gauge.rush = true
+	jobs.append(gauge)
+
+	var bike := new()
+	bike.id = "C-019"
+	bike.client = "Odalys / Bike co-op"
+	bike.model_name = "Derailleur alignment gauge"
+	bike.payout_cents = 11000        # standard rate for diff 4, generous deadline
+	bike.material_cost_cents = 2600
+	bike.difficulty = 4
+	bike.risk_flags = ["stability"]
+	bike.layers = 440
+	bike.deadline_days = 6
+	jobs.append(bike)
+
+	var ramen := new()
+	ramen.id = "C-020"
+	ramen.client = "Bram / Late Night Ramen"
+	ramen.model_name = "Countdown order stand"
+	ramen.payout_cents = 12400       # rush premium (~1.4x the diff-3 norm of 8750)
+	ramen.material_cost_cents = 1400
+	ramen.difficulty = 3
+	ramen.risk_flags = ["bed adhesion", "stability"]
+	ramen.layers = 220
+	ramen.deadline_days = 1
+	ramen.rush = true
+	jobs.append(ramen)
+
+	var library := new()
+	library.id = "C-021"
+	library.client = "June / Ridgeview library"
+	library.model_name = "Story-hour puppet joints"
+	library.payout_cents = 3900      # standard rate for diff 1, no rush premium
+	library.material_cost_cents = 520
+	library.difficulty = 1
+	library.risk_flags = []
+	library.layers = 90
+	library.deadline_days = 4
+	jobs.append(library)
 
 	return jobs

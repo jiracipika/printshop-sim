@@ -16,16 +16,51 @@ const BASE_FAILURE_THRESHOLD := 0.55
 const RENT_CENTS := 400
 const LATE_PAYOUT_FACTOR := 0.5
 
-var sim: PrintSim
 var job_board: Node
 var ledger: Ledger
 var upgrades: Upgrades
 var day_cycle: DayCycle
 var rent_debt_cents := 0
-var active_contract: Contract = null
-var active_contract_day := 0    # shop day the active contract was accepted on
-var active_printer_idx := 0     # printer the active contract was accepted at
 var packing_station: PackingStation
+
+## --- machines (v0.3.0): true parallel printing -------------------------------
+## One entry per printer: {idx, sim, contract, day, orient, orient_pending,
+## part, scrap}. machines[0] is the bench printer (the historical single-
+## machine path); machines[1] is the purchasable pro machine. The `sim`,
+## `active_contract` and friends below are backward-compatible accessors over
+## the FOCUSED machine (the printer the player last interacted with), so
+## existing tests and the debug panel keep working unchanged.
+var machines: Array[Dictionary] = []
+var _focus := 0
+
+func _machine(i: int) -> Dictionary:
+	if machines.is_empty():
+		return {}
+	return machines[clampi(i, 0, machines.size() - 1)]
+
+var sim: PrintSim:
+	get: return _machine(_focus).get("sim")
+
+var active_contract: Contract:
+	get: return _machine(_focus).get("contract")
+
+var active_contract_day: int:
+	get: return int(_machine(_focus).get("day"))
+
+var active_printer_idx: int:
+	get: return int(_machine(_focus).get("idx"))
+
+var orientation_index: int:
+	get: return int(_machine(_focus).get("orient"))
+	set(value): _machine(_focus)["orient"] = value
+
+var orientation_pending: bool:
+	get: return bool(_machine(_focus).get("orient_pending"))
+	set(value): _machine(_focus)["orient_pending"] = value
+
+var active_part: Grabbable:
+	get: return _machine(_focus).get("part")
+
 var settings := {"mouse_sens_scale": 1.0, "sfx_volume": 0.8, "invert_y": false}
 var _settings_dirty := false
 var sfx: Sfx
@@ -36,13 +71,6 @@ var yaw := 0.0
 var captured := false
 var paused := true
 var held: Grabbable = null
-## Printed part awaiting delivery (meta part_contract = active contract id).
-var active_part: Grabbable = null
-var _scrap_armed := false
-## Prep state: orientation under consideration for the active contract.
-## E while PREPARING previews (advances the index); E again confirms.
-var orientation_index := 0
-var orientation_pending := false
 
 var _player: CharacterBody3D
 var _camera: Camera3D
@@ -138,9 +166,13 @@ func _route_escape() -> void:
 	_prompt.text = ""
 
 ## Debug-panel seam: start the highest-risk offered fixture via the REAL
-## accept + confirm path (used by DebugPanel action [1]).
+## accept + confirm path on machine 0 (used by DebugPanel action [1]).
 func debug_spawn_test_print() -> bool:
-	if active_contract != null or sim.is_running() or not job_board.has_available():
+	if machines.is_empty() or not job_board.has_available():
+		return false
+	var m := _machine(0)
+	var s: PrintSim = m.get("sim")
+	if m.get("contract") != null or s.is_running():
 		return false
 	var best: Contract = null
 	var best_score := -1.0
@@ -155,16 +187,16 @@ func debug_spawn_test_print() -> bool:
 	# rotation — take_next refills as it pops, which makes rotation lossy).
 	job_board.rotate_to_front(best)
 	var before := ledger.balance()
-	_accept_print()
-	if active_contract != best:
+	_accept_on(0)
+	if m.get("contract") != best:
 		return false
 	# Confirm the "upright" prep so the print actually starts (risks written).
-	orientation_index = 0
-	orientation_pending = true
-	_prep_press()
-	if active_contract != best or not sim.is_running():
+	m["orient"] = 0
+	m["orient_pending"] = true
+	_prep_on(0)
+	if m.get("contract") != best or not s.is_running():
 		return false
-	return ledger.balance() <= before + best.material_cost_cents and sim.is_running()
+	return ledger.balance() <= before + best.material_cost_cents and s.is_running()
 
 ## Room palette (task 01 spec): exposed for tests and future theming.
 var world := {}
@@ -414,11 +446,18 @@ func _build_world() -> void:
 	packing_station.position = Vector3(2.4, 0, 1.2)
 	add_child(packing_station)
 
-	sim = PrintSim.new()
-	sim.add_to_group("print_sim")
-	add_child(sim)
-	sim.print_started.connect(_on_print_started)
-	sim.print_finished.connect(_on_print_done)
+	# One machine per printer: own sim, contract, prep state and part.
+	machines.clear()
+	for i in range(2):
+		var s := PrintSim.new()
+		s.add_to_group("print_sim")
+		add_child(s)
+		machines.append({
+			"idx": i, "sim": s, "contract": null, "day": 0,
+			"orient": 0, "orient_pending": false, "part": null, "scrap": false,
+		})
+		s.print_started.connect(_on_print_started.bind(i))
+		s.print_finished.connect(_on_print_done.bind(i))
 	job_board = load("res://scripts/JobBoard.gd").new()
 	job_board.add_to_group("job_board")
 	add_child(job_board)
@@ -1091,71 +1130,75 @@ func _physics_process(delta: float) -> void:
 	if not _player.is_on_floor():
 		_player.velocity.y -= 14.0 * delta
 	_player.move_and_slide()
-	sim.tick(delta)
+	for m in machines:
+		var s: PrintSim = m.get("sim")
+		s.tick(delta)
 	day_cycle.tick(delta)
 	_apply_daylight()
 	_update_print_visuals(delta)
 	_update_hud()
 
-## Drive the per-printer deposition visual from the sim (task 04).
-## Only one printer prints at a time; the visual shows on printer 0 unless
-## the nearest printer is closer than a small threshold while RUNNING.
+## Drive each machine's deposition visual from its own sim (v0.3.0: both
+## machines can print — and fail — independently).
 func _update_print_visuals(delta: float) -> void:
-	var target := 0  # nearest-active printer, else printer 0
 	if _print_visuals.is_empty():
 		return
-	var running := sim.is_running()
-	var done := sim.state == PrintSim.State.DONE_OK or sim.state == PrintSim.State.DONE_FAIL
+	var any_running := false
 	for i in range(_print_visuals.size()):
 		var visual = _print_visuals[i]
-		var is_active_printer := (i == target) and (running or done)
-		if running and sim.state == PrintSim.State.RUNNING and is_active_printer:
-			visual.set_progress(sim.progress(), sim.model_name)
-		elif is_active_printer:
+		var s: PrintSim = _machine(i).get("sim")
+		if s == null:
+			continue
+		if s.state == PrintSim.State.RUNNING:
+			any_running = true
+			visual.set_progress(s.progress(), s.model_name)
+		elif s.state == PrintSim.State.DONE_OK or s.state == PrintSim.State.DONE_FAIL:
 			# DONE_OK: hold final shape. DONE_FAIL: gray it out once.
-			visual.set_progress(sim.progress(), sim.model_name)
-			if sim.state == PrintSim.State.DONE_FAIL and not visual.is_failed():
+			visual.set_progress(s.progress(), s.model_name)
+			if s.state == PrintSim.State.DONE_FAIL and not visual.is_failed():
 				visual.mark_failed()
 		else:
 			visual.reset()
+		# Nozzle "life" on every running machine.
+		if s.is_running() and i < _printers.size():
+			var printer = _printers[i]
+			if printer != null and printer.get("set_nozzle_scan") != null:
+				printer.set_nozzle_scan(elapsed_nozzle_clock)
+			if _hum != null:
+				_hum.global_position = printer.global_position + Vector3(0, 0.3, 0)
 
-	# Nozzle "life": slow oscillation while RUNNING, on the active printer,
-	# plus the looping printer hum attached to it.
-	if running:
-		var printer = _printers[target]
-		if printer != null and printer.get("set_nozzle_scan") != null:
-			printer.set_nozzle_scan(elapsed_nozzle_clock)
-		if _hum != null:
-			_hum.global_position = printer.global_position + Vector3(0, 0.3, 0)
-			if not _hum.playing:
-				_hum.play()
-	elif _hum != null and _hum.playing:
-		_hum.stop()
+	if _hum != null:
+		if any_running and not _hum.playing:
+			_hum.play()
+		elif not any_running and _hum.playing:
+			_hum.stop()
 	elapsed_nozzle_clock += delta
 
 var elapsed_nozzle_clock := 0.0
 
-## Called whenever a fresh job begins so the visual restarts clean.
-func _on_print_started() -> void:
-	for visual in _print_visuals:
-		visual.reset()
+## Called whenever a fresh job begins so that machine's visual restarts clean.
+func _on_print_started(idx: int) -> void:
+	if idx < _print_visuals.size():
+		_print_visuals[idx].reset()
 
-## Sim finished: park the contract at INSPECTION (success) or FAILED.
-func _on_print_done(ok: bool) -> void:
+## Sim finished on machine `idx`: park its contract at INSPECTION or FAILED.
+func _on_print_done(ok: bool, idx: int) -> void:
 	if ok:
 		sfx.play("chime")
-	if active_contract == null:
+	var m := _machine(idx)
+	var c: Contract = m.get("contract")
+	if c == null:
 		return
-	if ok and active_contract.state == Contract.State.PRINTING:
-		_advance(active_contract, Contract.State.INSPECTION)
+	if ok and c.state == Contract.State.PRINTING:
+		_advance(c, Contract.State.INSPECTION)
 	elif not ok:
 		sfx.play("buzz")
-		if not _printers.is_empty() and _printers[0].get("set_failed") != null:
-			_printers[0].set_failed(true)
-		if active_contract.state in [Contract.State.PREPARING, Contract.State.PRINTING, Contract.State.INSPECTION]:
-			_advance(active_contract, Contract.State.FAILED)
-		_set_prompt("Print FAILED — %s lost. [E] clear the printer" % active_contract.model_name)
-		active_contract = null
+		if idx < _printers.size() and _printers[idx].get("set_failed") != null:
+			_printers[idx].set_failed(true)
+		if c.state in [Contract.State.PREPARING, Contract.State.PRINTING, Contract.State.INSPECTION]:
+			_advance(c, Contract.State.FAILED)
+		_set_prompt("Print FAILED — %s lost. [E] clear the printer" % c.model_name)
+		m["contract"] = null
 
 func _nearest_printer() -> Node3D:
 	var best: Node3D = null
@@ -1176,29 +1219,46 @@ func _near_packing_station() -> bool:
 	return packing_station != null and _player != null \
 		and _player.global_position.distance_to(packing_station.global_position) <= INTERACT_RANGE
 
+## The machine whose printed part the player is holding (or -1).
+func _machine_for_part(part: Grabbable) -> int:
+	if part == null:
+		return -1
+	var id := str(part.get_meta("part_contract", ""))
+	for m in machines:
+		var c: Contract = m.get("contract")
+		if c != null and c.id == id:
+			return int(m.get("idx"))
+	return -1
+
 ## A finished print (DONE_OK -> contract INSPECTION) becomes a physical part
 ## that the player carries to the packing table. Returns true when the press
 ## was consumed by collection flow (even if it only showed a hint).
-func _collect_print() -> bool:
-	var c := active_contract
+func _collect_on(idx: int) -> bool:
+	var m := _machine(idx)
+	var c: Contract = m.get("contract")
 	if c == null or c.state != Contract.State.INSPECTION:
 		return false
-	if is_instance_valid(active_part):
+	if is_instance_valid(m.get("part")):
 		_set_prompt("Grab the printed part and take it to the packing table")
 		return true
 	if held != null:
-		_set_prompt("Hands full — put that down first")
+		# Both machines can finish at once: the second part waits on the bed
+		# until the player's hands are free.
+		_set_prompt("Hands full — grab the printed part when free")
 		return true
 	var part := _make_part(c)
 	add_child(part)
-	var printer := _nearest_printer()
-	var origin: Vector3 = printer.global_position if printer != null else _player.global_position
+	var origin: Vector3 = _printers[idx].global_position if idx < _printers.size() \
+		else _player.global_position
 	part.global_position = origin + Vector3(0, 0.28, 0)
 	_attach_to_hand(part)
-	active_part = part
+	m["part"] = part
 	sfx.play("grab")
 	_set_prompt("%s printed — take it to the packing table" % c.model_name)
 	return true
+
+func _collect_print() -> bool:
+	return _collect_on(_focus)
 
 ## The delivered object: a small printed block tagged with its contract id.
 func _make_part(c: Contract) -> Grabbable:
@@ -1222,34 +1282,46 @@ func _make_part(c: Contract) -> Grabbable:
 	part.set_meta("part_contract", c.id)
 	return part
 
-## Free the active part wherever it is (delivered or scrapped).
-func _discard_part() -> void:
-	if held != null and held == active_part:
+## Free machine `idx`'s part wherever it is (delivered or scrapped).
+func _discard_part_for(m: Dictionary) -> void:
+	var part: Grabbable = m.get("part")
+	if held != null and held == part:
 		held.get_parent().remove_child(held)
 		held.queue_free()
 		held = null
-	elif is_instance_valid(active_part):
-		active_part.queue_free()
-	active_part = null
+	elif is_instance_valid(part):
+		part.queue_free()
+	m["part"] = null
 
-## Pack the held part at the packing table: grade via QualityCheck, scale the
+func _discard_part() -> void:
+	_discard_part_for(_machine(_focus))
+
+## Pack the held part at the packing table: the part's contract id selects the
+## machine (both can finish in parallel). Grade via QualityCheck, scale the
 ## payout, advance INSPECTION -> PACKED -> DELIVERED, pay exactly once.
 func _try_pack_held() -> bool:
-	var c := active_contract
-	if c == null or c.state != Contract.State.INSPECTION or not _is_held_part():
+	if not _is_held_part():
 		return false
+	var mi := _machine_for_part(held)
+	if mi < 0:
+		return false
+	var m := _machine(mi)
+	var c: Contract = m.get("contract")
+	if c == null or c.state != Contract.State.INSPECTION:
+		return false
+	var s: PrintSim = m.get("sim")
 	var result := packing_station.try_pack(c, {
-		"final_layer": sim.layers_done,
-		"total_layers": sim.layers_total,
+		"final_layer": s.layers_done,
+		"total_layers": s.layers_total,
 		"risks": {
-			"support_need": sim.support_need,
-			"adhesion_risk": sim.adhesion_risk,
-			"stability_risk": sim.stability_risk,
+			"support_need": s.support_need,
+			"adhesion_risk": s.adhesion_risk,
+			"stability_risk": s.stability_risk,
 		},
 	})
 	if not result.get("packed", false):
 		if result.get("grade", "") == "F":
-			_scrap_armed = true
+			m["scrap"] = true
 			_set_prompt("Quality F — %s not deliverable. [E] scrap it" % c.model_name)
 		else:
 			_set_prompt("Pack refused: %s" % result.get("reason", "?"))
@@ -1260,14 +1332,14 @@ func _try_pack_held() -> bool:
 		return true
 	# Late deliveries pay half (the client still takes the part).
 	var payout: int = result.payout_cents
-	var late := _is_late()
+	var late := _is_late_for(m)
 	if late:
 		payout = roundi(float(payout) * LATE_PAYOUT_FACTOR)
 	if not ledger.pay_once(c.id, payout, "payout %s" % c.id):
 		return true
 	_repay_rent_debt()
-	_discard_part()
-	active_contract = null
+	_discard_part_for(m)
+	m["contract"] = null
 	last_pack_grade = result.grade
 	_save_game()
 	sfx.play("cash")
@@ -1280,37 +1352,52 @@ func _try_pack_held() -> bool:
 
 ## F-grade escape hatch: scrap the part, fail the contract, no payout.
 func _scrap_held() -> bool:
-	var c := active_contract
-	if c == null or c.state != Contract.State.INSPECTION or not _is_held_part():
+	if not _is_held_part():
+		return false
+	var mi := _machine_for_part(held)
+	if mi < 0:
+		return false
+	var m := _machine(mi)
+	var c: Contract = m.get("contract")
+	if c == null or c.state != Contract.State.INSPECTION:
 		return false
 	_advance(c, Contract.State.FAILED)
-	_discard_part()
-	active_contract = null
+	_discard_part_for(m)
+	m["contract"] = null
 	_save_game()
 	sfx.play("buzz")
 	_set_prompt("Scrapped %s. No payout." % c.model_name)
 	return true
 
 ## DONE_FAIL leaves the spoiled print on the bed; clear it before the next job.
-func _clear_failed_print() -> bool:
-	if sim.state != PrintSim.State.DONE_FAIL:
+func _clear_failed_on(idx: int) -> bool:
+	var m := _machine(idx)
+	var s: PrintSim = m.get("sim")
+	if s.state != PrintSim.State.DONE_FAIL:
 		return false
-	sim.reset()
-	for visual in _print_visuals:
-		visual.reset()
-	if not _printers.is_empty() and _printers[0].get("set_failed") != null:
-		_printers[0].set_failed(false)
+	s.reset()
+	if idx < _print_visuals.size():
+		_print_visuals[idx].reset()
+	if idx < _printers.size() and _printers[idx].get("set_failed") != null:
+		_printers[idx].set_failed(false)
 	sfx.play("place")
 	_set_prompt("Failed print cleared from the bed")
 	return true
 
+func _clear_failed_print() -> bool:
+	return _clear_failed_on(_focus)
+
 ## --- orientation prep (task 09 gameplay) ------------------------------------
 
-func _orientation_name() -> String:
+func _orientation_name_for(idx: int) -> String:
 	var names: Array[String] = PrepSystem.orientations()
-	return names[clampi(orientation_index, 0, names.size() - 1)]
+	var m := _machine(idx)
+	return names[clampi(int(m.get("orient")), 0, names.size() - 1)]
 
-## Prep evaluation for the active contract, with owned-upgrade modifiers.
+func _orientation_name() -> String:
+	return _orientation_name_for(_focus)
+
+## Prep evaluation for a contract, with owned-upgrade modifiers.
 func _prep_eval(contract: Contract, orientation: String) -> Dictionary:
 	var eval: Dictionary = PrepSystem.evaluate(contract, orientation)
 	if not eval.get("valid", false):
@@ -1320,59 +1407,69 @@ func _prep_eval(contract: Contract, orientation: String) -> Dictionary:
 	eval.stability_risk = clampf(float(eval.stability_risk) + float(mods.stability_risk), 0.0, 1.0)
 	return eval
 
-func _write_prep_to_sim(eval: Dictionary) -> void:
-	sim.support_need = eval.support_need
-	sim.adhesion_risk = eval.adhesion_risk
-	sim.stability_risk = eval.stability_risk
+func _write_prep_to_sim(eval: Dictionary, idx: int) -> void:
+	var s: PrintSim = _machine(idx).get("sim")
+	s.support_need = eval.support_need
+	s.adhesion_risk = eval.adhesion_risk
+	s.stability_risk = eval.stability_risk
 	# Extruder upgrades speed every job; the pro machine (printer 2) adds its
 	# own bonus to jobs accepted there.
 	var machine_mult := upgrades.machine_speed_multiplier() \
-		if active_printer_idx == 1 and upgrades.pro_machine_unlocked() else 1.0
-	sim.speed_multiplier = upgrades.speed_multiplier() * machine_mult
-	sim.failure_threshold = BASE_FAILURE_THRESHOLD + upgrades.failure_threshold_delta()
+		if idx == 1 and upgrades.pro_machine_unlocked() else 1.0
+	s.speed_multiplier = upgrades.speed_multiplier() * machine_mult
+	s.failure_threshold = BASE_FAILURE_THRESHOLD + upgrades.failure_threshold_delta()
 
-## E while the contract is PREPARING: first press previews an orientation,
-## second press confirms (charges materials, starts the print). An invalid
-## preview (e.g. flat side on a stability part) can't be confirmed — E cycles
-## on instead. Insufficient funds returns the job to the board untouched.
-func _prep_press() -> void:
-	var c := active_contract
+func _write_prep_to_sim_focus(eval: Dictionary) -> void:
+	_write_prep_to_sim(eval, _focus)
+
+## E while a machine's contract is PREPARING: first press previews an
+## orientation, second press confirms (charges materials, starts the print).
+## An invalid preview (e.g. flat side on a stability part) can't be confirmed —
+## E cycles on instead. Insufficient funds returns the job to the board.
+func _prep_on(idx: int) -> void:
+	var m := _machine(idx)
+	var c: Contract = m.get("contract")
 	if c == null or c.state != Contract.State.PREPARING:
 		return
-	if not orientation_pending:
-		orientation_index = (orientation_index + 1) % PrepSystem.orientations().size()
-		orientation_pending = true
-		_show_prep_preview()
+	if not bool(m.get("orient_pending")):
+		m["orient"] = (int(m.get("orient")) + 1) % PrepSystem.orientations().size()
+		m["orient_pending"] = true
+		_show_prep_preview_for(idx)
 		return
-	var eval := _prep_eval(c, _orientation_name())
+	var eval := _prep_eval(c, _orientation_name_for(idx))
 	if not eval.get("valid", false):
-		orientation_index = (orientation_index + 1) % PrepSystem.orientations().size()
-		_show_prep_preview()
+		m["orient"] = (int(m.get("orient")) + 1) % PrepSystem.orientations().size()
+		_show_prep_preview_for(idx)
 		return
 	if not ledger.can_afford(c.material_cost_cents):
 		c.state = Contract.State.OFFERED
 		job_board.put_back(c)
-		active_contract = null
-		orientation_pending = false
+		m["contract"] = null
+		m["orient_pending"] = false
 		_set_prompt("Not enough funds for materials ($%s)" % _cents_str(c.material_cost_cents))
 		return
 	if not ledger.charge(c.material_cost_cents, "materials %s" % c.id):
 		return
 	if not _advance(c, Contract.State.PRINTING):
 		ledger.credit(c.material_cost_cents, "refund materials %s" % c.id)
-		active_contract = null
+		m["contract"] = null
 		return
-	_write_prep_to_sim(eval)
-	orientation_pending = false
-	sim.start_job(c.id, c.model_name, c.layers)
+	_write_prep_to_sim(eval, idx)
+	m["orient_pending"] = false
+	var s: PrintSim = m.get("sim")
+	s.start_job(c.id, c.model_name, c.layers)
 	sfx.play("beep")
-	_set_prompt("Printing %s — %s orientation confirmed" % [c.model_name, _orientation_name()])
+	_set_prompt("Printing %s — %s orientation confirmed" % [c.model_name, _orientation_name_for(idx)])
 
-func _show_prep_preview() -> void:
-	var c := active_contract
+func _prep_press() -> void:
+	_prep_on(_focus)
+
+func _show_prep_preview_for(idx: int) -> void:
+	var m := _machine(idx)
+	var c: Contract = m.get("contract")
 	if c == null:
 		return
-	var orient := _orientation_name()
+	var orient := _orientation_name_for(idx)
 	var eval := _prep_eval(c, orient)
 	if not eval.get("valid", false):
 		_set_prompt("%s: %s — [E] cycle" % [orient, eval.reason])
@@ -1392,19 +1489,23 @@ func _advance(contract: Contract, to: Contract.State) -> bool:
 	contract.state = to
 	return true
 
+## Zero-arg wrapper kept for tests/debug paths: acts on the focused machine.
 func _accept_print() -> void:
-	if not job_board.has_available():
-		return
-	# Remember which machine takes the job: printer 2 is the purchasable pro
-	# machine (locked until bought, prints 25% faster there).
-	var printer := _nearest_printer()
-	active_printer_idx = int(printer.get_meta("printer_index", 0)) if printer != null else 0
-	if active_printer_idx == 1 and not upgrades.pro_machine_unlocked():
+	_accept_on(_focus)
+
+## Accept the next job on machine `idx`. Printer 2 is the purchasable pro
+## machine: locked until bought. OFFERED -> ACCEPTED -> PREPARING; the print
+## only starts once the player confirms an orientation via _prep_on.
+func _accept_on(idx: int) -> void:
+	if idx == 1 and not upgrades.pro_machine_unlocked():
 		_set_prompt("Printer 2 is locked — buy the Pro machine upgrade (menu)")
 		return
+	var m := _machine(idx)
+	if m.contract != null:
+		return  # this machine is busy
+	if not job_board.has_available():
+		return
 	var job: Contract = job_board.take_next()
-	# OFFERED -> ACCEPTED -> PREPARING. The print only starts once the player
-	# confirms an orientation via _prep_press.
 	if not _advance(job, Contract.State.ACCEPTED):
 		job_board.put_back(job)
 		return
@@ -1418,30 +1519,44 @@ func _accept_print() -> void:
 		job_board.put_back(job)
 		_set_prompt("Not enough funds for materials ($%s)" % _cents_str(job.material_cost_cents))
 		return
-	active_contract = job
-	active_contract_day = day_cycle.day
-	orientation_index = 0
-	orientation_pending = false
+	m["contract"] = job
+	m["day"] = day_cycle.day
+	m["orient"] = 0
+	m["orient_pending"] = false
 	sfx.play("click")
 	_set_prompt("Accepted %s — [E] to preview orientation" % job.model_name)
 
 ## --- deadlines (v0.2.0) -------------------------------------------------------
 
-func _days_taken() -> int:
-	return day_cycle.day - active_contract_day
+func _days_taken_for(m: Dictionary) -> int:
+	return day_cycle.day - int(m.get("day"))
 
-func _days_remaining() -> int:
-	return active_contract.deadline_days - _days_taken() if active_contract != null else 0
+func _days_remaining_for(m: Dictionary) -> int:
+	var c: Contract = m.get("contract")
+	return c.deadline_days - _days_taken_for(m) if c != null else 0
 
-func _is_late() -> bool:
-	return active_contract != null and _days_taken() > active_contract.deadline_days
+func _is_late_for(m: Dictionary) -> bool:
+	var c: Contract = m.get("contract")
+	return c != null and _days_taken_for(m) > c.deadline_days
 
 ## Two full days past the deadline the client cancels the contract.
-func _is_cancelled() -> bool:
-	return active_contract != null \
-		and _days_taken() > active_contract.deadline_days + 1
+func _is_cancelled_for(m: Dictionary) -> bool:
+	var c: Contract = m.get("contract")
+	return c != null and _days_taken_for(m) > c.deadline_days + 1
 
-## Day rollover: rent comes due first, then an overdue contract is cancelled.
+func _days_taken() -> int:
+	return _days_taken_for(_machine(_focus))
+
+func _days_remaining() -> int:
+	return _days_remaining_for(_machine(_focus))
+
+func _is_late() -> bool:
+	return _is_late_for(_machine(_focus))
+
+func _is_cancelled() -> bool:
+	return _is_cancelled_for(_machine(_focus))
+
+## Day rollover: rent comes due first, then overdue contracts are cancelled.
 func _on_day_changed(new_day: int) -> void:
 	if ledger.can_afford(RENT_CENTS):
 		ledger.charge(RENT_CENTS, "rent day %d" % new_day)
@@ -1449,18 +1564,22 @@ func _on_day_changed(new_day: int) -> void:
 	else:
 		rent_debt_cents += RENT_CENTS
 		_set_prompt("Day %d — rent UNPAID (now owe $%s)" % [new_day, _cents_str(rent_debt_cents)])
-	if active_contract != null and _is_cancelled():
-		var c := active_contract
+	for m in machines:
+		if not _is_cancelled_for(m):
+			continue
+		var c: Contract = m.get("contract")
 		if c.state in [Contract.State.PREPARING, Contract.State.PRINTING, Contract.State.INSPECTION]:
 			_advance(c, Contract.State.FAILED)
-		if sim.is_running() or sim.state == PrintSim.State.DONE_OK:
-			sim.reset()
-			for visual in _print_visuals:
-				visual.reset()
-			if not _printers.is_empty() and _printers[0].get("set_failed") != null:
-				_printers[0].set_failed(false)
-		_discard_part()
-		active_contract = null
+		var s: PrintSim = m.get("sim")
+		if s.is_running() or s.state == PrintSim.State.DONE_OK:
+			s.reset()
+			var vi := int(m.get("idx"))
+			if vi < _print_visuals.size():
+				_print_visuals[vi].reset()
+			if vi < _printers.size() and _printers[vi].get("set_failed") != null:
+				_printers[vi].set_failed(false)
+		_discard_part_for(m)
+		m["contract"] = null
 		sfx.play("buzz")
 		_set_prompt("Client cancelled %s — far too late. No payout." % c.model_name)
 
@@ -1486,8 +1605,9 @@ func _try_interact() -> void:
 	# this beats the generic place action so E never drops the part at the
 	# station when the player means to deliver.
 	if held != null and _is_held_part() and _near_packing_station():
-		if _scrap_armed:
-			_scrap_armed = false
+		var mi := _machine_for_part(held)
+		if mi >= 0 and bool(_machine(mi).get("scrap")):
+			_machine(mi)["scrap"] = false
 			_scrap_held()
 		else:
 			_try_pack_held()
@@ -1497,35 +1617,42 @@ func _try_interact() -> void:
 		_try_place()
 		return
 	# Near the packing table without the part in hand: nudge, don't act.
-	if _near_packing_station() and active_contract != null \
-			and active_contract.state == Contract.State.INSPECTION \
-			and is_instance_valid(active_part):
-		_set_prompt("The printed part is by the printer — bring it here")
-		return
+	for m in machines:
+		var c: Contract = m.get("contract")
+		if c != null and c.state == Contract.State.INSPECTION \
+				and is_instance_valid(m.get("part")):
+			_set_prompt("The printed part is by the printer — bring it here")
+			return
 	var printer := _nearest_printer()
 	if printer == null:
 		return
-	if sim.is_running():
+	_focus = clampi(int(printer.get_meta("printer_index", 0)), 0, maxi(machines.size() - 1, 0))
+	var m := _machine(_focus)
+	var s: PrintSim = m.get("sim")
+	if s.is_running():
 		return
-	if sim.state == PrintSim.State.DONE_FAIL:
-		_clear_failed_print()
+	if s.state == PrintSim.State.DONE_FAIL:
+		_clear_failed_on(_focus)
 		return
-	if _collect_print():
+	if _collect_on(_focus):
 		return
-	if active_contract != null:
-		if active_contract.state == Contract.State.PREPARING:
-			_prep_press()
-		return  # one contract at a time
+	var c: Contract = m.get("contract")
+	if c != null:
+		if c.state == Contract.State.PREPARING:
+			_prep_on(_focus)
+		return  # this machine is busy
 	if not job_board.has_available():
 		return
-	_accept_print()
+	_accept_on(_focus)
 
 ## Contextual grab/place HUD line, appended to the status panel.
 func _grab_prompt_line() -> String:
 	if held != null:
 		if _is_held_part():
+			var mi := _machine_for_part(held)
 			if _near_packing_station():
-				return "[E] Scrap this part" if _scrap_armed else "[E] Pack & deliver"
+				return "[E] Scrap this part" if (mi >= 0 and bool(_machine(mi).get("scrap"))) \
+					else "[E] Pack & deliver"
 			return "Carry it to the packing table ([E] sets it down)"
 		return "[E] Place"
 	var g := _current_grabbable()
@@ -1545,51 +1672,62 @@ func _update_hud() -> void:
 	lines.append("Day %d — rent $%s/day" % [day_cycle.day, _cents_str(RENT_CENTS)])
 	if rent_debt_cents > 0:
 		lines.append("Unpaid rent: $%s" % _cents_str(rent_debt_cents))
-	if active_contract != null:
-		var due := _days_remaining()
+	# One contract/prep block per machine (v0.3.0: both can hold jobs).
+	for m in machines:
+		var c: Contract = m.get("contract")
+		if c == null:
+			continue
+		var mi := int(m.get("idx"))
+		var tag := "" if mi == 0 else " · Printer %d" % (mi + 1)
+		var due := _days_remaining_for(m)
 		var due_text := "due in %dd" % due if due >= 0 else "LATE — half pay"
-		lines.append("Contract %s — %s [%s] pays $%s · %s" % [
-			active_contract.id,
-			active_contract.model_name,
-			Contract.state_name(active_contract.state),
-			_cents_str(active_contract.payout_cents),
-			due_text,
+		lines.append("Contract %s — %s [%s] pays $%s · %s%s" % [
+			c.id, c.model_name, Contract.state_name(c.state),
+			_cents_str(c.payout_cents), due_text, tag,
 		])
-	# Orientation prep block while the player is choosing how to print.
-	if active_contract != null and active_contract.state == Contract.State.PREPARING:
-		if orientation_pending:
-			var eval := _prep_eval(active_contract, _orientation_name())
-			if eval.get("valid", false):
-				lines.append("Prep: %s — %d%% supports · ~%dg · risk %s" % [
-					_orientation_name(), roundi(float(eval.support_need) * 100.0),
-					int(eval.estimated_material_g), PrepSystem.risk_level(eval)])
-				lines.append("[E] Confirm · [E] cycle")
+		if c.state == Contract.State.PREPARING:
+			var orient := _orientation_name_for(mi)
+			if bool(m.get("orient_pending")):
+				var eval := _prep_eval(c, orient)
+				if eval.get("valid", false):
+					lines.append("Prep: %s — %d%% supports · ~%dg · risk %s" % [
+						orient, roundi(float(eval.support_need) * 100.0),
+						int(eval.estimated_material_g), PrepSystem.risk_level(eval)])
+					lines.append("[E] Confirm · [E] cycle")
+				else:
+					lines.append("Prep: %s — %s" % [orient, eval.reason])
+					lines.append("[E] cycle")
 			else:
-				lines.append("Prep: %s — %s" % [_orientation_name(), eval.reason])
-				lines.append("[E] cycle")
-		else:
-			lines.append("Prep: [E] preview orientation")
+				lines.append("Prep: [E] preview orientation")
 	lines.append("Jobs waiting: %d" % job_board.get_available_count())
-	match sim.state:
-		PrintSim.State.IDLE:
-			if active_contract == null or active_contract.state != Contract.State.PREPARING:
-				var p := _nearest_printer()
-				if p != null and job_board.has_available():
-					if active_contract == null:
-						lines.append("[E] Accept job")
-					else:
-						lines.append("[E] Start print job")
-		PrintSim.State.RUNNING:
-			lines.append("Printing %s — layer %d/%d  %.0f%%" % [
-				sim.model_name, sim.layers_done, sim.layers_total, sim.progress() * 100.0])
-			lines.append("Material: %d g   Risks: %s" % [sim.material_used_g(), str(sim.current_risks())])
-		PrintSim.State.DONE_OK:
-			if active_contract != null and active_contract.state == Contract.State.INSPECTION:
-				lines.append("Print complete — [E] collect the part")
+	# Focused machine's action line, then per-machine print progress.
+	var fm := _machine(_focus)
+	var fs: PrintSim = fm.get("sim")
+	var fc: Contract = fm.get("contract")
+	if fs.state == PrintSim.State.IDLE and (fc == null or fc.state != Contract.State.PREPARING):
+		var p := _nearest_printer()
+		if p != null and job_board.has_available():
+			if fc == null:
+				lines.append("[E] Accept job")
 			else:
-				lines.append("Print complete! Jobs waiting: %d" % job_board.get_available_count())
-		PrintSim.State.DONE_FAIL:
-			lines.append("Print FAILED — [E] clear the bed, then take a new job")
+				lines.append("[E] Start print job")
+	for m in machines:
+		var s: PrintSim = m.get("sim")
+		var mi := int(m.get("idx"))
+		var prefix := "" if mi == 0 else "Printer %d — " % (mi + 1)
+		match s.state:
+			PrintSim.State.RUNNING:
+				lines.append("%sPrinting %s — layer %d/%d  %.0f%%" % [
+					prefix, s.model_name, s.layers_done, s.layers_total, s.progress() * 100.0])
+				lines.append("Material: %d g   Risks: %s" % [s.material_used_g(), str(s.current_risks())])
+			PrintSim.State.DONE_OK:
+				var c2: Contract = m.get("contract")
+				if c2 != null and c2.state == Contract.State.INSPECTION:
+					lines.append("%sPrint complete — [E] collect the part" % prefix)
+				elif mi != 0:
+					lines.append("%sPrint complete!" % prefix)
+			PrintSim.State.DONE_FAIL:
+				lines.append("%sPrint FAILED — [E] clear the bed, then take a new job" % prefix)
 	var grab_line := _grab_prompt_line()
 	if grab_line != "":
 		lines.append(grab_line)

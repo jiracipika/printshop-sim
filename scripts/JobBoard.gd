@@ -55,7 +55,7 @@ func rotate_to_front(c: Contract) -> bool:
 	_queue.push_front(c)
 	return true
 
-## HUD summaries: {id, client, model_name, payout_cents, difficulty, risk_flags}.
+## HUD summaries: {id, client, model_name, payout_cents, difficulty, risk_flags, rush}.
 func available_summaries() -> Array[Dictionary]:
 	var out: Array[Dictionary] = []
 	for c in _queue:
@@ -66,5 +66,6 @@ func available_summaries() -> Array[Dictionary]:
 			"payout_cents": c.payout_cents,
 			"difficulty": c.difficulty,
 			"risk_flags": c.risk_flags,
+			"rush": c.rush,
 		})
 	return out

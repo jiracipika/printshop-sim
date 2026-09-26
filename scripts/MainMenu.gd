@@ -619,6 +619,13 @@ func _make_card(s: Dictionary) -> PanelContainer:
 	dots.add_theme_color_override("font_color", COLOR_HONEY)
 	dots.add_theme_font_size_override("font_size", 14)
 	meta.add_child(dots)
+	if bool(s.get("rush", false)):
+		var rush_tag := Label.new()
+		rush_tag.name = "RushTag"
+		rush_tag.text = "  [RUSH]"
+		rush_tag.add_theme_color_override("font_color", COLOR_TERRA)
+		rush_tag.add_theme_font_size_override("font_size", 12)
+		meta.add_child(rush_tag)
 	for flag in s.get("risk_flags", []):
 		var tag := Label.new()
 		tag.text = "  [%s]" % flag

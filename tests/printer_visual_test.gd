@@ -73,7 +73,7 @@ func _run() -> void:
 	# --- sim at 25%: visible, monotonic growth, progress matches ---
 	var sim = main.sim
 	sim.start_job("TEST-VIS", "Visual Test Model", 40)
-	main._on_print_started()
+	main._on_print_started(0)  # machine 0's visual resets on job start
 	# tick to 10/40 layers = 25%
 	for i in range(10):
 		sim.tick(1.0 / sim.TICK_HZ + 0.001)
@@ -109,7 +109,7 @@ func _run() -> void:
 	_ok(not visual.visible, "visual hidden again after reset to IDLE-like state")
 	sim.start_job("TEST-FAIL", "Fail Test Model", 20)
 	sim.failure_seeded = true
-	main._on_print_started()
+	main._on_print_started(0)
 	for i in range(25):  # past halfway where failure seeds
 		sim.tick(1.0 / sim.TICK_HZ + 0.001)
 	_ok(sim.state == PrintSim.State.DONE_FAIL, "sim DONE_FAIL with seeded failure")
@@ -124,7 +124,7 @@ func _run() -> void:
 	var base_count := _count_under(printer)
 	for j in range(3):
 		sim.start_job("TEST-J%d" % j, "Model %d" % j, 30)
-		main._on_print_started()
+		main._on_print_started(0)
 		for i in range(30):
 			sim.tick(1.0 / sim.TICK_HZ + 0.001)
 		main._update_print_visuals(0.016)

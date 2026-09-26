@@ -6,6 +6,7 @@ extends SceneTree
 
 const Contract := preload("res://scripts/Contract.gd")
 const Ledger := preload("res://scripts/Ledger.gd")
+const JobBoard := preload("res://scripts/JobBoard.gd")
 
 var checks := 0
 var failures := 0
@@ -30,6 +31,8 @@ func _run() -> void:
 	_test_transition_table_probe()
 	_test_failed_reachability()
 	_test_fixtures()
+	_test_expanded_fixtures_and_rush()
+	_test_jobboard_rush_summaries()
 	_test_ledger_basics()
 	_test_ledger_exactly_once()
 	_test_ledger_reconciliation_and_invariant()
@@ -173,6 +176,86 @@ func _test_fixtures() -> void:
 				or jobs[i].difficulty != again[i].difficulty or jobs[i].layers != again[i].layers:
 			same = false
 	check(same, "fixture factory deterministic in values")
+
+
+func _test_expanded_fixtures_and_rush() -> void:
+	var jobs: Array = Contract.make_fixture_jobs()
+	check(jobs.size() == 8, "expanded fixture pool has 8 jobs (got %d)" % jobs.size())
+	# Original four fixtures stay first, in order, with exact payout values.
+	var original_payouts := {"C-014": 6400, "C-015": 4200, "C-016": 11600, "C-017": 8750}
+	var i := 0
+	for want_id in original_payouts.keys():
+		var j: Contract = jobs[i]
+		check(j.id == want_id, "fixture %d is %s (got %s)" % [i, want_id, j.id])
+		check(j.payout_cents == original_payouts[want_id],
+			"fixture %s payout unchanged (%d)" % [want_id, j.payout_cents])
+		check(not j.rush, "original fixture %s is not rush" % want_id)
+		i += 1
+	# Full-pool invariants.
+	var ids := {}
+	var rush_count := 0
+	for j in jobs:
+		check(j.is_valid(), "expanded fixture %s is_valid()" % j.id)
+		check(not ids.has(j.id), "expanded fixture id %s unique" % j.id)
+		ids[j.id] = true
+		check(j.payout_cents >= 3000 and j.payout_cents <= 15000,
+			"fixture %s payout in 3000-15000" % j.id)
+		check(j.layers >= 60 and j.layers <= 500, "fixture %s layers in 60-500" % j.id)
+		check(j.deadline_days >= 1 and j.deadline_days <= 6,
+			"fixture %s deadline in 1-6" % j.id)
+		check(j.difficulty >= 1 and j.difficulty <= 5, "fixture %s difficulty in 1-5" % j.id)
+		if j.rush:
+			rush_count += 1
+			check(j.deadline_days <= 2, "rush fixture %s has deadline <= 2" % j.id)
+	check(rush_count >= 2, "at least 2 rush fixtures exist (got %d)" % rush_count)
+	# Rush fixtures pay clearly above the non-rush norm for their difficulty.
+	var norm := {1: 4200, 2: 6400, 3: 8750, 4: 11600, 5: 11600}
+	for j in jobs:
+		if j.rush:
+			var ratio: float = float(j.payout_cents) / float(norm[j.difficulty])
+			check(ratio >= 1.3 and ratio <= 1.6,
+				"rush fixture %s payout is 1.3-1.6x norm (%.2f)" % [j.id, ratio])
+
+
+func _test_jobboard_rush_summaries() -> void:
+	var board = JobBoard.new()
+	root.add_child(board)  # triggers _ready -> fill to capacity
+	var fixtures: Array = Contract.make_fixture_jobs()
+	check(board.get_available_count() == fixtures.size(),
+		"job board fills to expanded capacity (%d)" % fixtures.size())
+	var rush_by_id := {}
+	for f in fixtures:
+		rush_by_id[f.id] = f.rush
+	var summaries: Array[Dictionary] = board.available_summaries()
+	check(summaries.size() == fixtures.size(), "summaries cover the whole board")
+	var rush_summaries := 0
+	var non_rush_summaries := 0
+	var values_match := true
+	for s in summaries:
+		if not s.has("rush"):
+			values_match = false
+			break
+		if rush_by_id.get(s["id"], null) != s["rush"]:
+			values_match = false
+		if s["rush"]:
+			rush_summaries += 1
+		else:
+			non_rush_summaries += 1
+	check(values_match, "every summary carries 'rush' matching its contract")
+	check(rush_summaries >= 1, "at least one rush summary present (got %d)" % rush_summaries)
+	check(non_rush_summaries >= 1, "at least one non-rush summary present (got %d)" % non_rush_summaries)
+	# Rotation still works with the bigger pool: take everything, then check the
+	# next refill starts back at the first fixture.
+	var first_id: String = fixtures[0].id
+	var drained_ok := true
+	for k in range(fixtures.size()):
+		var c: Contract = board.take_next()
+		if c.id != fixtures[k].id:
+			drained_ok = false
+	check(drained_ok, "board rotates through all fixtures in order")
+	var after: Contract = board.take_next()
+	check(after.id == first_id, "refill wraps around to the first fixture")
+	board.free()
 
 
 func _test_ledger_basics() -> void:

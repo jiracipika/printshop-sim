@@ -1,4 +1,4 @@
-# Current handoff — shop day slice (v0.2.0)
+# Current handoff — parallel printing + contract variety (v0.3.0)
 
 Read AGENTS.md and design/implementation-plan.md. Working copy:
 /Users/rs-mac/.zcode/workspace/default/printshop-sim (canonical disk plan in
@@ -8,6 +8,20 @@ https://github.com/jiracipika/printshop-sim, main. Public prototype
 https://printshop-sim.vercel.app/.
 
 ## State at this checkpoint
+
+v0.3.0 shipped on top of v0.2.0: (a) contract variety — the fixture pool
+doubles to 8 jobs (C-014..C-021; original four stay first/in order), with two
+rush fixtures (deadline <= 2 d, ~1.4x payout) tagged RUSH on the board card;
+summaries carry "rush". (b) True parallel printing — Main owns a `machines`
+array ({idx, sim, contract, day, orient, orient_pending, part, scrap}); each
+machine accepts/prepares/prints/fails/delivers independently; the held part
+identifies its machine via part_contract id; legacy single-machine vars
+(sim/active_contract/orientation_*/active_part) are properties over the
+FOCUSED machine (last printer interacted with) so tests and the debug panel
+work unchanged; _on_print_started/done now take a machine index. New suite
+tests/parallel_test.gd (23 checks). PrintSim.tick gained a reentrant-
+completion guard (large deltas no longer overshoot layers_total or emit
+print_finished twice).
 
 v0.2.0 (shop day) shipped on top of the completed v0.1.0 contract loop:
 DayCycle drives a 90 s day with day/night lighting (sun energy/color, ambient,
@@ -36,13 +50,12 @@ cardboard/posters/rug), procedural sky + fog, ceiling fixtures, window,
 props (spool shelf, crates, plant, ticking wall clock), center reticle,
 synthesized SFX + printer hum on an "SFX" bus.
 
-Verification evidence (local): 16 Godot headless suites green — contract 170,
+Verification evidence (local): 17 Godot headless suites green — contract 255,
 packing 58, touch 47, save 44, shop_art 51, upgrades 52, economy 54, day 36,
-prep 29, printer_visual 28, grab 26, input_pause 23, menu 25, debug_panel 32,
-room 9, smoke 9 (693 checks, 0 failures, no SCRIPT ERROR); Python build
-pipeline 21 pytest; real Web export via tools/build_web.sh; engine
-screenshots at 1280x720 (day HUD, locked printer 2, dusk vs midday lighting)
-confirm the new features render.
+parallel 23, prep 29, printer_visual 28, grab 26, input_pause 23, menu 25,
+debug_panel 32, room 9, smoke 9 (801 checks, 0 failures, no SCRIPT ERROR);
+Python build pipeline 21 pytest; engine screenshots confirm the RUSH board
+tag and both machines printing simultaneously with per-printer HUD lines.
 
 v0.1.0 RELEASED: commits 2f1f2af (loop/features) + ab05cc4 (shell help
 placement). Deployed to https://printshop-sim.vercel.app/ via vercel --prod;
@@ -65,10 +78,10 @@ physical-device and cross-browser matrix remain open.
 
 ## Next features (not started)
 
-- True multi-printer parallelism (second PrintSim per machine).
-- More contract variety (client pool, layer/material spread, rush bonuses).
+- Contract generation (procedural client pool instead of fixed fixtures).
 - Ambient occlusion / shader polish (Compatibility-safe); performance profile.
-- Physical iOS/Android device validation; browser matrix.
+- Physical iOS/Android device validation (android/ preset landed from another
+  session; debug keystore only); browser matrix.
 
 ## Operator notes
 

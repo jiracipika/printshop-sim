@@ -127,7 +127,10 @@ func tick(delta: float) -> void:
 	elapsed_real_time_s += delta
 	elapsed_sim_time_s += delta * SIM_TIME_SCALE * speed_multiplier
 	_tick_accum += delta * speed_multiplier
-	while _tick_accum >= 1.0 / TICK_HZ:
+	# Guard against reentrant completion: a large delta can cover several
+	# ticks, but once the print finishes the remaining budget must not step
+	# past layers_total or emit print_finished twice.
+	while _tick_accum >= 1.0 / TICK_HZ and state == State.RUNNING:
 		_tick_accum -= 1.0 / TICK_HZ
 		_step_tick()
 

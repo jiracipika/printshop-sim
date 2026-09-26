@@ -10,11 +10,14 @@ The deployed version may lag local development. Check the in-game version/build 
 
 ## Current Milestone
 
-Complete playable contract loop with the shop day (v0.2.0). Accept a job, pick
-an orientation, print it, carry the part to the packing table, deliver, get
-paid — against the clock: days pass, rent comes due each day, late deliveries
-pay half, and clients cancel after two extra days. Printer 2 is a purchasable
-Pro machine that prints 25% faster.
+Complete playable contract loop with the shop day and true two-machine
+parallel printing (v0.3.0). Accept a job, pick an orientation, print it, carry
+the part to the packing table, deliver, get paid — against the clock: days
+pass, rent comes due each day, late deliveries pay half, and clients cancel
+after two extra days. Both printers can hold and print separate contracts at
+the same time; printer 2 is a purchasable Pro machine that prints 25% faster.
+The contract board now rotates eight jobs including RUSH work (short
+deadline, premium pay).
 
 Working in local automated tests (15 suites, 656 checks):
 - Workshop enclosure, collision walls, workbench, two FDM printers (frame, bed,
@@ -29,6 +32,8 @@ Working in local automated tests (15 suites, 656 checks):
   the print grows visibly on the bed, failed prints must be cleared, finished
   parts are carried to the packing table, graded A/B/C/F by quality, delivered
   for a grade-scaled payout. Exactly-once payouts in an integer-cents ledger.
+- True parallel printing: each machine owns its sim, contract, prep state and
+  printed part; both can print, fail, and deliver independently (v0.3.0).
 - Risk-driven deterministic failures (bad orientation can lose the print),
   F-grade scrap path, printer hum and synthesized SFX (grab, place, beep,
   chime, cash, buzz) on a dedicated audio bus.
