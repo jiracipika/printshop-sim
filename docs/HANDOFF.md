@@ -32,8 +32,16 @@ pytest; real Web export via tools/build_web.sh (all four artifacts served,
 application/wasm correct); engine screenshots captured at 1280x720 (menu,
 spawn, mid-print, holding part, packing table) confirm visuals and HUD.
 
-v0.1.0 released: see git log for the exact release commit; deployed build
-verifiable via build-info.json + in-game version label.
+v0.1.0 RELEASED: commits 2f1f2af (loop/features) + ab05cc4 (shell help
+placement). Deployed to https://printshop-sim.vercel.app/ via vercel --prod;
+live build-info.json reports git_sha ab05cc4, version 0.1.0, source clean;
+index.js/wasm/pck all 200 with correct content types (application/wasm).
+Live browser (ZCode IAB, 1280x720): cold load, WASM boot, WebGL render, main
+menu with correct version label, Play -> gameplay HUD (balance $25.00, jobs
+waiting 4) and capture prompt all verified via screenshots. Pointer lock is
+not grantable in the embedded automation browser, so the full in-browser
+contract loop was verified in-engine (same build, captured screenshots);
+physical-device and cross-browser matrix remain open.
 
 ## Known quirks (accepted)
 
