@@ -134,6 +134,8 @@ static func _settings_valid(p: Dictionary) -> bool:
 		return false
 	if s.has("invert_y") and not (s["invert_y"] is bool):
 		return false
+	if s.has("shadows") and not (s["shadows"] is bool):
+		return false
 	return true
 
 

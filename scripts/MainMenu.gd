@@ -30,11 +30,13 @@ var _root: Control
 var _contracts_panel: Control
 var _upgrades_panel: Control
 var _settings_panel: Control
+var _howto_panel: Control
 var _settings_applying := false
 var _open := false
 var _contracts_open := false
 var _upgrades_open := false
 var _settings_open := false
+var _howto_open := false
 
 const COLOR_STEEL := Color("#202B2B")
 const COLOR_PAPER := Color("#EEE5D3")
@@ -54,28 +56,30 @@ func is_open() -> bool:
 
 func open_menu() -> void:
 	visible = true
-	for panel in [_contracts_panel, _upgrades_panel, _settings_panel]:
+	for panel in [_contracts_panel, _upgrades_panel, _settings_panel, _howto_panel]:
 		if panel != null:
 			panel.visible = false
 	_contracts_open = false
 	_upgrades_open = false
 	_settings_open = false
+	_howto_open = false
 	is_open()
 
 func close_menu() -> void:
 	visible = false
-	for panel in [_contracts_panel, _upgrades_panel, _settings_panel]:
+	for panel in [_contracts_panel, _upgrades_panel, _settings_panel, _howto_panel]:
 		if panel != null:
 			panel.visible = false
 	_contracts_open = false
 	_upgrades_open = false
 	_settings_open = false
+	_howto_open = false
 	is_open()
 
-## True while any subpanel (contracts/upgrades/settings) is showing — Esc
-## should step back to the main panel rather than close the menu.
+## True while any subpanel (contracts/upgrades/settings/how-to) is showing —
+## Esc should step back to the main panel rather than close the menu.
 func subpanel_open() -> bool:
-	return visible and (_contracts_open or _upgrades_open or _settings_open)
+	return visible and (_contracts_open or _upgrades_open or _settings_open or _howto_open)
 
 func contracts_visible() -> bool:
 	return visible and _contracts_open
@@ -179,6 +183,10 @@ func _build() -> void:
 	settings.pressed.connect(func() -> void: settings_pressed.emit())
 	buttons.add_child(settings)
 
+	var howto := _make_button("How to play", "HowTo")
+	howto.pressed.connect(func() -> void: _show_panel(_howto_panel))
+	buttons.add_child(howto)
+
 	var quit := _make_button("Quit", "Quit")
 	quit.pressed.connect(func() -> void: get_tree().quit())
 	buttons.add_child(quit)
@@ -200,6 +208,7 @@ func _build() -> void:
 	_build_contracts_panel()
 	_build_upgrades_panel()
 	_build_settings_panel()
+	_build_howto_panel()
 
 func _apply_quit_visibility() -> void:
 	if _root == null:
@@ -499,6 +508,16 @@ func _build_settings_panel() -> void:
 			settings_changed.emit("invert_y", on))
 	sv.add_child(invert)
 
+	var shadows := CheckBox.new()
+	shadows.name = "ShadowsCheck"
+	shadows.text = "Directional shadows (uncheck on slow devices)"
+	shadows.add_theme_color_override("font_color", COLOR_PAPER)
+	shadows.add_theme_font_size_override("font_size", 16)
+	shadows.toggled.connect(func(on: bool) -> void:
+		if not _settings_applying:
+			settings_changed.emit("shadows", on))
+	sv.add_child(shadows)
+
 	sv.add_child(_make_back_button(func() -> void:
 		_settings_panel.visible = false
 		_settings_open = false
@@ -536,13 +555,86 @@ func show_settings(current: Dictionary) -> void:
 	var sens: HSlider = _settings_panel.get_node("Sheet/SheetBox/SensSliderRow/SensSlider")
 	var vol: HSlider = _settings_panel.get_node("Sheet/SheetBox/VolSliderRow/VolSlider")
 	var invert: CheckBox = _settings_panel.get_node("Sheet/SheetBox/InvertCheck")
+	var shadows: CheckBox = _settings_panel.get_node("Sheet/SheetBox/ShadowsCheck")
 	sens.set_value_no_signal(float(current.get("mouse_sens_scale", 1.0)))
 	vol.set_value_no_signal(float(current.get("sfx_volume", 0.8)))
 	invert.set_pressed_no_signal(bool(current.get("invert_y", false)))
+	shadows.set_pressed_no_signal(bool(current.get("shadows", true)))
 	_settings_applying = false
 	_show_panel(_settings_panel)
 	_settings_open = true
 	is_open()
+
+## --- how-to-play panel (v0.4.0) -------------------------------------------------
+
+func _build_howto_panel() -> void:
+	_howto_panel = Control.new()
+	_howto_panel.name = "HowToPanel"
+	_howto_panel.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_howto_panel.mouse_filter = Control.MOUSE_FILTER_STOP
+	_howto_panel.visible = false
+	_root.add_child(_howto_panel)
+
+	var dim := ColorRect.new()
+	dim.color = Color(COLOR_STEEL, 0.92)
+	dim.set_anchors_preset(Control.PRESET_FULL_RECT)
+	dim.mouse_filter = Control.MOUSE_FILTER_STOP
+	_howto_panel.add_child(dim)
+
+	var sheet := PanelContainer.new()
+	sheet.name = "Sheet"
+	sheet.set_anchors_preset(Control.PRESET_FULL_RECT)
+	sheet.offset_left = 140.0
+	sheet.offset_top = 60.0
+	sheet.offset_right = -140.0
+	sheet.offset_bottom = -80.0
+	sheet.add_theme_stylebox_override("panel", _sheet_style())
+	_howto_panel.add_child(sheet)
+
+	var sv := VBoxContainer.new()
+	sv.name = "SheetBox"
+	sv.add_theme_constant_override("separation", 10)
+	sheet.add_child(sv)
+
+	var h1 := Label.new()
+	h1.name = "Title"
+	h1.text = "HOW TO PLAY"
+	h1.add_theme_color_override("font_color", COLOR_PAPER)
+	h1.add_theme_font_size_override("font_size", 28)
+	sv.add_child(h1)
+
+	var body := Label.new()
+	body.name = "Body"
+	body.text = "\nTHE LOOP\n" \
+		+ "1.  Walk to a printer and press E to accept a job from the board.\n" \
+		+ "2.  E previews an orientation (supports, material, risk). E again confirms and starts the print.\n" \
+		+ "3.  Risky orientations can fail mid-print — clear the bed with E and try a calmer angle.\n" \
+		+ "4.  When the print finishes, E collects the part.\n" \
+		+ "5.  Carry it to the PACKING table and press E to deliver. Grade A pays best; F pays nothing.\n" \
+		+ "\nWATCH THE CLOCK\n" \
+		+ "Days pass (~90 s each). Rent is due every morning — unpaid rent becomes debt.\n" \
+		+ "Deliver late and the client pays half. Two days too late, the job is cancelled.\n" \
+		+ "RUSH jobs pay a premium if you can make a 1-2 day deadline.\n" \
+		+ "\nTHE SHOP\n" \
+		+ "Printer 2 stays locked until you buy the Pro machine upgrade (menu > Upgrades).\n" \
+		+ "Both printers can run separate jobs at once. Upgrades cut risks and speed up prints.\n" \
+		+ "E also grabs and drops spools. Esc opens this menu; F3 is the dev panel (debug builds)."
+	body.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	body.add_theme_color_override("font_color", COLOR_PAPER)
+	body.add_theme_font_size_override("font_size", 16)
+	sv.add_child(body)
+
+	var controls := Label.new()
+	controls.name = "Controls"
+	controls.text = "Desktop: WASD move · mouse look · E interact · Esc menu        Touch: stick move · drag look · Interact · Pause"
+	controls.add_theme_color_override("font_color", COLOR_MINT)
+	controls.add_theme_font_size_override("font_size", 13)
+	sv.add_child(controls)
+
+	sv.add_child(_make_back_button(func() -> void:
+		_howto_panel.visible = false
+		_howto_open = false
+		is_open()))
 
 ## --- shared panel helpers ------------------------------------------------------
 
@@ -568,12 +660,13 @@ func _make_back_button(on_pressed: Callable) -> Button:
 	return back
 
 func _show_panel(panel: Control) -> void:
-	for p in [_contracts_panel, _upgrades_panel, _settings_panel]:
+	for p in [_contracts_panel, _upgrades_panel, _settings_panel, _howto_panel]:
 		if p != null:
 			p.visible = p == panel
 	_contracts_open = panel == _contracts_panel
 	_upgrades_open = panel == _upgrades_panel
 	_settings_open = panel == _settings_panel
+	_howto_open = panel == _howto_panel
 
 func _make_card(s: Dictionary) -> PanelContainer:
 	var card := PanelContainer.new()

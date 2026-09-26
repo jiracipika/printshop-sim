@@ -99,9 +99,10 @@ func _run() -> void:
 		"confirm drives PREPARING->PRINTING via legal path")
 	_ok(main.sim.is_running() and main.sim.job_id == contract.id,
 		"sim printing the accepted contract id")
-	_ok(absf(main.sim.support_need - 0.55) < 0.001 \
-		and absf(main.sim.adhesion_risk - 0.15) < 0.001,
-		"prep risks written into sim (tilted planter)")
+	var tilted_eval: Dictionary = PrepSystem.evaluate(contract, "tilted")
+	_ok(absf(main.sim.support_need - float(tilted_eval.support_need)) < 0.001 \
+		and absf(main.sim.adhesion_risk - float(tilted_eval.adhesion_risk)) < 0.001,
+		"prep risks written into sim (tilted, matches PrepSystem)")
 	_ok(ledger.balance() == 2500 - contract.material_cost_cents,
 		"material_cost_cents charged at orientation confirm")
 	var charged := false

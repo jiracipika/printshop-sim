@@ -155,3 +155,18 @@ static func weave(base: Color) -> ImageTexture:
 				var c := base.darkened(1.0 - v)
 				img.set_pixel(x, y, Color(c.r, c.g, c.b, 1.0))
 		return _finish(img))
+
+
+## Soft radial vignette overlay (black at edges, transparent center).
+static func vignette() -> ImageTexture:
+	return tex("vignette", func() -> ImageTexture:
+		var size := 256
+		var img := Image.create(size, size, false, Image.FORMAT_RGBA8)
+		var half := float(size) * 0.5
+		for y in size:
+			for x in size:
+				var d := Vector2(float(x) - half, float(y) - half).length() / half
+				var a := clampf((d - 0.55) / 0.45, 0.0, 1.0)
+				a = a * a  # ease-in so the center stays clean
+				img.set_pixel(x, y, Color(0.02, 0.03, 0.03, 0.55 * a))
+		return _finish(img))

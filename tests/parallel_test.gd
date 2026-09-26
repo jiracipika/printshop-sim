@@ -113,7 +113,7 @@ func _run() -> void:
 	# Exactly-once payouts across both machines.
 	var payout_txs := 0
 	for t in ledger.transactions:
-		if str(t["reason"]).begins_with("payout C-"):
+		if str(t["reason"]).begins_with("payout G-"):
 			payout_txs += 1
 	_ok(payout_txs == 2, "exactly two payout transactions (one per machine)")
 

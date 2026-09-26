@@ -10,14 +10,16 @@ The deployed version may lag local development. Check the in-game version/build 
 
 ## Current Milestone
 
-Complete playable contract loop with the shop day and true two-machine
-parallel printing (v0.3.0). Accept a job, pick an orientation, print it, carry
+Complete playable contract loop with the shop day, true two-machine parallel
+printing, and a procedural contract board (v0.4.0). Accept a job, pick an orientation, print it, carry
 the part to the packing table, deliver, get paid — against the clock: days
 pass, rent comes due each day, late deliveries pay half, and clients cancel
 after two extra days. Both printers can hold and print separate contracts at
 the same time; printer 2 is a purchasable Pro machine that prints 25% faster.
-The contract board now rotates eight jobs including RUSH work (short
-deadline, premium pay).
+The contract board is generated fresh every shop morning (deterministic per
+day) with rush work paying a premium for 1-2 day deadlines. Menu has a
+How-to-play screen; the look includes glow, sun shadows (toggleable in
+Settings for slow devices) and a soft vignette.
 
 Working in local automated tests (15 suites, 656 checks):
 - Workshop enclosure, collision walls, workbench, two FDM printers (frame, bed,
@@ -45,9 +47,10 @@ Working in local automated tests (15 suites, 656 checks):
   rent accrues as debt that payouts repay first), contract deadlines — late
   delivery pays half, two days overdue the client cancels.
 
-Pending:
-- Physical iOS/Android validation; browser matrix beyond Chromium; performance
-  profiling; more upgrades and contract variety.
+Pending (human-only):
+- Hands-on playtesting and balance passes; physical iOS/Android device
+  validation (unsigned Android APK builds via docs/mobile.md); browser matrix
+  beyond Chromium; app-store signing/distribution.
 
 ## Controls
 

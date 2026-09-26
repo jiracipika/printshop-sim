@@ -212,3 +212,73 @@ static func make_fixture_jobs() -> Array:
 	jobs.append(library)
 
 	return jobs
+
+## --- procedural generation (v0.4.0) -----------------------------------------
+##
+## The live shop serves generated contracts instead of the fixed fixture pool.
+## Generation is fully deterministic: the same (day, slot) always produces the
+## same contract, so a save/reload shows the same board and tests can pin
+## exact values. Bounds chosen for playability: materials stay affordable
+## (<= $24, so a fresh $25 shop can always confirm the first job), payouts
+## stay in $30-$150, rush work keeps its <= 2-day deadline and ~1.4x premium.
+
+const GEN_FIRSTS: Array[String] = [
+	"Mara", "Ellis", "Priya", "Theo", "Odalys", "Bram", "June", "Sam",
+	"Ines", "Viktor", "Noor", "Felix", "Ada", "Marcus", "Lena", "Kofi",
+]
+const GEN_ORGS: Array[String] = [
+	"Corner Plant Co.", "Repair cafe", "Parts desk", "Community kitchen",
+	"Farmers market", "Bike co-op", "Late Night Ramen", "Ridgeview library",
+	"Makerspace", "Bakery Nord", "Print & Pixel", "School of Craft",
+	"Harbor Clinic", "Venue Vinyl", "City ferries", "Escape room Nord",
+]
+const GEN_MODELS: Array[String] = [
+	"Desk organizer set", "Cable comb set", "Plant propagation stand",
+	"Camera hot-shoe cover", "Kitchen tape holder", "Loom shuttle repair",
+	"Speaker grille frame", "Board game insert", "Greenhouse drip nozzle",
+	"Backpack buckle pair", "Meter bezel replica", "Tool wall cradles",
+	"Stereo knob set", "Fold-flat tablet stand", "Button repair discs",
+	"Aquarium tube clip", "Sheet music page clamps", "Espresso tamper collar",
+	"Helmet chin-bar clip", "Wind chime core",
+]
+const GEN_BASE_PAYOUT: Array[int] = [4200, 6400, 8750, 11600, 15500]
+
+
+## Deterministic contract for shop `day`, board slot `index`. Same inputs ->
+## same contract, forever. `day >= 1` also bumps difficulty odds slightly so
+## later days lean toward meatier work.
+static func generate(day: int, index: int) -> Contract:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = hash("printshop-gen-%d-%d" % [maxi(day, 1), index])
+
+	var c := new()
+	c.id = "G-%d-%02d" % [maxi(day, 1), index]
+	c.client = "%s / %s" % [
+		GEN_FIRSTS[rng.randi_range(0, GEN_FIRSTS.size() - 1)],
+		GEN_ORGS[rng.randi_range(0, GEN_ORGS.size() - 1)]]
+	c.model_name = GEN_MODELS[rng.randi_range(0, GEN_MODELS.size() - 1)]
+
+	var day_bonus: int = clampi((maxi(day, 1) - 1) / 3, 0, 2)
+	c.difficulty = clampi(rng.randi_range(1, 5) + (1 if rng.randf() < 0.15 * day_bonus else 0), 1, 5)
+	c.layers = rng.randi_range(60, 400)
+
+	# Risk flags scale with difficulty (~15% per step above 1, per flag).
+	var flag_odds := 0.15 * float(c.difficulty - 1)
+	for flag in VALID_RISK_FLAGS:
+		if rng.randf() < flag_odds:
+			c.risk_flags.append(flag)
+
+	# Materials: layers * rate, hard-capped at 2400 cents (always affordable
+	# against the $25 opening balance).
+	c.material_cost_cents = mini(c.layers * rng.randi_range(3, 6), 2400)
+
+	# Rush: a quarter of the board; short deadline, ~1.4x premium.
+	c.rush = rng.randf() < 0.25
+	if c.rush:
+		c.deadline_days = rng.randi_range(1, 2)
+		c.payout_cents = mini((GEN_BASE_PAYOUT[c.difficulty - 1] + c.layers * 2) * 14 / 10, 15000)
+	else:
+		c.deadline_days = clampi(c.difficulty + rng.randi_range(-1, 1), 2, 6)
+		c.payout_cents = mini(GEN_BASE_PAYOUT[c.difficulty - 1] + c.layers * 2, 15000)
+	c.payout_cents = maxi(c.payout_cents, 3000)
+	return c

@@ -1,4 +1,4 @@
-# Current handoff — parallel printing + contract variety (v0.3.0)
+# Current handoff — generated board + polish (v0.4.0)
 
 Read AGENTS.md and design/implementation-plan.md. Working copy:
 /Users/rs-mac/.zcode/workspace/default/printshop-sim (canonical disk plan in
@@ -8,6 +8,21 @@ https://github.com/jiracipika/printshop-sim, main. Public prototype
 https://printshop-sim.vercel.app/.
 
 ## State at this checkpoint
+
+v0.4.0 shipped on top of v0.3.0: the live shop's board is procedurally
+generated per shop day (Contract.generate(day, slot), fully deterministic,
+materials capped at $24 so day 1 is always confirmable, rush ~25% of the
+board at 1.4x and <= 2-day deadlines, day 1 leans easy). JobBoard.generation_enabled
+(default false keeps fixture behavior for direct-board suites) +
+rotate_day(new_day) on every day rollover and save restore. Polish, all
+Compatibility-safe: glow (emissive fixtures/labels bloom), sun shadows with
+a Settings "Directional shadows" toggle (persists; for slow devices), soft
+vignette overlay (non-blocking), and a How-to-play menu panel explaining the
+loop, the clock and the shop. New suite tests/gen_test.gd (24 checks).
+Android: builds/printshop-sim.apk exports unsigned from this workspace with
+just the installed export templates (docs/mobile.md documents sign+install;
+the SDK/apksigner toolchain lives on /Volumes/ADATA and was not mounted, so
+signing remains a human step).
 
 v0.3.0 shipped on top of v0.2.0: (a) contract variety — the fixture pool
 doubles to 8 jobs (C-014..C-021; original four stay first/in order), with two
@@ -50,12 +65,12 @@ cardboard/posters/rug), procedural sky + fog, ceiling fixtures, window,
 props (spool shelf, crates, plant, ticking wall clock), center reticle,
 synthesized SFX + printer hum on an "SFX" bus.
 
-Verification evidence (local): 17 Godot headless suites green — contract 255,
-packing 58, touch 47, save 44, shop_art 51, upgrades 52, economy 54, day 36,
-parallel 23, prep 29, printer_visual 28, grab 26, input_pause 23, menu 25,
-debug_panel 32, room 9, smoke 9 (801 checks, 0 failures, no SCRIPT ERROR);
-Python build pipeline 21 pytest; engine screenshots confirm the RUSH board
-tag and both machines printing simultaneously with per-printer HUD lines.
+Verification evidence (local): 18 Godot headless suites green — contract 255,
+gen 24, packing 58, touch 47, save 44, shop_art 51, upgrades 52, economy 54,
+day 36, parallel 23, prep 29, printer_visual 28, grab 26, input_pause 23,
+menu 25, debug_panel 32, room 9, smoke 9 (849 checks, 0 failures, no SCRIPT
+ERROR); Python build pipeline 21 pytest; engine screenshots confirm the
+how-to panel, vignette, shadows and the generated board (Jobs waiting: 8).
 
 v0.1.0 RELEASED: commits 2f1f2af (loop/features) + ab05cc4 (shell help
 placement). Deployed to https://printshop-sim.vercel.app/ via vercel --prod;
@@ -76,12 +91,18 @@ physical-device and cross-browser matrix remain open.
   or the next print starts (intentional: it's the thing you pick up).
 - DebugPanel [1] spawn confirms "upright" automatically via the real path.
 
-## Next features (not started)
+## Remaining work is HUMAN-ONLY (as of v0.4.0)
 
-- Contract generation (procedural client pool instead of fixed fixtures).
-- Ambient occlusion / shader polish (Compatibility-safe); performance profile.
-- Physical iOS/Android device validation (android/ preset landed from another
-  session; debug keystore only); browser matrix.
+- Hands-on playtesting/balance (deadline tuning, payout curves, feel).
+- Physical device testing: Android install/sign per docs/mobile.md (needs the
+  /Volumes/ADATA toolchain mounted), iOS/Android touch behavior, performance
+  on real hardware.
+- Cross-browser matrix (Firefox/Safari) and limited-bandwidth checks on the
+  live URL.
+- App-store signing/distribution decisions (debug keystore is committed; do
+  not ship it).
+
+Everything code-side is implemented and automated-tested.
 
 ## Operator notes
 

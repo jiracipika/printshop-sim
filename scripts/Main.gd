@@ -61,7 +61,7 @@ var orientation_pending: bool:
 var active_part: Grabbable:
 	get: return _machine(_focus).get("part")
 
-var settings := {"mouse_sens_scale": 1.0, "sfx_volume": 0.8, "invert_y": false}
+var settings := {"mouse_sens_scale": 1.0, "sfx_volume": 0.8, "invert_y": false, "shadows": true}
 var _settings_dirty := false
 var sfx: Sfx
 var _hum: AudioStreamPlayer3D
@@ -219,6 +219,13 @@ func _ready() -> void:
 	_build_hud()
 	_load_save()
 	apply_setting("sfx_volume", float(settings.sfx_volume), false)
+	_apply_quality()
+
+## Quality settings (v0.4.0): directional shadows can be turned off for weak
+## devices; persists in the save like the rest of the settings.
+func _apply_quality() -> void:
+	if _sun != null:
+		_sun.shadow_enabled = bool(settings.get("shadows", true))
 	# Browser-safe start: mouse visible, gameplay paused until a deliberate
 	# left click captures the pointer.
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
@@ -249,17 +256,20 @@ func _load_save() -> void:
 		_apply_upgrade_effects()
 	if payload.has("settings"):
 		var s: Dictionary = payload.settings
-		for key in ["mouse_sens_scale", "sfx_volume", "invert_y"]:
+		for key in ["mouse_sens_scale", "sfx_volume", "invert_y", "shadows"]:
 			if s.has(key):
 				apply_setting(key, s[key], false)
 	if payload.has("day"):
 		day_cycle.restore(int(payload.day), 0.0)
+		job_board.rotate_day(day_cycle.day)
 
 func apply_setting(key: String, value, persist := true) -> void:
 	settings[key] = value
 	match key:
 		"sfx_volume":
 			Sfx.set_volume(float(value))
+		"shadows":
+			_apply_quality()
 		# mouse_sens_scale / invert_y are read live by the look paths.
 	if persist:
 		_save_game()
@@ -405,6 +415,8 @@ func _build_world() -> void:
 	sun.rotation_degrees = Vector3(-55, -30, 0)
 	sun.light_energy = 1.1
 	sun.light_color = Color(1.0, 0.96, 0.88)
+	sun.shadow_enabled = true
+	sun.directional_shadow_max_distance = 12.0
 	add_child(sun)
 	_sun = sun
 	var lamp := OmniLight3D.new()
@@ -459,6 +471,7 @@ func _build_world() -> void:
 		s.print_started.connect(_on_print_started.bind(i))
 		s.print_finished.connect(_on_print_done.bind(i))
 	job_board = load("res://scripts/JobBoard.gd").new()
+	job_board.generation_enabled = true  # live shop: procedural board (v0.4.0)
 	job_board.add_to_group("job_board")
 	add_child(job_board)
 	_apply_daylight()
@@ -504,6 +517,11 @@ func _build_environment() -> void:
 	env.fog_enabled = true
 	env.fog_light_color = Color("#C9C2AE")
 	env.fog_density = 0.008
+	# Subtle bloom on the emissive fixtures/labels (Compatibility-safe polish).
+	env.glow_enabled = true
+	env.glow_intensity = 0.5
+	env.glow_strength = 0.9
+	env.glow_hdr_threshold = 1.1
 	_sky_mat = sky_mat
 	_env = env
 	var we := WorldEnvironment.new()
@@ -898,6 +916,15 @@ func _build_player() -> void:
 func _build_hud() -> void:
 	_hud = CanvasLayer.new()
 	add_child(_hud)
+	# Soft vignette overlay — focuses the eye, hides nothing.
+	var vignette := TextureRect.new()
+	vignette.name = "Vignette"
+	vignette.texture = ShopArt.vignette()
+	vignette.stretch_mode = TextureRect.STRETCH_SCALE
+	vignette.set_anchors_preset(Control.PRESET_FULL_RECT)
+	vignette.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_hud.add_child(vignette)
+
 	# Translucent steel card behind the status block for readability over the
 	# bright workshop.
 	var card := PanelContainer.new()
@@ -1558,6 +1585,7 @@ func _is_cancelled() -> bool:
 
 ## Day rollover: rent comes due first, then overdue contracts are cancelled.
 func _on_day_changed(new_day: int) -> void:
+	job_board.rotate_day(new_day)  # fresh deterministic offerings each morning
 	if ledger.can_afford(RENT_CENTS):
 		ledger.charge(RENT_CENTS, "rent day %d" % new_day)
 		_set_prompt("Day %d — rent paid ($%s)" % [new_day, _cents_str(RENT_CENTS)])

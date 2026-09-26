@@ -1,18 +1,42 @@
 extends Node
 
-## Task 09 — contract job board. Serves Contract objects (task 08 fixtures).
-## Deterministic: fixture list refills in rotated order when drained.
+## Task 09 — contract job board. Serves Contract objects.
+## Two modes:
+##   fixture mode (default): the fixed 8-job pool rotates deterministically.
+##   generation mode (v0.4.0, `generation_enabled = true`): procedurally
+##     generated contracts, deterministic per shop day; `rotate_day(day)`
+##     deals a fresh board each morning. Main enables this for the live shop;
+##     suites that build a JobBoard directly keep fixture behavior.
 
 var _queue: Array[Contract] = []
 var _fixture_cycle := 0
+var generation_enabled := false
+var _gen_day := 1
 
 func _ready() -> void:
 	_fill_to_capacity()
 
+## Point the board at a new shop day: clears the queue and refills from that
+## day's deterministic generation. No-op in fixture mode.
+func rotate_day(day: int) -> void:
+	if not generation_enabled:
+		return
+	_gen_day = maxi(day, 1)
+	_queue.clear()
+	_fixture_cycle = 0
+	_fill_to_capacity()
+
 func _refill() -> void:
-	# Append ONE next fixture job (rotated deterministic order). Duplicated:
-	# the shared fixture Resources must never be mutated — a checked-out
-	# contract's state would otherwise be clobbered by a later refill.
+	# Append ONE next job (rotated deterministic order). In fixture mode the
+	# shared fixture Resources must never be mutated — a checked-out
+	# contract's state would otherwise be clobbered by a later refill —
+	# so they are duplicated. Generated contracts are fresh objects already.
+	if generation_enabled:
+		var g: Contract = Contract.generate(_gen_day, _fixture_cycle)
+		g.state = Contract.State.OFFERED
+		_queue.append(g)
+		_fixture_cycle += 1
+		return
 	var fixtures: Array = Contract.make_fixture_jobs()
 	var idx := _fixture_cycle % fixtures.size()
 	var c: Contract = fixtures[idx].duplicate()
@@ -27,7 +51,6 @@ func get_available_count() -> int:
 	return _queue.size()
 
 func take_next() -> Contract:
-	var capacity := Contract.make_fixture_jobs().size()
 	if _queue.is_empty():
 		_fill_to_capacity()
 	var c: Contract = _queue.pop_front()
@@ -35,9 +58,9 @@ func take_next() -> Contract:
 	return c
 
 func _fill_to_capacity() -> void:
-	# Top the queue back up to at most fixture capacity so the board count
+	# Top the queue back up to board capacity (fixture pool size) so the count
 	# is invariant (existing suites rely on this) and the loop never drains;
-	# refill order cycles deterministically through the fixture set.
+	# refill order cycles deterministically.
 	var capacity := Contract.make_fixture_jobs().size()
 	while _queue.size() < capacity:
 		_refill()
