@@ -13,7 +13,13 @@ extends RefCounted
 ##     "active_contract": Dictionary (may be {}),
 ##     "paid_ids": Array[String] (redundant mirror of ledger.paid_contract_ids),
 ##     "saved_at_unix": int,
+##     "upgrades": Array[String] (optional — owned upgrade ids),
+##     "settings": Dictionary (optional — {mouse_sens_scale, sfx_volume, invert_y}),
 ##   }
+##
+## Optional keys are additive: payloads without them stay valid (older saves
+## keep loading), and validate() rejects them only when malformed (wrong
+## types, negative/zero scale, out-of-range volume, non-string ids).
 ##
 ## validate() returns a normalized deep copy of the payload, or {} if anything
 ## is malformed. It never throws on garbage input (fuzz-tested).
@@ -22,14 +28,16 @@ const VERSION := 1
 
 
 ## Build a v1 payload. Deep-copies inputs so later mutation of the caller's
-## dictionaries cannot corrupt the payload.
+## dictionaries cannot corrupt the payload. `extras` may carry "upgrades"
+## (Array[String]) and "settings" (Dictionary); unknown extra keys are kept
+## verbatim and must still pass validate().
 static func build_payload(
 		ledger_snapshot: Dictionary, active_contract: Dictionary,
-		balance_cents: int, paid_ids: Array) -> Dictionary:
+		balance_cents: int, paid_ids: Array, extras: Dictionary = {}) -> Dictionary:
 	var paid: Array = []
 	for id in paid_ids:
 		paid.append(str(id))
-	return {
+	var payload := {
 		"version": VERSION,
 		"balance_cents": int(balance_cents),
 		"ledger": ledger_snapshot.duplicate(true),
@@ -37,6 +45,10 @@ static func build_payload(
 		"paid_ids": paid,
 		"saved_at_unix": int(Time.get_unix_time_from_system()),
 	}
+	for key in extras:
+		payload[key] = extras[key].duplicate(true) if extras[key] is Array \
+			or extras[key] is Dictionary else extras[key]
+	return payload
 
 
 ## Defensive validation. Returns {} for ANY malformed input (wrong version
@@ -66,6 +78,10 @@ static func validate(payload: Variant) -> Dictionary:
 	for id in p["paid_ids"]:
 		if not (id is String) or id.is_empty():
 			return {}
+	if not _upgrades_valid(p):
+		return {}
+	if not _settings_valid(p):
+		return {}
 
 	var out: Dictionary = p.duplicate(true)
 	out["version"] = int(p["version"])
@@ -80,6 +96,42 @@ static func validate(payload: Variant) -> Dictionary:
 		tx["delta_cents"] = int(tx["delta_cents"])
 		tx["balance_after"] = int(tx["balance_after"])
 	return out
+
+
+## Optional "upgrades" key: absent = fine; present must be Array[String] of
+## non-empty ids.
+static func _upgrades_valid(p: Dictionary) -> bool:
+	if not p.has("upgrades"):
+		return true
+	if typeof(p["upgrades"]) != TYPE_ARRAY:
+		return false
+	for id in p["upgrades"]:
+		if not (id is String) or id.is_empty():
+			return false
+	return true
+
+
+## Optional "settings" key: absent = fine; present must be a Dictionary whose
+## known keys type-check (positive float scale, float volume in [0,1], bool
+## invert). Unknown keys are tolerated and preserved.
+static func _settings_valid(p: Dictionary) -> bool:
+	if not p.has("settings"):
+		return true
+	if typeof(p["settings"]) != TYPE_DICTIONARY:
+		return false
+	var s: Dictionary = p["settings"]
+	if s.has("mouse_sens_scale") and not (_is_int(s["mouse_sens_scale"]) \
+			or s["mouse_sens_scale"] is float):
+		return false
+	if s.has("mouse_sens_scale") and float(s["mouse_sens_scale"]) <= 0.0:
+		return false
+	if s.has("sfx_volume") and not (_is_int(s["sfx_volume"]) or s["sfx_volume"] is float):
+		return false
+	if s.has("sfx_volume") and (float(s["sfx_volume"]) < 0.0 or float(s["sfx_volume"]) > 1.0):
+		return false
+	if s.has("invert_y") and not (s["invert_y"] is bool):
+		return false
+	return true
 
 
 ## True for TYPE_INT or a float with an exactly integral value.

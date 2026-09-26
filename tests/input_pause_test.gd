@@ -95,10 +95,14 @@ func _run() -> void:
 	_ok(main.job_board.get_available_count() == jobs1, "E blocked while paused")
 
 	# 9. Close menu (Esc), then resume click, then E starts a real job.
+	#    (E now accepts into PREPARING; a second E previews orientation and a
+	#    third confirms — the print only starts after orientation confirm.)
 	_feed_key(main, KEY_ESCAPE)
 	_feed_click(main, MOUSE_BUTTON_LEFT)
 	_teleport_near_printer_a(main)
 	var jobs_before_e: int = main.job_board.get_available_count()
+	_feed_key(main, KEY_E)
+	_feed_key(main, KEY_E)
 	_feed_key(main, KEY_E)
 	_ok(main.sim.is_running(), "E after resume starts print job")
 	# take_next() pops and immediately refills, so the count is invariant;

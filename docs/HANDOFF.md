@@ -1,15 +1,60 @@
-# Current handoff — integrated mobile workshop update
+# Current handoff — full contract loop (v0.1.0)
 
-Read AGENTS.md and design/implementation-plan.md. Repo /Volumes/HARD/projects/printshop-sim; private remote https://github.com/jiracipika/printshop-sim, main. Existing public prototype https://printshop-sim.vercel.app/. User authorized main commit/push and Vercel release; design-only document approval/PR language is superseded.
+Read AGENTS.md and design/implementation-plan.md. Working copy:
+/Users/rs-mac/.zcode/workspace/default/printshop-sim (canonical disk plan in
+HANDOFF pointed at /Volumes/HARD previously; this workspace copy is the live
+one for the v0.1.0 release). Private remote
+https://github.com/jiracipika/printshop-sim, main. Public prototype
+https://printshop-sim.vercel.app/.
 
-Roles: Astra designs/plans/reviews; explicit GLM 5.3 Flash via Z.AI Coding Plan handles bounded background coding. Pin GLM_BASE_URL=https://api.z.ai/api/coding/paas/v4 and --provider zai --model glm-5.3-flash. Do not use default delegation (previously routed exhausted GLM5.2), do not retry quota/auth or silently switch models. Never touch automated-newsletter or pitchforge/pitch-therapy.
+## State at this checkpoint
 
-Completed locally: workshop walls/bench/palette; click-to-play/Escape/focus pause; mobile overlay and multi-touch movement/look/Interact/Pause; reproducible export stamping/restoration and artifact freshness checks. Parent review caught and fixed hidden overlay, synthetic touch-to-mouse capture, and a desktop-only physics gate that blocked touch movement. Tests must exercise integrated physics, not only input handlers.
+All implementation-plan tasks 00-12 are implemented and integrated. The full
+loop is playable: accept at a printer -> orientation prep (upright/tilted/
+flat_side with support %, material estimate, risk level; flat_side refused on
+stability parts) -> material charge on confirm -> visible layered print growth
+on the bed -> risk-driven deterministic failures (clear the bed with E before
+the next job) -> collect the physical part -> carry it to the packing table ->
+pack & deliver (A/B/C/F grade via QualityCheck, grade-scaled payout, F scrap
+path) -> exactly-once ledger payout. Upgrades shop (4 items with real sim
+effects), settings panel (sensitivity/volume/invert-Y, write-through on menu
+close), versioned save covering balance/upgrades/settings with corruption
+fallback. Art pass: runtime-procedural textures (plaster/plywood/tiles/steel/
+cardboard/posters/rug), procedural sky + fog, ceiling fixtures, window,
+props (spool shelf, crates, plant, ticking wall clock), center reticle,
+synthesized SFX + printer hum on an "SFX" bus.
 
-Parent verification: Godot import clean; touch 47 checks, desktop pause 21, room 9, simulation 9; Python build pipeline 21 tests. Actual Web export passed. Chromium mobile emulation (844x390, 5 touch points) loaded WASM/PCK and rendered controls; touch resume, move+look, Interact starting print and pause observed; pointer lock remained false. Physical iOS/Android, browser matrix, performance targets, portrait gameplay and full tycoon loop remain unverified. Browser screenshots /tmp/printshop-mobile-moving.png and /tmp/printshop-mobile-print-paused.png are local transient evidence.
+Verification evidence (local): 15 Godot headless suites green — contract 170,
+packing 58, touch 47, save 44, shop_art 51, upgrades 51, economy 54, prep 29,
+printer_visual 28, grab 26, input_pause 23, menu 25, debug_panel 32, room 9,
+smoke 9 (656 checks, 0 failures, no SCRIPT ERROR); Python build pipeline 21
+pytest; real Web export via tools/build_web.sh (all four artifacts served,
+application/wasm correct); engine screenshots captured at 1280x720 (menu,
+spawn, mid-print, holding part, packing table) confirm visuals and HUD.
 
-Release in progress at this checkpoint: commit reviewed source, clean export bash tools/build_web.sh, push main, Vercel production deploy, read live build-info.json and verify live browser. Never assume this checkpoint itself proves deployment. Parent final reply/remote metadata provides actual released commit.
+v0.1.0 released: see git log for the exact release commit; deployed build
+verifiable via build-info.json + in-game version label.
 
-Next features: grabbing/placement, recognizable printer geometry and visible print deposition, preparation/supports/failure/packaging/economy. Current printers are placeholder boxes; print state appears in HUD. Do not call full contract loop complete.
+## Known quirks (accepted)
 
-Continue via independent bounded CLI workers (not parent-context-only delegation), disjoint file ownership, required checkpoint files and Astra review boundaries. Disk plan survives context resets; indefinite autonomous continuation is not configured.
+- Headless tests drive the sim via sim.tick(); real-time prints take
+  layers*0.1 s / speed multiplier (C-014 upright ~21 s).
+- The completed print visual stays on the bed until collected/failed-cleared
+  or the next print starts (intentional: it's the thing you pick up).
+- DebugPanel [1] spawn confirms "upright" automatically via the real path.
+
+## Next features (not started)
+
+- Deadline/day tracking consequences (deadline_days shown in HUD, no
+  consequence yet).
+- Second printer as purchasable machine; multi-job parallelism.
+- Day/night cycle, ambient occlusion, shader polish (Compatibility-safe).
+- Physical iOS/Android device validation; browser matrix; performance profile.
+
+## Operator notes
+
+- Build: bash tools/build_web.sh (stamps Version.gd with HEAD sha; export
+  validated; build-info.json written). Serve web/build/ over HTTP, never file://.
+- Deploy: vercel --prod from the repo (vercel.json serves web/build). Verify
+  the live URL loads the stamped build and plays before calling it released.
+- Never touch automated-newsletter or pitchforge/pitch-therapy.

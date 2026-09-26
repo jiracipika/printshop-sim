@@ -181,6 +181,9 @@ func _run() -> void:
 	_resume_via_tap(tc, main)
 	_teleport_near_printer_a(main)
 	main.sim.state = PrintSim.State.IDLE
+	# Accept -> preview -> confirm: three Interact taps to a running print.
+	_feed_touch(tc, 8, tc.interact_rect().get_center(), true)
+	_feed_touch(tc, 8, tc.interact_rect().get_center(), true)
 	_feed_touch(tc, 8, tc.interact_rect().get_center(), true)
 	_ok(main.sim.is_running(), "touch interact starts print job when unpaused")
 

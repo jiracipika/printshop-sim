@@ -15,6 +15,10 @@ class_name MainMenu
 
 signal play_pressed
 signal contracts_pressed
+signal upgrades_pressed
+signal upgrade_buy_pressed(id: String)
+signal settings_pressed
+signal settings_changed(key: String, value)
 
 ## Test-only: simulate a web export (hides Quit exactly like the real gate).
 var simulate_web := false:
@@ -24,8 +28,13 @@ var simulate_web := false:
 
 var _root: Control
 var _contracts_panel: Control
+var _upgrades_panel: Control
+var _settings_panel: Control
+var _settings_applying := false
 var _open := false
 var _contracts_open := false
+var _upgrades_open := false
+var _settings_open := false
 
 const COLOR_STEEL := Color("#202B2B")
 const COLOR_PAPER := Color("#EEE5D3")
@@ -45,15 +54,28 @@ func is_open() -> bool:
 
 func open_menu() -> void:
 	visible = true
-	_contracts_panel.visible = false
+	for panel in [_contracts_panel, _upgrades_panel, _settings_panel]:
+		if panel != null:
+			panel.visible = false
 	_contracts_open = false
+	_upgrades_open = false
+	_settings_open = false
 	is_open()
 
 func close_menu() -> void:
 	visible = false
-	_contracts_panel.visible = false
+	for panel in [_contracts_panel, _upgrades_panel, _settings_panel]:
+		if panel != null:
+			panel.visible = false
 	_contracts_open = false
+	_upgrades_open = false
+	_settings_open = false
 	is_open()
+
+## True while any subpanel (contracts/upgrades/settings) is showing — Esc
+## should step back to the main panel rather than close the menu.
+func subpanel_open() -> bool:
+	return visible and (_contracts_open or _upgrades_open or _settings_open)
 
 func contracts_visible() -> bool:
 	return visible and _contracts_open
@@ -149,8 +171,12 @@ func _build() -> void:
 	contracts.pressed.connect(func() -> void: contracts_pressed.emit())
 	buttons.add_child(contracts)
 
-	var settings := _make_button("Settings — coming soon", "Settings")
-	settings.disabled = true
+	var upgrades := _make_button("Upgrades", "Upgrades")
+	upgrades.pressed.connect(func() -> void: upgrades_pressed.emit())
+	buttons.add_child(upgrades)
+
+	var settings := _make_button("Settings", "Settings")
+	settings.pressed.connect(func() -> void: settings_pressed.emit())
 	buttons.add_child(settings)
 
 	var quit := _make_button("Quit", "Quit")
@@ -172,6 +198,8 @@ func _build() -> void:
 	_root.add_child(version)
 
 	_build_contracts_panel()
+	_build_upgrades_panel()
+	_build_settings_panel()
 
 func _apply_quit_visibility() -> void:
 	if _root == null:
@@ -265,12 +293,287 @@ func _build_contracts_panel() -> void:
 func show_contracts(summaries: Array[Dictionary]) -> void:
 	var list: VBoxContainer = _contracts_panel.get_node("Sheet/SheetBox/Scroll/List")
 	for child in list.get_children():
-		child.queue_free()
+		list.remove_child(child)
+		child.free()
 	for s in summaries:
 		list.add_child(_make_card(s))
-	_contracts_panel.visible = true
+	_show_panel(_contracts_panel)
 	_contracts_open = true
 	is_open()
+
+## --- upgrades panel (task 12) ------------------------------------------------
+
+func _build_upgrades_panel() -> void:
+	_upgrades_panel = Control.new()
+	_upgrades_panel.name = "UpgradesPanel"
+	_upgrades_panel.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_upgrades_panel.mouse_filter = Control.MOUSE_FILTER_STOP
+	_upgrades_panel.visible = false
+	_root.add_child(_upgrades_panel)
+
+	var dim := ColorRect.new()
+	dim.color = Color(COLOR_STEEL, 0.92)
+	dim.set_anchors_preset(Control.PRESET_FULL_RECT)
+	dim.mouse_filter = Control.MOUSE_FILTER_STOP
+	_upgrades_panel.add_child(dim)
+
+	var sheet := PanelContainer.new()
+	sheet.name = "Sheet"
+	sheet.set_anchors_preset(Control.PRESET_FULL_RECT)
+	sheet.offset_left = 64.0
+	sheet.offset_top = 48.0
+	sheet.offset_right = -64.0
+	sheet.offset_bottom = -48.0
+	sheet.add_theme_stylebox_override("panel", _sheet_style())
+	_upgrades_panel.add_child(sheet)
+
+	var sv := VBoxContainer.new()
+	sv.name = "SheetBox"
+	sheet.add_child(sv)
+
+	var head := HBoxContainer.new()
+	head.name = "Head"
+	sv.add_child(head)
+	var h1 := Label.new()
+	h1.name = "Title"
+	h1.text = "UPGRADES"
+	h1.add_theme_color_override("font_color", COLOR_PAPER)
+	h1.add_theme_font_size_override("font_size", 28)
+	head.add_child(h1)
+	var balance := Label.new()
+	balance.name = "Balance"
+	balance.text = ""
+	balance.add_theme_color_override("font_color", COLOR_MINT)
+	balance.add_theme_font_size_override("font_size", 16)
+	head.add_child(balance)
+
+	var scroll := ScrollContainer.new()
+	scroll.name = "Scroll"
+	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	sv.add_child(scroll)
+
+	var list := VBoxContainer.new()
+	list.name = "List"
+	list.add_theme_constant_override("separation", 10)
+	scroll.add_child(list)
+
+	sv.add_child(_make_back_button(func() -> void:
+		_upgrades_panel.visible = false
+		_upgrades_open = false
+		is_open()))
+
+## cards: [{id, name, desc, cost_cents, owned, affordable}]
+func show_upgrades(cards: Array[Dictionary], balance_line := "") -> void:
+	var list: VBoxContainer = _upgrades_panel.get_node("Sheet/SheetBox/Scroll/List")
+	for child in list.get_children():
+		list.remove_child(child)
+		child.free()
+	for c in cards:
+		list.add_child(_make_upgrade_card(c))
+	if balance_line != "":
+		set_upgrade_balance(balance_line)
+	_show_panel(_upgrades_panel)
+	_upgrades_open = true
+	is_open()
+
+var _balance_line := ""
+
+## Main sets the header balance line before/alongside show_upgrades.
+func set_upgrade_balance(line: String) -> void:
+	_balance_line = line
+	var bal: Label = _upgrades_panel.find_child("Balance", true, false) if _upgrades_panel != null else null
+	if bal != null:
+		bal.text = line
+
+## Test/UI seam: the live card nodes in the upgrades list.
+func upgrade_cards_ui() -> Array:
+	var out: Array = []
+	if _upgrades_panel == null:
+		return out
+	var list: VBoxContainer = _upgrades_panel.get_node("Sheet/SheetBox/Scroll/List")
+	for child in list.get_children():
+		out.append(child)
+	return out
+
+func _make_upgrade_card(c: Dictionary) -> PanelContainer:
+	var card := PanelContainer.new()
+	card.set_meta("upgrade_id", str(c.get("id", "")))
+	var sb := StyleBoxFlat.new()
+	sb.bg_color = Color("#364137")
+	sb.border_color = Color("#627265")
+	sb.set_border_width_all(1)
+	sb.content_margin_left = 16.0
+	sb.content_margin_right = 16.0
+	sb.content_margin_top = 12.0
+	sb.content_margin_bottom = 12.0
+	card.add_theme_stylebox_override("panel", sb)
+
+	var row := HBoxContainer.new()
+	card.add_child(row)
+
+	var v := VBoxContainer.new()
+	v.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	row.add_child(v)
+	var who := Label.new()
+	who.text = str(c.get("name", ""))
+	who.add_theme_color_override("font_color", COLOR_PAPER)
+	who.add_theme_font_size_override("font_size", 18)
+	v.add_child(who)
+	var desc := Label.new()
+	desc.text = str(c.get("desc", ""))
+	desc.add_theme_color_override("font_color", COLOR_MUTED)
+	desc.add_theme_font_size_override("font_size", 13)
+	v.add_child(desc)
+
+	var cost_cents := int(c.get("cost_cents", 0))
+	var owned := bool(c.get("owned", false))
+	var affordable := bool(c.get("affordable", false))
+	card.set_meta("owned", owned)
+	var btn := Button.new()
+	btn.name = "Buy"
+	btn.custom_minimum_size = Vector2(150, 44)
+	btn.add_theme_font_size_override("font_size", 16)
+	if owned:
+		btn.text = "Installed"
+		btn.disabled = true
+	else:
+		btn.text = "Buy $%d.%02d" % [cost_cents / 100, cost_cents % 100]
+		btn.disabled = not affordable
+		btn.pressed.connect(func() -> void: upgrade_buy_pressed.emit(str(c.get("id", ""))))
+	if owned:
+		btn.add_theme_color_override("font_color", COLOR_MINT)
+	elif affordable:
+		btn.add_theme_color_override("font_color", COLOR_HONEY)
+	else:
+		btn.add_theme_color_override("font_color", COLOR_MUTED)
+	row.add_child(btn)
+	return card
+
+## --- settings panel (task 12) -------------------------------------------------
+
+func _build_settings_panel() -> void:
+	_settings_panel = Control.new()
+	_settings_panel.name = "SettingsPanel"
+	_settings_panel.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_settings_panel.mouse_filter = Control.MOUSE_FILTER_STOP
+	_settings_panel.visible = false
+	_root.add_child(_settings_panel)
+
+	var dim := ColorRect.new()
+	dim.color = Color(COLOR_STEEL, 0.92)
+	dim.set_anchors_preset(Control.PRESET_FULL_RECT)
+	dim.mouse_filter = Control.MOUSE_FILTER_STOP
+	_settings_panel.add_child(dim)
+
+	var sheet := PanelContainer.new()
+	sheet.name = "Sheet"
+	sheet.set_anchors_preset(Control.PRESET_FULL_RECT)
+	sheet.offset_left = 300.0
+	sheet.offset_top = 110.0
+	sheet.offset_right = -300.0
+	sheet.offset_bottom = -260.0
+	sheet.add_theme_stylebox_override("panel", _sheet_style())
+	_settings_panel.add_child(sheet)
+
+	var sv := VBoxContainer.new()
+	sv.name = "SheetBox"
+	sv.add_theme_constant_override("separation", 14)
+	sheet.add_child(sv)
+
+	var h1 := Label.new()
+	h1.text = "SETTINGS"
+	h1.add_theme_color_override("font_color", COLOR_PAPER)
+	h1.add_theme_font_size_override("font_size", 28)
+	sv.add_child(h1)
+
+	sv.add_child(_labeled_slider("Mouse look speed", "SensSlider", 0.3, 2.5, 0.05))
+	sv.add_child(_labeled_slider("Sound volume", "VolSlider", 0.0, 1.0, 0.05))
+
+	var invert := CheckBox.new()
+	invert.name = "InvertCheck"
+	invert.text = "Invert look Y"
+	invert.add_theme_color_override("font_color", COLOR_PAPER)
+	invert.add_theme_font_size_override("font_size", 16)
+	invert.toggled.connect(func(on: bool) -> void:
+		if not _settings_applying:
+			settings_changed.emit("invert_y", on))
+	sv.add_child(invert)
+
+	sv.add_child(_make_back_button(func() -> void:
+		_settings_panel.visible = false
+		_settings_open = false
+		is_open()))
+
+func _labeled_slider(label_text: String, slider_name: String, min_v: float, max_v: float, step: float) -> HBoxContainer:
+	var row := HBoxContainer.new()
+	row.name = slider_name + "Row"
+	row.add_theme_constant_override("separation", 16)
+	var l := Label.new()
+	l.text = label_text
+	l.custom_minimum_size = Vector2(190, 0)
+	l.add_theme_color_override("font_color", COLOR_PAPER)
+	l.add_theme_font_size_override("font_size", 16)
+	row.add_child(l)
+	var slider := HSlider.new()
+	slider.name = slider_name
+	slider.min_value = min_v
+	slider.max_value = max_v
+	slider.step = step
+	slider.custom_minimum_size = Vector2(260, 32)
+	slider.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	slider.value_changed.connect(func(v: float) -> void:
+		if not _settings_applying:
+			settings_changed.emit(slider_name_to_key(slider_name), v))
+	row.add_child(slider)
+	return row
+
+static func slider_name_to_key(slider_name: String) -> String:
+	return "mouse_sens_scale" if slider_name == "SensSlider" else "sfx_volume"
+
+## Push current settings into the sliders without re-emitting signals.
+func show_settings(current: Dictionary) -> void:
+	_settings_applying = true
+	var sens: HSlider = _settings_panel.get_node("Sheet/SheetBox/SensSliderRow/SensSlider")
+	var vol: HSlider = _settings_panel.get_node("Sheet/SheetBox/VolSliderRow/VolSlider")
+	var invert: CheckBox = _settings_panel.get_node("Sheet/SheetBox/InvertCheck")
+	sens.set_value_no_signal(float(current.get("mouse_sens_scale", 1.0)))
+	vol.set_value_no_signal(float(current.get("sfx_volume", 0.8)))
+	invert.set_pressed_no_signal(bool(current.get("invert_y", false)))
+	_settings_applying = false
+	_show_panel(_settings_panel)
+	_settings_open = true
+	is_open()
+
+## --- shared panel helpers ------------------------------------------------------
+
+func _sheet_style() -> StyleBoxFlat:
+	var sb := StyleBoxFlat.new()
+	sb.bg_color = Color("#2B3934")
+	sb.border_color = COLOR_MINT
+	sb.set_border_width_all(1)
+	sb.content_margin_left = 24.0
+	sb.content_margin_right = 24.0
+	sb.content_margin_top = 20.0
+	sb.content_margin_bottom = 20.0
+	return sb
+
+func _make_back_button(on_pressed: Callable) -> Button:
+	var back := Button.new()
+	back.name = "Back"
+	back.text = "Back"
+	back.custom_minimum_size = Vector2(140, 44)
+	back.add_theme_color_override("font_color", COLOR_PAPER)
+	back.add_theme_font_size_override("font_size", 17)
+	back.pressed.connect(on_pressed)
+	return back
+
+func _show_panel(panel: Control) -> void:
+	for p in [_contracts_panel, _upgrades_panel, _settings_panel]:
+		if p != null:
+			p.visible = p == panel
+	_contracts_open = panel == _contracts_panel
+	_upgrades_open = panel == _upgrades_panel
+	_settings_open = panel == _settings_panel
 
 func _make_card(s: Dictionary) -> PanelContainer:
 	var card := PanelContainer.new()

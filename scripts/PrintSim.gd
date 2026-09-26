@@ -37,6 +37,11 @@ var _failed := false
 var failure_threshold: float = 0.55
 var _failure_tick: int = -1
 
+## Task 12 upgrade seam: multiplies sim time accumulation so owned extruder
+## upgrades genuinely shorten prints. Layer counts, progress and the
+## deterministic failure roll are unaffected (the roll is layer-keyed).
+var speed_multiplier: float = 1.0
+
 var state: State = State.IDLE
 
 func get_state_name() -> String:
@@ -86,6 +91,7 @@ func _roll_failure_tick() -> void:
 
 func estimated_print_time_s() -> float:
 	# simulated print seconds = ticks needed x sim-seconds per tick
+	# (speed_multiplier shortens the real-world wait, not the job's duration)
 	return float(layers_total) * SIM_TIME_SCALE / TICK_HZ
 
 func material_used_g() -> int:
@@ -119,11 +125,26 @@ func tick(delta: float) -> void:
 	if state != State.RUNNING:
 		return
 	elapsed_real_time_s += delta
-	elapsed_sim_time_s += delta * SIM_TIME_SCALE
-	_tick_accum += delta
+	elapsed_sim_time_s += delta * SIM_TIME_SCALE * speed_multiplier
+	_tick_accum += delta * speed_multiplier
 	while _tick_accum >= 1.0 / TICK_HZ:
 		_tick_accum -= 1.0 / TICK_HZ
 		_step_tick()
+
+
+## Full reset back to IDLE (task 12: clearing a failed print off the bed).
+## Does not emit signals — the printer/visual cleanup is the caller's job.
+func reset() -> void:
+	state = State.IDLE
+	job_id = ""
+	model_name = ""
+	layers_total = 0
+	layers_done = 0
+	elapsed_sim_time_s = 0.0
+	elapsed_real_time_s = 0.0
+	_tick_accum = 0.0
+	_failed = false
+	_failure_tick = -1
 
 func _step_tick() -> void:
 	if _failed:

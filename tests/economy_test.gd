@@ -75,7 +75,7 @@ func _run() -> void:
 	main.paused = false
 	main.captured = true  # desktop pointer-lock intent (headless stand-in)
 
-	# --- 1. accept at printer: OFFERED->ACCEPTED->PREPARING->PRINTING ---
+	# --- 1. accept at printer: OFFERED->ACCEPTED->PREPARING, orientation prep ---
 	var board_before: int = main.job_board.get_available_count()
 	main._try_interact()
 	var contract: Contract = _prop(main, "active_contract")
@@ -83,15 +83,27 @@ func _run() -> void:
 	if contract == null:
 		_finish(1)
 		return
+	_ok(contract.state == Contract.State.PREPARING,
+		"accept parks contract at PREPARING for orientation prep")
+	_ok(not main.sim.is_running(), "print does not start before orientation confirm")
+	_ok(ledger.balance() == 2500, "no material charge before orientation confirm")
+	main._update_hud()
+	_ok("Prep" in main._status.text, "HUD shows prep prompt while PREPARING")
+	main._try_interact()  # first prep press: preview (index advances to tilted)
+	_ok(main.orientation_pending and "tilted" in str(main._prompt.text),
+		"E previews next orientation with estimate")
+	_ok(contract.state == Contract.State.PREPARING and not main.sim.is_running(),
+		"preview does not start the print")
+	main._try_interact()  # second prep press: confirm tilted
 	_ok(contract.state == Contract.State.PRINTING,
-		"accept drives contract to PRINTING via legal path")
-	_ok(Contract.can_transition(Contract.State.ACCEPTED, Contract.State.PREPARING)
-		and Contract.can_transition(Contract.State.PREPARING, Contract.State.PRINTING),
-		"accept-path transitions ACCEPTED->PREPARING->PRINTING are legal")
+		"confirm drives PREPARING->PRINTING via legal path")
 	_ok(main.sim.is_running() and main.sim.job_id == contract.id,
 		"sim printing the accepted contract id")
+	_ok(absf(main.sim.support_need - 0.55) < 0.001 \
+		and absf(main.sim.adhesion_risk - 0.15) < 0.001,
+		"prep risks written into sim (tilted planter)")
 	_ok(ledger.balance() == 2500 - contract.material_cost_cents,
-		"material_cost_cents charged at print start")
+		"material_cost_cents charged at orientation confirm")
 	var charged := false
 	for t in ledger.transactions:
 		if contract.id in str(t["reason"]) and t["delta_cents"] == -contract.material_cost_cents:
@@ -120,47 +132,67 @@ func _run() -> void:
 	_ok(not ledger.has_paid(contract.id) and ledger.balance() == bal_running,
 		"no payout before collect")
 	main._update_hud()
-	_ok("[E] Collect" in main._status.text, "HUD prompts collect while parked at INSPECTION")
+	_ok("collect the part" in main._status.text, "HUD prompts collect while parked at INSPECTION")
 
-	# --- 4. collect: PACKED->DELIVERED, exactly-once payout ---
+	# --- 4. collect the physical part, deliver at the packing table ---
 	main.paused = false
 	var bal_before_payout: int = ledger.balance()
 	main._try_interact()
-	_ok(_prop(main, "active_contract") == null, "collect clears active contract")
-	_ok(contract.state == Contract.State.DELIVERED, "collect walks INSPECTION->PACKED->DELIVERED")
-	_ok(ledger.balance() == bal_before_payout + contract.payout_cents,
-		"payout credited exactly once to balance")
+	_ok(main.held != null and main._is_held_part(),
+		"collect attaches the printed part to hands")
+	_ok(str(main.held.get_meta("part_contract", "")) == contract.id,
+		"part carries the contract id")
+	_ok(_prop(main, "active_contract") == contract
+		and contract.state == Contract.State.INSPECTION,
+		"contract stays INSPECTION while the part is carried")
+	_ok(not ledger.has_paid(contract.id), "no payout on collect alone")
+	_ok(main._try_pack_held(), "packing table packs the carried part")
+	var grade_expected: String = QualityCheck.grade(contract, main.sim.layers_done,
+		main.sim.layers_total, {
+			"support_need": main.sim.support_need,
+			"adhesion_risk": main.sim.adhesion_risk,
+			"stability_risk": main.sim.stability_risk,
+		})
+	var expected_payout: int = roundi(contract.payout_cents
+		* QualityCheck.quality_multiplier(grade_expected))
+	_ok(grade_expected in ["A", "B", "C"], "completed print grades deliverable (%s)" % grade_expected)
+	_ok(_prop(main, "active_contract") == null, "delivery clears active contract")
+	_ok(contract.state == Contract.State.DELIVERED, "delivery walks INSPECTION->PACKED->DELIVERED")
+	_ok(ledger.balance() == bal_before_payout + expected_payout,
+		"grade-scaled payout credited exactly once to balance")
 	_ok(ledger.has_paid(contract.id), "ledger marks contract paid")
 	var payout_txs := 0
 	for t in ledger.transactions:
-		if t["delta_cents"] == contract.payout_cents and t["reason"] == "payout %s" % contract.id:
+		if t["delta_cents"] == expected_payout and t["reason"] == "payout %s" % contract.id:
 			payout_txs += 1
 	_ok(payout_txs == 1, "exactly one payout transaction for the contract")
 	_ok(not ledger.pay_once(contract.id, contract.payout_cents, "payout %s" % contract.id),
 		"pay_once idempotent on repeated attempt for same id")
-	var repeat_paid := true
-	if main.has_method("_pay_payout"):
-		repeat_paid = main._pay_payout(contract)
-	else:
-		repeat_paid = false
-	_ok(not repeat_paid, "repeated collect does not double-pay")
-	_ok(ledger.balance() == bal_before_payout + contract.payout_cents,
-		"balance unchanged after repeated collect attempt")
+	_ok(not main._try_pack_held(), "repeated pack attempt refused (nothing held)")
+	_ok(main.active_part == null and main.held == null,
+		"part consumed by delivery (double delivery impossible)")
+	_ok(ledger.balance() == bal_before_payout + expected_payout,
+		"balance unchanged after repeated collect/pack attempts")
 	main._update_hud()
-	_ok("Balance: $%s" % _fmt(bal_before_payout + contract.payout_cents) in main._status.text,
+	_ok("Balance: $%s" % _fmt(bal_before_payout + expected_payout) in main._status.text,
 		"HUD shows post-payout balance")
 
-	# --- 5. failure path: FAILED via legal path, zero payout ---
+	# --- 5. failure path: FAILED via legal path, clear required, zero payout ---
 	main.sim.failure_seeded = true
-	main._try_interact()  # accept next fixture job
+	main._try_interact()  # accept next fixture job -> PREPARING
+	_ok(_prop(main, "active_contract") != null
+		and _prop(main, "active_contract").state == Contract.State.PREPARING,
+		"second contract accepted to PREPARING")
+	main._try_interact()  # preview
+	main._try_interact()  # confirm
 	var contract2: Contract = _prop(main, "active_contract")
 	_ok(contract2 is Contract and contract2.state == Contract.State.PRINTING,
-		"second contract accepted to PRINTING")
+		"second contract confirmed to PRINTING")
 	if contract2 == null:
 		_finish(1)
 		return
 	var bal2: int = ledger.balance()
-	_ok(bal2 == bal_before_payout + contract.payout_cents - contract2.material_cost_cents,
+	_ok(bal2 == bal_before_payout + expected_payout - contract2.material_cost_cents,
 		"material charged for second job")
 	main.paused = true
 	_drive()
@@ -171,9 +203,12 @@ func _run() -> void:
 	main._update_hud()
 	_ok("FAIL" in main._status.text, "HUD explains the failure")
 	main.sim.failure_seeded = false
+	main.paused = false
+	main._try_interact()  # clear the spoiled print off the bed
+	_ok(main.sim.state == PrintSim.State.IDLE, "failed print must be cleared before the next job")
 
 	# --- 6. insufficient funds refuses print start ---
-	ledger.balance_cents = 0  # test-only drain (Ledger frozen; direct field access)
+	ledger.charge(ledger.balance(), "test drain")  # keeps tx-replay invariant
 	main.paused = false
 	main._try_interact()
 	_ok(_prop(main, "active_contract") == null, "no contract active after refused start")

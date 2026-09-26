@@ -27,16 +27,19 @@ func _ready() -> void:
 
 func _build_visuals() -> void:
 	var honey := StandardMaterial3D.new()
-	honey.albedo_color = Color("#C3A076")
+	honey.albedo_color = Color.WHITE
+	honey.albedo_texture = ShopArt.wood(Color("#C3A076"))
 	honey.roughness = 0.7
 	var steel := StandardMaterial3D.new()
-	steel.albedo_color = Color("#202B2B")
+	steel.albedo_color = Color.WHITE
+	steel.albedo_texture = ShopArt.metal(Color("#202B2B"))
 	steel.roughness = 0.5
 	var terracotta := StandardMaterial3D.new()
 	terracotta.albedo_color = Color("#DA623A")
 	terracotta.roughness = 0.6
 	var cardboard := StandardMaterial3D.new()
-	cardboard.albedo_color = Color("#B08D57")
+	cardboard.albedo_color = Color.WHITE
+	cardboard.albedo_texture = ShopArt.cardboard(Color("#B08D57"))
 	cardboard.roughness = 0.85
 
 	# Table top: honey plywood, 1.2 x 0.9 m, top surface at 0.9 m.
@@ -76,6 +79,18 @@ func _build_visuals() -> void:
 	box.material_override = cardboard
 	box.position = Vector3(0.25, 1.05, 0.1)
 	add_child(box)
+
+	# Sign so the station reads as "the place to deliver".
+	var sign := Label3D.new()
+	sign.text = "PACKING"
+	sign.font_size = 48
+	sign.pixel_size = 0.0022
+	sign.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	sign.modulate = Color("#EEE5D3")
+	sign.outline_modulate = Color("#202B2B")
+	sign.outline_size = 5
+	sign.position = Vector3(0, 1.45, 0)
+	add_child(sign)
 
 
 func _build_collision() -> void:

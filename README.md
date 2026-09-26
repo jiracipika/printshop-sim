@@ -10,29 +10,44 @@ The deployed version may lag local development. Check the in-game version/build 
 
 ## Current Milestone
 
-Workshop foundation. Not yet a complete tycoon or contract-delivery loop.
+Complete playable contract loop (v0.1.0). Accept a job, pick an orientation,
+print it, carry the part to the packing table, deliver, get paid — with risk,
+failure, upgrades, settings and persistence.
 
-Working in local automated tests:
-- Workshop enclosure, collision walls, workbench and two placeholder printers.
-- First-person WASD/mouse movement.
-- Click-to-play and Escape/focus-loss pause behavior.
-- Printer interaction starts a queued job; simulation progress and material usage appear in the HUD.
+Working in local automated tests (15 suites, 656 checks):
+- Workshop enclosure, collision walls, workbench, two FDM printers (frame, bed,
+  gantry, oscillating nozzle), packing table, spool shelf, posters, rug, wall
+  clock, props, ceiling lights, window, procedural sky with gentle fog.
+- Procedural textures everywhere (plaster walls, plywood, tiled floor, brushed
+  steel, cardboard) — no external assets; web-export safe.
+- First-person WASD/mouse movement, click-to-play, Escape/focus pause, center
+  reticle; full mobile touch overlay (stick, look, Interact, Pause).
+- Full loop: E at a printer accepts a contract, E previews/cycles orientation
+  (support %, material estimate, risk level), E confirms and charges materials,
+  the print grows visibly on the bed, failed prints must be cleared, finished
+  parts are carried to the packing table, graded A/B/C/F by quality, delivered
+  for a grade-scaled payout. Exactly-once payouts in an integer-cents ledger.
+- Risk-driven deterministic failures (bad orientation can lose the print),
+  F-grade scrap path, printer hum and synthesized SFX (grab, place, beep,
+  chime, cash, buzz) on a dedicated audio bus.
+- Upgrades shop (heated bed, dual-gear extruder, stiffened frame, premium
+  nozzle) with real sim effects; settings panel (look sensitivity, volume,
+  invert Y); versioned save with corruption fallback covering balance,
+  upgrades and settings.
 
-- Mobile touchscreen movement, look, Interact and Pause controls (Chromium emulation checked; physical-device testing pending).
-
-In progress:
-- Release of the latest changes and physical-device validation.
-
-Next:
-- Grabbing and placement.
-- Convincing printer geometry and visible print progression.
-- Model preparation, meaningful failures, packaging and contract payouts.
+Pending:
+- Physical iOS/Android validation; browser matrix beyond Chromium; deadline
+  pressure and day/night cycle; printer 2 as a purchasable second machine.
 
 ## Controls
 
-Desktop: click to play/capture, WASD to move, mouse to look, E near a printer to start a job, Escape to release/pause.
+Desktop: click to play/capture, WASD to move, mouse to look, E to interact
+(accept job / cycle+confirm orientation / collect part / pack & deliver at the
+packing table / grab & place props), Escape for the menu (Contracts, Upgrades,
+Settings), F3 dev panel in debug builds.
 
-Mobile: tap Resume, use the left stick to move, drag the right side to look, tap Interact near a printer, and tap Pause to stop. Simultaneous movement/look is supported. Touch behavior is covered by headless tests and Chromium mobile emulation; physical iOS/Android testing remains pending.
+Mobile: tap Resume, left stick to move, drag right side to look, Interact for
+everything above, Pause for the menu. Simultaneous movement/look is supported.
 
 ## Run from scratch
 
@@ -44,12 +59,11 @@ To launch directly:
 
     godot --path .
 
-Verification:
+Verification (all 15 suites must pass):
 
     godot --headless --path . --editor --import --quit
-    godot --headless --path . --script tests/room_boot_test.gd
-    godot --headless --path . --script tests/input_pause_test.gd
-    godot --headless --path . --script tests/smoke.gd
+    for t in tests/*_test.gd tests/smoke.gd; do godot --headless --path . --script "$t"; done
+    python3 -m pytest tests/test_build_web.py -q
 
 Use bounded runners and inspect logs for script/parse errors as well as exit status. Headless checks do not prove browser pointer lock, rendering, or mobile touch behavior.
 
@@ -65,11 +79,19 @@ Open http://localhost:8766/ in a WebGL 2-capable browser. Do not open index.html
 ## Architecture
 
 - project.godot / scenes/Main.tscn: configuration and main scene.
-- scripts/Main.gd: procedural workshop, player, interaction and HUD.
-- scripts/PrintSim.gd: print simulation state.
-- scripts/JobBoard.gd: prototype job queue.
-- scripts/Version.gd: build identification.
-- tests/: headless behavioral checks.
+- scripts/Main.gd: procedural workshop, player, full contract loop, HUD.
+- scripts/PrintSim.gd: print simulation state (risk-driven deterministic
+  failures, upgrade speed multiplier, full reset).
+- scripts/PrepSystem.gd: orientation/support heuristics; Contract.gd / Ledger.gd /
+  JobBoard.gd: contract state machine, integer-cents money, job rotation.
+- scripts/PackingStation.gd + QualityCheck.gd: grading (A/B/C/F) and delivery.
+- scripts/Upgrades.gd: catalog + exactly-once purchases + sim effect helpers.
+- scripts/SaveSystem.gd + BrowserSave.gd: versioned payload, corruption fallback.
+- scripts/ShopArt.gd: runtime-procedural textures (no external assets).
+- scripts/Sfx.gd: synthesized audio streams + SFX bus; scripts/Clock.gd: wall clock.
+- scripts/MainMenu.gd: menu, contract board, upgrades shop, settings.
+- scripts/Version.gd: build identification (stamped at export).
+- tests/: 15 headless behavioral suites + Python build-pipeline tests.
 - web_shell/: browser loader shell; web/build/: generated release artifacts.
-- design/: cover, menus, HUD and workshop concept mockups plus design specification. These are concepts, not gameplay captures.
-- docs/HANDOFF.md and AGENTS.md: persistent continuation instructions and Astra/GLM ownership.
+- design/: concept mockups (concepts, not gameplay captures).
+- docs/HANDOFF.md and AGENTS.md: persistent continuation instructions.

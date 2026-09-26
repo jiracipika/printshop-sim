@@ -27,21 +27,31 @@ func _ready() -> void:
 
 ## Printer visuals; caller sets printer_index meta if needed.
 func _build() -> void:
+	var frame_mat := StandardMaterial3D.new()
+	frame_mat.albedo_color = Color.WHITE
+	frame_mat.albedo_texture = ShopArt.metal(FRAME_COLOR)
+	frame_mat.roughness = 0.45
+	frame_mat.metallic = 0.4
+	var bed_mat := StandardMaterial3D.new()
+	bed_mat.albedo_color = Color.WHITE
+	bed_mat.albedo_texture = ShopArt.wood(BED_COLOR, 3)
+	bed_mat.roughness = 0.65
+
 	# Base: dark steel slab the whole printer sits on.
-	var base := _box(Vector3(FOOTPRINT, 0.06, FOOTPRINT), FRAME_COLOR)
+	var base := _box(Vector3(FOOTPRINT, 0.06, FOOTPRINT), frame_mat)
 	base.position = Vector3(0, 0.03, 0)
 	base.name = "Base"
 	add_child(base)
 
 	# Build plate: honey plywood, flat and visible from above.
-	bed = _box(Vector3(FOOTPRINT * 0.92, BED_THICK, FOOTPRINT * 0.92), BED_COLOR)
+	bed = _box(Vector3(FOOTPRINT * 0.92, BED_THICK, FOOTPRINT * 0.92), bed_mat)
 	bed.position = Vector3(0, 0.06 + BED_THICK / 2.0, 0)
 	bed.name = "Bed"
 	add_child(bed)
 
 	# Two vertical Z rails at the back.
 	for sx in [-0.18, 0.18]:
-		var rail := _box(Vector3(0.05, HEIGHT, 0.05), FRAME_COLOR)
+		var rail := _box(Vector3(0.05, HEIGHT, 0.05), frame_mat)
 		rail.position = Vector3(sx, HEIGHT / 2.0, -0.20)
 		rail.name = "ZRail"
 		add_child(rail)
@@ -57,7 +67,7 @@ func _build() -> void:
 	gantry.name = "Gantry"
 	add_child(gantry)
 
-	var beam := _box(Vector3(0.41, 0.05, 0.05), FRAME_COLOR)
+	var beam := _box(Vector3(0.41, 0.05, 0.05), frame_mat)
 	beam.position = Vector3(0, 0.38, 0.0)
 	beam.name = "GantryBeam"
 	gantry.add_child(beam)
@@ -102,14 +112,18 @@ func _build() -> void:
 	body.add_child(col)
 	add_child(body)
 
-func _box(size: Vector3, color: Color) -> MeshInstance3D:
+func _box(size: Vector3, material: Variant) -> MeshInstance3D:
 	var m := MeshInstance3D.new()
 	var bm := BoxMesh.new()
 	bm.size = size
 	m.mesh = bm
-	var mat := StandardMaterial3D.new()
-	mat.albedo_color = color
-	mat.roughness = 0.6
+	var mat: StandardMaterial3D = material if material is StandardMaterial3D \
+		else null
+	if mat == null:
+		# Color convenience path (unchanged behavior for plain colors).
+		mat = StandardMaterial3D.new()
+		mat.albedo_color = material
+		mat.roughness = 0.6
 	m.material_override = mat
 	return m
 
