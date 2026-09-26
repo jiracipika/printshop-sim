@@ -20,6 +20,8 @@ var nozzle: Node3D      # small block; Main oscillates its X during RUNNING
 var gantry: Node3D
 var bed: MeshInstance3D
 var _nozzle_mat: StandardMaterial3D
+var _lock_label: Label3D
+var _name_label: Label3D
 
 func _ready() -> void:
 	add_to_group("printers")
@@ -138,3 +140,33 @@ func set_failed(failed: bool) -> void:
 	if _nozzle_mat == null:
 		return
 	_nozzle_mat.albedo_color = Color(0.45, 0.45, 0.45) if failed else Color(0.85, 0.85, 0.9)
+
+## Lock state is set by Main (pro machine purchase). A locked printer shows a
+## terracotta LOCKED tag under its name label.
+func set_locked(locked: bool) -> void:
+	if locked and _lock_label == null:
+		_lock_label = Label3D.new()
+		_lock_label.text = "LOCKED"
+		_lock_label.font_size = 40
+		_lock_label.pixel_size = 0.0022
+		_lock_label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+		_lock_label.modulate = Color("#DA623A")
+		_lock_label.outline_modulate = Color("#202B2B")
+		_lock_label.outline_size = 4
+		_lock_label.position = Vector3(0, 0.74, 0)
+		add_child(_lock_label)
+	elif _lock_label != null:
+		_lock_label.visible = locked
+
+func is_locked() -> bool:
+	return _lock_label != null and _lock_label.visible
+
+## Main sets the display name ("Printer 1" / "Printer 2 — PRO").
+func set_display_name(text: String) -> void:
+	if _name_label == null:
+		for child in get_children():
+			if child is Label3D and child != _lock_label:
+				_name_label = child
+				break
+	if _name_label != null:
+		_name_label.text = text

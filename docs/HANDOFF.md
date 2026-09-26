@@ -1,4 +1,4 @@
-# Current handoff — full contract loop (v0.1.0)
+# Current handoff — shop day slice (v0.2.0)
 
 Read AGENTS.md and design/implementation-plan.md. Working copy:
 /Users/rs-mac/.zcode/workspace/default/printshop-sim (canonical disk plan in
@@ -8,6 +8,18 @@ https://github.com/jiracipika/printshop-sim, main. Public prototype
 https://printshop-sim.vercel.app/.
 
 ## State at this checkpoint
+
+v0.2.0 (shop day) shipped on top of the completed v0.1.0 contract loop:
+DayCycle drives a 90 s day with day/night lighting (sun energy/color, ambient,
+sky energy); each rollover charges $4.00 rent (unaffordable rent accrues as
+debt; payouts repay debt first via _repay_rent_debt); contracts anchor a
+deadline at accept — late delivery pays 50%, and a contract more than one day
+past deadline is cancelled at rollover (contract FAILED, sim torn down, part
+discarded). Printer 2 is the purchasable Pro machine (upgrades id
+"pro_machine", $60): locked with a LOCKED tag until bought, jobs accepted
+there run at 1.25x machine speed. Day persists in the save ("day" optional
+payload key, validated int >= 1). New suite tests/day_test.gd (36 checks);
+upgrades_test updated for the 5-entry catalog.
 
 All implementation-plan tasks 00-12 are implemented and integrated. The full
 loop is playable: accept at a printer -> orientation prep (upright/tilted/
@@ -24,13 +36,13 @@ cardboard/posters/rug), procedural sky + fog, ceiling fixtures, window,
 props (spool shelf, crates, plant, ticking wall clock), center reticle,
 synthesized SFX + printer hum on an "SFX" bus.
 
-Verification evidence (local): 15 Godot headless suites green — contract 170,
-packing 58, touch 47, save 44, shop_art 51, upgrades 51, economy 54, prep 29,
-printer_visual 28, grab 26, input_pause 23, menu 25, debug_panel 32, room 9,
-smoke 9 (656 checks, 0 failures, no SCRIPT ERROR); Python build pipeline 21
-pytest; real Web export via tools/build_web.sh (all four artifacts served,
-application/wasm correct); engine screenshots captured at 1280x720 (menu,
-spawn, mid-print, holding part, packing table) confirm visuals and HUD.
+Verification evidence (local): 16 Godot headless suites green — contract 170,
+packing 58, touch 47, save 44, shop_art 51, upgrades 52, economy 54, day 36,
+prep 29, printer_visual 28, grab 26, input_pause 23, menu 25, debug_panel 32,
+room 9, smoke 9 (693 checks, 0 failures, no SCRIPT ERROR); Python build
+pipeline 21 pytest; real Web export via tools/build_web.sh; engine
+screenshots at 1280x720 (day HUD, locked printer 2, dusk vs midday lighting)
+confirm the new features render.
 
 v0.1.0 RELEASED: commits 2f1f2af (loop/features) + ab05cc4 (shell help
 placement). Deployed to https://printshop-sim.vercel.app/ via vercel --prod;
@@ -53,11 +65,10 @@ physical-device and cross-browser matrix remain open.
 
 ## Next features (not started)
 
-- Deadline/day tracking consequences (deadline_days shown in HUD, no
-  consequence yet).
-- Second printer as purchasable machine; multi-job parallelism.
-- Day/night cycle, ambient occlusion, shader polish (Compatibility-safe).
-- Physical iOS/Android device validation; browser matrix; performance profile.
+- True multi-printer parallelism (second PrintSim per machine).
+- More contract variety (client pool, layer/material spread, rush bonuses).
+- Ambient occlusion / shader polish (Compatibility-safe); performance profile.
+- Physical iOS/Android device validation; browser matrix.
 
 ## Operator notes
 

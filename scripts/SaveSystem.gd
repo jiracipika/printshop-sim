@@ -15,6 +15,7 @@ extends RefCounted
 ##     "saved_at_unix": int,
 ##     "upgrades": Array[String] (optional — owned upgrade ids),
 ##     "settings": Dictionary (optional — {mouse_sens_scale, sfx_volume, invert_y}),
+##     "day": int >= 1 (optional — shop day counter),
 ##   }
 ##
 ## Optional keys are additive: payloads without them stay valid (older saves
@@ -82,6 +83,8 @@ static func validate(payload: Variant) -> Dictionary:
 		return {}
 	if not _settings_valid(p):
 		return {}
+	if not _day_valid(p):
+		return {}
 
 	var out: Dictionary = p.duplicate(true)
 	out["version"] = int(p["version"])
@@ -132,6 +135,13 @@ static func _settings_valid(p: Dictionary) -> bool:
 	if s.has("invert_y") and not (s["invert_y"] is bool):
 		return false
 	return true
+
+
+## Optional "day" key: absent = fine; present must be an int >= 1.
+static func _day_valid(p: Dictionary) -> bool:
+	if not p.has("day"):
+		return true
+	return _is_int(p["day"]) and int(p["day"]) >= 1
 
 
 ## True for TYPE_INT or a float with an exactly integral value.

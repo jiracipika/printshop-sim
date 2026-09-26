@@ -10,9 +10,11 @@ The deployed version may lag local development. Check the in-game version/build 
 
 ## Current Milestone
 
-Complete playable contract loop (v0.1.0). Accept a job, pick an orientation,
-print it, carry the part to the packing table, deliver, get paid — with risk,
-failure, upgrades, settings and persistence.
+Complete playable contract loop with the shop day (v0.2.0). Accept a job, pick
+an orientation, print it, carry the part to the packing table, deliver, get
+paid — against the clock: days pass, rent comes due each day, late deliveries
+pay half, and clients cancel after two extra days. Printer 2 is a purchasable
+Pro machine that prints 25% faster.
 
 Working in local automated tests (15 suites, 656 checks):
 - Workshop enclosure, collision walls, workbench, two FDM printers (frame, bed,
@@ -31,13 +33,16 @@ Working in local automated tests (15 suites, 656 checks):
   F-grade scrap path, printer hum and synthesized SFX (grab, place, beep,
   chime, cash, buzz) on a dedicated audio bus.
 - Upgrades shop (heated bed, dual-gear extruder, stiffened frame, premium
-  nozzle) with real sim effects; settings panel (look sensitivity, volume,
-  invert Y); versioned save with corruption fallback covering balance,
-  upgrades and settings.
+  nozzle, Pro machine unlock for printer 2) with real sim effects; settings
+  panel (look sensitivity, volume, invert Y); versioned save with corruption
+  fallback covering balance, upgrades, settings and the shop day.
+- Shop day: a 90-second day with day/night lighting, $4.00 daily rent (unpaid
+  rent accrues as debt that payouts repay first), contract deadlines — late
+  delivery pays half, two days overdue the client cancels.
 
 Pending:
-- Physical iOS/Android validation; browser matrix beyond Chromium; deadline
-  pressure and day/night cycle; printer 2 as a purchasable second machine.
+- Physical iOS/Android validation; browser matrix beyond Chromium; performance
+  profiling; more upgrades and contract variety.
 
 ## Controls
 

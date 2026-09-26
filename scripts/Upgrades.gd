@@ -33,6 +33,13 @@ const CATALOG: Array[Dictionary] = [
 		"cost_cents": 9000,
 		"failure_threshold_delta": -0.12,
 	},
+	{
+		"id": "pro_machine",
+		"name": "Pro machine (printer 2)",
+		"desc": "Unlock printer 2 — jobs run there print 25% faster",
+		"cost_cents": 6000,
+		"machine_speed_multiplier": 1.25,
+	},
 ]
 
 var _owned: Dictionary = {}  # id -> true
@@ -93,6 +100,18 @@ func speed_multiplier() -> float:
 	if is_owned("dual_gear"):
 		m *= float(entry("dual_gear").speed_multiplier)
 	return m
+
+
+## Speed bonus for jobs run on the unlocked pro machine (1.0 otherwise).
+func machine_speed_multiplier() -> float:
+	if is_owned("pro_machine"):
+		return float(entry("pro_machine").machine_speed_multiplier)
+	return 1.0
+
+
+## Printer 2 stays locked until the pro machine is purchased.
+func pro_machine_unlocked() -> bool:
+	return is_owned("pro_machine")
 
 
 ## Delta applied to PrintSim.failure_threshold (0.0 when none owned).

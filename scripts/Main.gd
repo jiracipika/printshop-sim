@@ -12,11 +12,19 @@ const GRAB_RANGE := 2.2
 ## upgrade deltas are added on top.
 const BASE_FAILURE_THRESHOLD := 0.55
 
+## --- shop day (v0.2.0) ---
+const RENT_CENTS := 400
+const LATE_PAYOUT_FACTOR := 0.5
+
 var sim: PrintSim
 var job_board: Node
 var ledger: Ledger
 var upgrades: Upgrades
+var day_cycle: DayCycle
+var rent_debt_cents := 0
 var active_contract: Contract = null
+var active_contract_day := 0    # shop day the active contract was accepted on
+var active_printer_idx := 0     # printer the active contract was accepted at
 var packing_station: PackingStation
 var settings := {"mouse_sens_scale": 1.0, "sfx_volume": 0.8, "invert_y": false}
 var _settings_dirty := false
@@ -38,6 +46,9 @@ var orientation_pending := false
 
 var _player: CharacterBody3D
 var _camera: Camera3D
+var _sun: DirectionalLight3D
+var _sky_mat: ProceduralSkyMaterial
+var _env: Environment
 var _printers: Array[Node3D] = []
 var _print_visuals: Array[Node3D] = []
 var _hud: CanvasLayer
@@ -74,6 +85,7 @@ func _on_menu_upgrade_buy(id: String) -> void:
 		return
 	upgrades.buy(id)
 	_apply_upgrade_effects()
+	_refresh_printer_locks()
 	_save_game()
 	sfx.play("upgrade")
 	_set_prompt("Installed %s" % e.name)
@@ -166,6 +178,8 @@ func _ready() -> void:
 	ledger = Ledger.new()
 	ledger.credit(2500, "opening funds")
 	upgrades = Upgrades.new()
+	day_cycle = DayCycle.new()
+	day_cycle.day_changed.connect(_on_day_changed)
 	_build_world()
 	_build_player()
 	_add_spool(Vector3(0.2, 0.14, 0.2))
@@ -206,6 +220,8 @@ func _load_save() -> void:
 		for key in ["mouse_sens_scale", "sfx_volume", "invert_y"]:
 			if s.has(key):
 				apply_setting(key, s[key], false)
+	if payload.has("day"):
+		day_cycle.restore(int(payload.day), 0.0)
 
 func apply_setting(key: String, value, persist := true) -> void:
 	settings[key] = value
@@ -222,6 +238,7 @@ func _save_game() -> void:
 		snapshot, {}, snapshot.balance_cents, snapshot.paid_contract_ids, {
 			"upgrades": upgrades.owned_ids(),
 			"settings": settings,
+			"day": day_cycle.day,
 		})
 	var ok: bool = load("res://scripts/BrowserSave.gd").save_payload(payload)
 	save_status_line = "%s at %s" % ["saved ok" if ok else "save FAILED",
@@ -357,6 +374,7 @@ func _build_world() -> void:
 	sun.light_energy = 1.1
 	sun.light_color = Color(1.0, 0.96, 0.88)
 	add_child(sun)
+	_sun = sun
 	var lamp := OmniLight3D.new()
 	lamp.position = Vector3(0, 2.8, 0)
 	lamp.omni_range = 12.0
@@ -371,6 +389,7 @@ func _build_world() -> void:
 	_build_props()
 
 	# Two printers: one on the bench, one on a steel floor stand against the back wall.
+	# Printer 2 is the "Pro machine": locked until purchased, 25% faster.
 	var printer_a := _make_printer(0)
 	printer_a.position = Vector3(-1.8, 0.95, -2.0)
 	add_child(printer_a)
@@ -380,6 +399,7 @@ func _build_world() -> void:
 	printer_b.position = Vector3(1.8, 0.8, -2.4)
 	add_child(printer_b)
 	_printers.append(printer_b)
+	_refresh_printer_locks()
 
 	var stand := MeshInstance3D.new()
 	var stand_box := BoxMesh.new()
@@ -402,6 +422,29 @@ func _build_world() -> void:
 	job_board = load("res://scripts/JobBoard.gd").new()
 	job_board.add_to_group("job_board")
 	add_child(job_board)
+	_apply_daylight()
+
+## Day/night (v0.2.0): brightness and warmth follow the shop clock. Direction
+## stays fixed (interior scene); energy/color carry the time of day.
+func _apply_daylight() -> void:
+	if _sun == null or _env == null:
+		return
+	var daylight := 0.5 + 0.5 * sin(day_cycle.t * TAU - PI * 0.5)  # 0 dawn, 1 midday
+	daylight = clampf(daylight, 0.0, 1.0)
+	_sun.light_energy = 0.2 + 1.0 * daylight
+	_sun.light_color = Color(1.0, 0.72, 0.5).lerp(Color(1.0, 0.96, 0.88), daylight)
+	_env.ambient_light_energy = 0.55 + 0.5 * daylight
+	if _sky_mat != null:
+		_sky_mat.sky_energy_multiplier = 0.3 + 0.8 * daylight
+
+## Printer 2 display name + lock tag follow the pro-machine upgrade.
+func _refresh_printer_locks() -> void:
+	if _printers.size() < 2:
+		return
+	var pro := upgrades.pro_machine_unlocked()
+	if _printers[1].get("set_locked") != null:
+		_printers[1].set_locked(not pro)
+		_printers[1].set_display_name("Printer 2 — PRO" if pro else "Printer 2")
 
 ## Sky, ambient light, ceiling and window (task 12 art pass). Everything is
 ## procedural — ProceduralSkyMaterial for the soft daylight ambience.
@@ -422,6 +465,8 @@ func _build_environment() -> void:
 	env.fog_enabled = true
 	env.fog_light_color = Color("#C9C2AE")
 	env.fog_density = 0.008
+	_sky_mat = sky_mat
+	_env = env
 	var we := WorldEnvironment.new()
 	we.environment = env
 	add_child(we)
@@ -1047,6 +1092,8 @@ func _physics_process(delta: float) -> void:
 		_player.velocity.y -= 14.0 * delta
 	_player.move_and_slide()
 	sim.tick(delta)
+	day_cycle.tick(delta)
+	_apply_daylight()
 	_update_print_visuals(delta)
 	_update_hud()
 
@@ -1211,14 +1258,24 @@ func _try_pack_held() -> bool:
 		return true
 	if not _advance(c, Contract.State.DELIVERED):
 		return true
-	if not ledger.pay_once(c.id, result.payout_cents, "payout %s" % c.id):
+	# Late deliveries pay half (the client still takes the part).
+	var payout: int = result.payout_cents
+	var late := _is_late()
+	if late:
+		payout = roundi(float(payout) * LATE_PAYOUT_FACTOR)
+	if not ledger.pay_once(c.id, payout, "payout %s" % c.id):
 		return true
+	_repay_rent_debt()
 	_discard_part()
 	active_contract = null
 	last_pack_grade = result.grade
 	_save_game()
 	sfx.play("cash")
-	_set_prompt("Delivered %s (%s) — $%s" % [c.model_name, result.grade, _cents_str(result.payout_cents)])
+	if late:
+		_set_prompt("Delivered LATE %s (%s) — $%s of $%s" % [c.model_name, result.grade,
+			_cents_str(payout), _cents_str(result.payout_cents)])
+	else:
+		_set_prompt("Delivered %s (%s) — $%s" % [c.model_name, result.grade, _cents_str(payout)])
 	return true
 
 ## F-grade escape hatch: scrap the part, fail the contract, no payout.
@@ -1267,7 +1324,11 @@ func _write_prep_to_sim(eval: Dictionary) -> void:
 	sim.support_need = eval.support_need
 	sim.adhesion_risk = eval.adhesion_risk
 	sim.stability_risk = eval.stability_risk
-	sim.speed_multiplier = upgrades.speed_multiplier()
+	# Extruder upgrades speed every job; the pro machine (printer 2) adds its
+	# own bonus to jobs accepted there.
+	var machine_mult := upgrades.machine_speed_multiplier() \
+		if active_printer_idx == 1 and upgrades.pro_machine_unlocked() else 1.0
+	sim.speed_multiplier = upgrades.speed_multiplier() * machine_mult
 	sim.failure_threshold = BASE_FAILURE_THRESHOLD + upgrades.failure_threshold_delta()
 
 ## E while the contract is PREPARING: first press previews an orientation,
@@ -1334,6 +1395,13 @@ func _advance(contract: Contract, to: Contract.State) -> bool:
 func _accept_print() -> void:
 	if not job_board.has_available():
 		return
+	# Remember which machine takes the job: printer 2 is the purchasable pro
+	# machine (locked until bought, prints 25% faster there).
+	var printer := _nearest_printer()
+	active_printer_idx = int(printer.get_meta("printer_index", 0)) if printer != null else 0
+	if active_printer_idx == 1 and not upgrades.pro_machine_unlocked():
+		_set_prompt("Printer 2 is locked — buy the Pro machine upgrade (menu)")
+		return
 	var job: Contract = job_board.take_next()
 	# OFFERED -> ACCEPTED -> PREPARING. The print only starts once the player
 	# confirms an orientation via _prep_press.
@@ -1351,10 +1419,58 @@ func _accept_print() -> void:
 		_set_prompt("Not enough funds for materials ($%s)" % _cents_str(job.material_cost_cents))
 		return
 	active_contract = job
+	active_contract_day = day_cycle.day
 	orientation_index = 0
 	orientation_pending = false
 	sfx.play("click")
 	_set_prompt("Accepted %s — [E] to preview orientation" % job.model_name)
+
+## --- deadlines (v0.2.0) -------------------------------------------------------
+
+func _days_taken() -> int:
+	return day_cycle.day - active_contract_day
+
+func _days_remaining() -> int:
+	return active_contract.deadline_days - _days_taken() if active_contract != null else 0
+
+func _is_late() -> bool:
+	return active_contract != null and _days_taken() > active_contract.deadline_days
+
+## Two full days past the deadline the client cancels the contract.
+func _is_cancelled() -> bool:
+	return active_contract != null \
+		and _days_taken() > active_contract.deadline_days + 1
+
+## Day rollover: rent comes due first, then an overdue contract is cancelled.
+func _on_day_changed(new_day: int) -> void:
+	if ledger.can_afford(RENT_CENTS):
+		ledger.charge(RENT_CENTS, "rent day %d" % new_day)
+		_set_prompt("Day %d — rent paid ($%s)" % [new_day, _cents_str(RENT_CENTS)])
+	else:
+		rent_debt_cents += RENT_CENTS
+		_set_prompt("Day %d — rent UNPAID (now owe $%s)" % [new_day, _cents_str(rent_debt_cents)])
+	if active_contract != null and _is_cancelled():
+		var c := active_contract
+		if c.state in [Contract.State.PREPARING, Contract.State.PRINTING, Contract.State.INSPECTION]:
+			_advance(c, Contract.State.FAILED)
+		if sim.is_running() or sim.state == PrintSim.State.DONE_OK:
+			sim.reset()
+			for visual in _print_visuals:
+				visual.reset()
+			if not _printers.is_empty() and _printers[0].get("set_failed") != null:
+				_printers[0].set_failed(false)
+		_discard_part()
+		active_contract = null
+		sfx.play("buzz")
+		_set_prompt("Client cancelled %s — far too late. No payout." % c.model_name)
+
+## Payouts repay rent debt before anything else can be done with the money.
+func _repay_rent_debt() -> void:
+	if rent_debt_cents <= 0 or ledger.balance() <= 0:
+		return
+	var repaid := mini(rent_debt_cents, ledger.balance())
+	if ledger.charge(repaid, "repay rent debt"):
+		rent_debt_cents -= repaid
 
 func _cents_str(cents: int) -> String:
 	return "%d.%02d" % [cents / 100, absi(cents) % 100]
@@ -1426,13 +1542,18 @@ func _update_hud() -> void:
 	lines.append(version_label)
 	if ledger != null:
 		lines.append("Balance: $%s" % _cents_str(ledger.balance()))
+	lines.append("Day %d — rent $%s/day" % [day_cycle.day, _cents_str(RENT_CENTS)])
+	if rent_debt_cents > 0:
+		lines.append("Unpaid rent: $%s" % _cents_str(rent_debt_cents))
 	if active_contract != null:
-		lines.append("Contract %s — %s [%s] pays $%s · due %dd" % [
+		var due := _days_remaining()
+		var due_text := "due in %dd" % due if due >= 0 else "LATE — half pay"
+		lines.append("Contract %s — %s [%s] pays $%s · %s" % [
 			active_contract.id,
 			active_contract.model_name,
 			Contract.state_name(active_contract.state),
 			_cents_str(active_contract.payout_cents),
-			active_contract.deadline_days,
+			due_text,
 		])
 	# Orientation prep block while the player is choosing how to print.
 	if active_contract != null and active_contract.state == Contract.State.PREPARING:
