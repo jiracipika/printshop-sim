@@ -17,7 +17,7 @@ h1 { font-size: clamp(28px, 7vw, 52px); margin: 0 0 8px; color: #ffca45; letter-
 p { line-height: 1.5; }
 progress { width: 100%; accent-color: #ffca45; margin-top: 20px; }
 #notice { color: #ffca45; white-space: pre-wrap; }
-#help { position: fixed; left: 20px; bottom: 20px; max-width: 220px; color: #b8b6c5; font-size: 13px; line-height: 1.6; }
+#help { position: fixed; right: 20px; bottom: 20px; max-width: 220px; color: #b8b6c5; font-size: 13px; line-height: 1.6; text-align: right; opacity: 0.85; }
 @media (max-width: 950px) { #help { display: none; } }
 </style>
 $GODOT_HEAD_INCLUDE
@@ -32,7 +32,7 @@ $GODOT_HEAD_INCLUDE
 <noscript>JavaScript and WebGL 2 are required to play.</noscript>
 </section>
 </main>
-<aside id="help">Early playable prototype<br>WASD — move<br>Mouse — look (click to capture)<br>E — start print at printer<br>Esc — release mouse</aside>
+<aside id="help">Early playable prototype<br>WASD — move<br>Mouse — look (click to capture)<br>E — interact / prep / deliver<br>Esc — menu</aside>
 <script src="$GODOT_URL"></script>
 <script>
 const config = $GODOT_CONFIG;
