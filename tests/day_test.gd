@@ -135,8 +135,8 @@ func _test_deadlines() -> void:
 	var snap: Dictionary = main._machine(0).get("grade_snapshot", {})
 	var grade: String = QualityCheck.grade(c, int(snap.get("final_layer", 0)),
 		int(snap.get("total_layers", 0)), snap.get("risks", {}))
-	var full: int = roundi(roundi(c.payout_cents
-		* QualityCheck.quality_multiplier(main._cap_grade_for_color(grade, c, main._machine(0)))) * rep0)
+	var full: int = main._finalize_payout(roundi(c.payout_cents
+		* QualityCheck.quality_multiplier(main._cap_grade_for_color(grade, c, main._machine(0)))), false, main._machine(0), rep0)
 	_ok(ledger.balance() == bal0 + full, "on-time delivery pays rep-scaled grade payout")
 
 	# Late (deadline exceeded by 1 day): half payout.
@@ -161,8 +161,8 @@ func _test_deadlines() -> void:
 	var rep1: float = main.reputation_multiplier()
 	main._try_pack_held()
 	var eff2: String = main._cap_grade_for_color(grade2, c2, main._machine(0))
-	_ok(ledger.balance() == bal1 + roundi(roundi(roundi(c2.payout_cents
-		* QualityCheck.quality_multiplier(eff2)) * rep1) * 0.5),
+	_ok(ledger.balance() == bal1 + main._finalize_payout(roundi(c2.payout_cents
+		* QualityCheck.quality_multiplier(eff2)), true, main._machine(0), rep1),
 		"late delivery pays exactly half (rep-scaled)")
 	_ok("LATE" in str(main._prompt.text), "HUD explains the late penalty")
 

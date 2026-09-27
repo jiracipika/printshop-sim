@@ -69,3 +69,50 @@ static func all_ids_seen_within(days: int) -> bool:
 		if not seen.has(id):
 			return false
 	return true
+
+## --- seasons (v0.11.0) -------------------------------------------------------
+##
+## A slower rhythm under the daily events: the shop week (7 days) carries one
+## season, deterministic per week number. Week 1 is always calm so fresh saves
+## start gentle; humidity makes filament thirstier, cold snaps raise the rent,
+## and a market boom lifts every payout.
+
+const CALM_SEASON := {
+	"id": "calm",
+	"name": "",
+	"adhesion_delta": 0.0,
+	"extra_rent_cents": 0,
+	"payout_mult": 1.0,
+}
+
+
+static func season_for_week(week: int) -> Dictionary:
+	var w := maxi(week, 1)
+	if w == 1:
+		return CALM_SEASON.duplicate(true)
+	var pool := ["calm", "humid", "calm", "cold_snap", "boom"]
+	var pick: String = pool[absi(hash("printshop-season-%d" % w)) % pool.size()]
+	return _season_by_id(pick).duplicate(true)
+
+
+static func _season_by_id(id: String) -> Dictionary:
+	match id:
+		"humid":
+			return {"id": id,
+				"name": "Humid spell — filament thirstier (adhesion +0.05)",
+				"adhesion_delta": 0.05,
+				"extra_rent_cents": 0,
+				"payout_mult": 1.0}
+		"cold_snap":
+			return {"id": id,
+				"name": "Cold snap — heating costs up (rent +$1/day)",
+				"adhesion_delta": 0.0,
+				"extra_rent_cents": 100,
+				"payout_mult": 1.0}
+		"boom":
+			return {"id": id,
+				"name": "Market boom — payouts +10% this week",
+				"adhesion_delta": 0.0,
+				"extra_rent_cents": 0,
+				"payout_mult": 1.10}
+	return CALM_SEASON.duplicate(true)

@@ -12,8 +12,8 @@ The deployed version may lag local development. Check the in-game version/build 
 
 Complete playable contract loop with the shop day, true two-machine parallel
 printing, a procedural contract board, a reputation system, a physical spool
-economy with color demands, daily shop events, and guided first-run
-objectives (v0.9.0). Filament is real: printers hold grams from loaded
+economy with color demands, daily shop events, weekly seasons, guided
+objectives, same-day tips and a live chalkboard ledger (v0.11.0). Filament is real: printers hold grams from loaded
 spools, every print consumes its estimate, failed prints salvage half the
 grams back, and new spools come from the crate ($12). Accept a job, pick an orientation, print it, carry
 the part to the packing table, deliver, get paid — against the clock: days
@@ -52,6 +52,10 @@ Working in local automated tests (15 suites, 656 checks):
 - Daily events (v0.7.0): each morning brings a deterministic event — filament
   sale ($8 spools), rush week (payouts +25%), power hiccups (riskier prints),
   rent holiday, or a quiet day. Day 1 always opens quiet.
+- Weekly seasons + same-day tips (v0.11.0): each 7-day week carries a
+  deterministic season (humid spell raises adhesion risk, cold snap raises
+  rent, market boom lifts payouts); delivering the same day you accept earns
+  a 15% tip; a chalkboard ledger on the wall shows live shop stats.
 - Color demands (v0.8.0): clients want Clay, Sage or Honey; the crate cycles
   colors (sign shows the next), the loaded spool's color shows on the machine,
   and a mismatch caps the grade at B — right color, top payout.

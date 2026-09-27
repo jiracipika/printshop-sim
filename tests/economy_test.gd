@@ -154,8 +154,8 @@ func _run() -> void:
 	# Final payout: grade scale first, then reputation (rep 3.0 -> x1.04),
 	# matching Main's rounding order exactly.
 	var eff_grade: String = main._cap_grade_for_color(grade_expected, contract, main._machine(0))
-	var expected_payout: int = roundi(roundi(contract.payout_cents
-		* QualityCheck.quality_multiplier(eff_grade)) * rep_at_pack)
+	var eff_base: int = roundi(contract.payout_cents * QualityCheck.quality_multiplier(eff_grade))
+	var expected_payout: int = main._finalize_payout(eff_base, false, main._machine(0), rep_at_pack)
 	_ok(grade_expected in ["A", "B", "C"], "completed print grades deliverable (%s)" % grade_expected)
 	_ok(_prop(main, "active_contract") == null, "delivery clears active contract")
 	_ok(contract.state == Contract.State.DELIVERED, "delivery walks INSPECTION->PACKED->DELIVERED")

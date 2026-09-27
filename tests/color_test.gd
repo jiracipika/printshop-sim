@@ -148,9 +148,9 @@ func _test_crate_and_cap() -> void:
 		var grade := QualityCheck.grade(c, int(snap.get("final_layer", 0)),
 			int(snap.get("total_layers", 0)), snap.get("risks", {}))
 		var eff: String = main._cap_grade_for_color(grade, c, main._machine(0))
-		var expected: int = roundi(roundi(roundi(c.payout_cents
-			* QualityCheck.quality_multiplier(eff)) * main.reputation_multiplier())
-			* float(main.today_event.payout_mult))
+		var rep_at_pack: float = main.reputation_multiplier()
+		var expected: int = main._finalize_payout(roundi(c.payout_cents
+			* QualityCheck.quality_multiplier(eff)), false, main._machine(0), rep_at_pack)
 		var bal1: int = ledger.balance()
 		main._try_interact()  # deliver
 		_ok(eff == "B" and ledger.balance() == bal1 + expected,

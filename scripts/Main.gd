@@ -37,7 +37,11 @@ var reputation := 3.0
 var stats := {"delivered": 0, "late": 0, "scrapped": 0, "cancelled": 0, "earned_cents": 0}
 ## Today's shop event (v0.7.0) — deterministic per day, refreshed on rollover.
 var today_event: Dictionary = Events.QUIET.duplicate(true)
+## This week's season (v0.11.0) — deterministic per week number.
+var season: Dictionary = Events.CALM_SEASON.duplicate(true)
 var _crate_label: Label3D
+var _chalk_label: Label3D
+var _chalk_cache := ""
 ## First-run objectives (v0.9.0): order-agnostic completion flags; the HUD
 ## shows the first unfinished step until everything is done (persisted).
 var guide_flags := {"accepted": false, "printed": false, "collected": false,
@@ -350,7 +354,7 @@ func _load_save() -> void:
 	if payload.has("day"):
 		day_cycle.restore(int(payload.day), 0.0)
 		job_board.rotate_day(day_cycle.day)
-		_refresh_event()
+		_refresh_event()  # also refreshes the season
 	if payload.has("reputation"):
 		reputation = clampf(float(payload.reputation), 0.0, 5.0)
 	if payload.has("stats"):
@@ -621,6 +625,7 @@ func _guide_current() -> String:
 ## Recompute today's event and anything that displays it (crate price tag).
 func _refresh_event() -> void:
 	today_event = Events.for_day(day_cycle.day)
+	season = Events.season_for_week(int((day_cycle.day - 1) / 7.0) + 1)
 	_refresh_crate_label()
 
 func _refresh_crate_label() -> void:
@@ -856,6 +861,40 @@ func _build_props() -> void:
 	spool_crate_body.add_child(spool_crate_shape)
 	spool_crate_body.position = CRATE_POS + Vector3(0, 0.25, 0)
 	add_child(spool_crate_body)
+
+	# Chalkboard stats wall: live shop numbers in chalk on the left wall.
+	var chalk_frame := MeshInstance3D.new()
+	var chalk_frame_box := BoxMesh.new()
+	chalk_frame_box.size = Vector3(0.08, 1.06, 1.46)
+	chalk_frame.mesh = chalk_frame_box
+	var chalk_frame_mat := StandardMaterial3D.new()
+	chalk_frame_mat.albedo_color = Color("#5A4632")
+	chalk_frame_mat.albedo_texture = ShopArt.wood(Color("#7A5E3E"), 3)
+	chalk_frame_mat.roughness = 0.7
+	chalk_frame.material_override = chalk_frame_mat
+	chalk_frame.position = Vector3(-ROOM_W / 2.0 + 0.09, 1.7, 0.7)
+	chalk_frame.add_to_group("props")
+	add_child(chalk_frame)
+	var chalk_board := MeshInstance3D.new()
+	var chalk_quad := QuadMesh.new()
+	chalk_quad.size = Vector2(1.28, 0.88)
+	chalk_board.mesh = chalk_quad
+	var chalk_mat := StandardMaterial3D.new()
+	chalk_mat.albedo_color = Color("#2F4F44")
+	chalk_mat.roughness = 0.95
+	chalk_board.material_override = chalk_mat
+	chalk_board.position = Vector3(-ROOM_W / 2.0 + 0.125, 1.7, 0.7)
+	chalk_board.rotation_degrees = Vector3(0, 90, 0)
+	chalk_board.add_to_group("props")
+	add_child(chalk_board)
+	_chalk_label = Label3D.new()
+	_chalk_label.text = ""
+	_chalk_label.font_size = 30
+	_chalk_label.pixel_size = 0.0022
+	_chalk_label.modulate = Color("#E8E4D4")
+	_chalk_label.position = Vector3(-ROOM_W / 2.0 + 0.145, 1.7, 0.7)
+	_chalk_label.rotation_degrees = Vector3(0, 90, 0)
+	add_child(_chalk_label)
 
 	# Baseboards: dark skirting strips at the foot of every wall.
 	for bb in [
@@ -1986,12 +2025,11 @@ func _try_pack_held() -> bool:
 		return true
 	if not _advance(c, Contract.State.DELIVERED):
 		return true
-	# Final payout: effective grade x reputation x event; late halves last.
+	# Final payout: effective grade x reputation x season x event; late halves
+	# last; same-day delivery earns a 15% tip on top.
 	var late := _is_late_for(m)
-	var payout: int = roundi(float(eff_payout) * reputation_multiplier())
-	payout = roundi(float(payout) * float(today_event.payout_mult))
-	if late:
-		payout = roundi(float(payout) * LATE_PAYOUT_FACTOR)
+	var payout := _finalize_payout(eff_payout, late, m)
+	var same_day := _days_taken_for(m) <= 0
 	if not ledger.pay_once(c.id, payout, "payout %s" % c.id):
 		return true
 	_repay_rent_debt()
@@ -2011,9 +2049,13 @@ func _try_pack_held() -> bool:
 		_guide("stars")
 	_save_game()
 	sfx.play("cash")
+	var tip: int = payout - roundi(float(payout) / 1.15)
 	if late:
 		_set_prompt("Delivered LATE %s (%s) — $%s · rep down" % [c.model_name, result.grade,
 			_cents_str(payout)])
+	elif same_day:
+		_set_prompt("Same-day tip! Delivered %s (%s) — $%s incl. $%s tip" % [c.model_name,
+			result.grade, _cents_str(payout), _cents_str(tip)])
 	else:
 		_set_prompt("Delivered %s (%s) — $%s · rep up" % [c.model_name, result.grade,
 			_cents_str(payout)])
@@ -2096,7 +2138,8 @@ func _prep_eval(contract: Contract, orientation: String) -> Dictionary:
 	if not eval.get("valid", false):
 		return eval
 	var mods: Dictionary = upgrades.risk_modifiers()
-	eval.adhesion_risk = clampf(float(eval.adhesion_risk) + float(mods.adhesion_risk), 0.0, 1.0)
+	eval.adhesion_risk = clampf(float(eval.adhesion_risk) + float(mods.adhesion_risk) \
+		+ float(season.adhesion_delta), 0.0, 1.0)
 	eval.stability_risk = clampf(float(eval.stability_risk) + float(mods.stability_risk), 0.0, 1.0)
 	return eval
 
@@ -2253,12 +2296,14 @@ func _on_day_changed(new_day: int) -> void:
 	# A rent holiday skips only the charge — the rest of the day still runs.
 	if bool(today_event.rent_free):
 		_set_prompt("Day %d — %s" % [new_day, today_event.name])
-	elif ledger.can_afford(RENT_CENTS):
-		ledger.charge(RENT_CENTS, "rent day %d" % new_day)
-		_set_prompt("Day %d — rent paid ($%s)" % [new_day, _cents_str(RENT_CENTS)])
 	else:
-		rent_debt_cents += RENT_CENTS
-		_set_prompt("Day %d — rent UNPAID (now owe $%s)" % [new_day, _cents_str(rent_debt_cents)])
+		var rent_due := RENT_CENTS + int(season.extra_rent_cents)
+		if ledger.can_afford(rent_due):
+			ledger.charge(rent_due, "rent day %d" % new_day)
+			_set_prompt("Day %d — rent paid ($%s)" % [new_day, _cents_str(rent_due)])
+		else:
+			rent_debt_cents += rent_due
+			_set_prompt("Day %d — rent UNPAID (now owe $%s)" % [new_day, _cents_str(rent_debt_cents)])
 	for m in machines:
 		if not _is_cancelled_for(m):
 			continue
@@ -2284,6 +2329,20 @@ func _on_day_changed(new_day: int) -> void:
 
 func reputation_multiplier() -> float:
 	return 0.8 + (reputation / 5.0) * 0.4
+
+## Single source of truth for what a delivery actually pays: station grade
+## base -> reputation -> season -> daily event -> late half -> same-day tip.
+## Tests pass the PRE-delivery reputation (the delivery bumps it afterwards).
+func _finalize_payout(base: int, late: bool, m: Dictionary, rep := -1.0) -> int:
+	var mult := reputation_multiplier() if rep < 0.0 else rep
+	var payout := roundi(float(base) * mult)
+	payout = roundi(float(payout) * float(season.payout_mult))
+	payout = roundi(float(payout) * float(today_event.payout_mult))
+	if late:
+		payout = roundi(float(payout) * LATE_PAYOUT_FACTOR)
+	if _days_taken_for(m) <= 0:
+		payout += roundi(float(payout) * 0.15)
+	return payout
 
 func _rep_event(delta: float) -> void:
 	reputation = clampf(reputation + delta, 0.0, 5.0)
@@ -2476,6 +2535,8 @@ func _update_hud() -> void:
 		lines.append("Balance: $%s" % _cents_str(ledger.balance()))
 	lines.append("Day %d — rent $%s/day" % [day_cycle.day, _cents_str(RENT_CENTS)])
 	lines.append("Today: %s" % today_event.name)
+	if str(season.name) != "":
+		lines.append("This week: %s" % season.name)
 	if not guide_done:
 		lines.append("▸ Objective: %s" % _guide_current())
 	if rent_debt_cents > 0:
@@ -2554,3 +2615,17 @@ func _update_hud() -> void:
 	if grab_line != "":
 		lines.append(grab_line)
 	_status.text = "\n".join(lines)
+	_update_chalkboard()
+
+func _update_chalkboard() -> void:
+	if _chalk_label == null:
+		return
+	var stars := ""
+	for i in range(5):
+		stars += "*" if i < roundi(reputation) else "."
+	var text := "SHOP LEDGER\nDay %d\nDelivered: %d\nEarned: $%s\nRep %s %.1f" % [
+		day_cycle.day, int(stats.delivered), _cents_str(int(stats.earned_cents)),
+		stars, reputation]
+	if text != _chalk_cache:
+		_chalk_cache = text
+		_chalk_label.text = text
