@@ -36,6 +36,17 @@ https://printshop-sim.vercel.app/.
 
 ## State at this checkpoint
 
+v0.7.0 (daily events) shipped on top of v0.6.0: Events.for_day(day) deals a
+deterministic event per shop day (day 1 always quiet; from day 2 a hashed
+pool of filament_sale $8 spools, rush_week payouts x1.25, power_hiccup
+failure threshold +0.10, rent_holiday, and quiet). Main applies them: crate
+price + sign text, payout multiplier (order: grade -> reputation -> event ->
+late half), failure threshold delta (clamped with upgrades), rent skip in
+_on_day_changed (holiday skips ONLY the charge — cancellations still run;
+the early version of that branch skipped the whole rollover and was caught
+by parallel_test). HUD shows "Today: <event>". New suite tests/events_test.gd
+(15 checks); all 22 suites green (940 checks).
+
 v0.6.0 (spool economy) shipped on top of v0.5.0 + the concurrent design-
 computer commits (80f18ae, 6e6b349 — note: those sessions share this clone;
 ALWAYS git pull --rebase before pushing and re-grep files before patching,
@@ -124,13 +135,13 @@ cardboard/posters/rug), procedural sky + fog, ceiling fixtures, window,
 props (spool shelf, crates, plant, ticking wall clock), center reticle,
 synthesized SFX + printer hum on an "SFX" bus.
 
-Verification evidence (local): 21 Godot headless suites green — contract 255,
-spool 23, gen 24, features 31, upgrades 55, packing 58, touch 47, save 44,
-shop_art 51, economy 54, day 36, design_computer 21, parallel 23, prep 29,
-printer_visual 34, grab 26, input_pause 23, menu 25, debug_panel 32, room 9,
-smoke 9 (932 checks, 0 failures, no SCRIPT ERROR); Python build pipeline 21
-pytest; engine screenshots confirm the crate, the depleted coil and the
-per-machine filament HUD line.
+Verification evidence (local): 22 Godot headless suites green — contract 255,
+events 15, spool 23, gen 24, features 31, upgrades 55, packing 58, touch 47,
+save 44, shop_art 51, economy 54, day 37, design_computer 21, parallel 23,
+prep 29, printer_visual 34, grab 26, input_pause 23, menu 25, debug_panel 32,
+room 9, smoke 9 (940 checks, 0 failures, no SCRIPT ERROR); Python build
+pipeline 21 pytest; engine screenshots confirm the sale-day HUD line and the
+$8 crate sign.
 
 v0.1.0 RELEASED: commits 2f1f2af (loop/features) + ab05cc4 (shell help
 placement). Deployed to https://printshop-sim.vercel.app/ via vercel --prod;

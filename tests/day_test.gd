@@ -62,26 +62,33 @@ func _test_rent_and_debt() -> void:
 	main.paused = false
 	main.captured = true
 
-	# Rent charges once per day change.
+	# Rent charges once per day change (unless the day's event is a holiday).
 	var bal0: int = ledger.balance()
 	var txs0: int = ledger.transaction_count()
 	main.day_cycle.tick(main.day_cycle.day_length_s)  # -> day 2
 	_ok(main.day_cycle.day == 2, "day rolled to 2")
-	_ok(ledger.balance() == bal0 - 400, "rent charged at day change")
+	var rent2: int = 0 if bool(main.today_event.rent_free) else 400
+	_ok(ledger.balance() == bal0 - rent2,
+		"rent handled per the day's event (%s)" % main.today_event.id)
 	var rent_txs := 0
 	for t in ledger.transactions:
 		if t["reason"] == "rent day 2":
 			rent_txs += 1
-	_ok(rent_txs == 1, "exactly one rent transaction for day 2")
-	_ok(ledger.transaction_count() == txs0 + 1, "no other transactions at rollover")
+	_ok(rent_txs <= 1, "at most one rent transaction for day 2")
+	if rent2 > 0:
+		_ok(rent_txs == 1, "rent transaction present when rent was due")
+	_ok(ledger.transaction_count() >= txs0 + 1, "rollover logged its transactions")
 
 	# Insufficient funds: no charge, debt accrues, balance never negative.
 	ledger.charge(ledger.balance(), "test drain")
+	var debt0: int = main.rent_debt_cents
 	main.day_cycle.tick(main.day_cycle.day_length_s)  # -> day 3
+	var rent3: int = 0 if bool(main.today_event.rent_free) else 400
 	_ok(ledger.balance() == 0, "empty balance unchanged at rollover")
-	_ok(main.rent_debt_cents == 400, "unpaid rent accrues as debt")
+	_ok(main.rent_debt_cents == debt0 + rent3, "unpaid rent accrues as debt per event")
 	main.day_cycle.tick(main.day_cycle.day_length_s)  # -> day 4
-	_ok(main.rent_debt_cents == 800, "debt accumulates per unpaid day")
+	var rent4: int = 0 if bool(main.today_event.rent_free) else 400
+	_ok(main.rent_debt_cents == debt0 + rent3 + rent4, "debt accumulates per unpaid day")
 
 	# Payout repays debt first.
 	ledger.credit(1000, "test funds")

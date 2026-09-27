@@ -35,6 +35,9 @@ var packing_station: PackingStation
 var reputation := 3.0
 ## Lifetime counters (v0.5.0), persisted and shown in the menu Stats panel.
 var stats := {"delivered": 0, "late": 0, "scrapped": 0, "cancelled": 0, "earned_cents": 0}
+## Today's shop event (v0.7.0) — deterministic per day, refreshed on rollover.
+var today_event: Dictionary = Events.QUIET.duplicate(true)
+var _crate_label: Label3D
 
 ## --- machines (v0.3.0): true parallel printing -------------------------------
 ## One entry per printer: {idx, sim, contract, day, orient, orient_pending,
@@ -275,6 +278,7 @@ func _ready() -> void:
 	_load_save()
 	apply_setting("sfx_volume", float(settings.sfx_volume), false)
 	_apply_quality()
+	_refresh_event()
 
 ## Quality settings (v0.4.0): directional shadows can be turned off for weak
 ## devices; persists in the save like the rest of the settings.
@@ -317,6 +321,7 @@ func _load_save() -> void:
 	if payload.has("day"):
 		day_cycle.restore(int(payload.day), 0.0)
 		job_board.rotate_day(day_cycle.day)
+		_refresh_event()
 	if payload.has("reputation"):
 		reputation = clampf(float(payload.reputation), 0.0, 5.0)
 	if payload.has("stats"):
@@ -547,6 +552,12 @@ func _build_world() -> void:
 	add_child(job_board)
 	_apply_daylight()
 
+## Recompute today's event and anything that displays it (crate price tag).
+func _refresh_event() -> void:
+	today_event = Events.for_day(day_cycle.day)
+	if _crate_label != null:
+		_crate_label.text = "SPOOL CRATE\n$%d" % (int(today_event.spool_price_cents) / 100)
+
 ## Day/night (v0.2.0): brightness and warmth follow the shop clock. Direction
 ## stays fixed (interior scene); energy/color carry the time of day.
 func _apply_daylight() -> void:
@@ -756,7 +767,8 @@ func _build_props() -> void:
 	spool_crate.add_to_group("props")
 	add_child(spool_crate)
 	var spool_crate_lbl := Label3D.new()
-	spool_crate_lbl.text = "SPOOL CRATE\n$%d" % (SPOOL_PRICE_CENTS / 100)
+	spool_crate_lbl.text = "SPOOL CRATE\n$%d" % (int(today_event.spool_price_cents) / 100)
+	_crate_label = spool_crate_lbl
 	spool_crate_lbl.font_size = 40
 	spool_crate_lbl.pixel_size = 0.0028
 	spool_crate_lbl.billboard = BaseMaterial3D.BILLBOARD_ENABLED
@@ -1465,10 +1477,11 @@ func _load_spool(idx: int) -> void:
 
 ## Buy a spool at the crate and put it straight into the player's hands.
 func _buy_spool() -> void:
-	if not ledger.can_afford(SPOOL_PRICE_CENTS):
-		_set_prompt("A new spool costs $%s — not enough funds" % _cents_str(SPOOL_PRICE_CENTS))
+	var price := int(today_event.spool_price_cents)
+	if not ledger.can_afford(price):
+		_set_prompt("A new spool costs $%s — not enough funds" % _cents_str(price))
 		return
-	if not ledger.charge(SPOOL_PRICE_CENTS, "spool"):
+	if not ledger.charge(price, "spool"):
 		return
 	var spool := _make_crate_spool()
 	add_child(spool)
@@ -1664,9 +1677,10 @@ func _try_pack_held() -> bool:
 		return true
 	if not _advance(c, Contract.State.DELIVERED):
 		return true
-	# Final payout: grade x reputation; late work halves before reputation.
+	# Final payout: grade x reputation x event; late work halves at the end.
 	var late := _is_late_for(m)
 	var payout: int = roundi(float(result.payout_cents) * reputation_multiplier())
+	payout = roundi(float(payout) * float(today_event.payout_mult))
 	if late:
 		payout = roundi(float(payout) * LATE_PAYOUT_FACTOR)
 	if not ledger.pay_once(c.id, payout, "payout %s" % c.id):
@@ -1777,7 +1791,8 @@ func _write_prep_to_sim(eval: Dictionary, idx: int) -> void:
 	var machine_mult := upgrades.machine_speed_multiplier() \
 		if idx == 1 and upgrades.pro_machine_unlocked() else 1.0
 	s.speed_multiplier = upgrades.speed_multiplier() * machine_mult
-	s.failure_threshold = BASE_FAILURE_THRESHOLD + upgrades.failure_threshold_delta()
+	s.failure_threshold = clampf(BASE_FAILURE_THRESHOLD + upgrades.failure_threshold_delta() \
+		+ float(today_event.failure_delta), 0.0, 1.0)
 
 func _write_prep_to_sim_focus(eval: Dictionary) -> void:
 	_write_prep_to_sim(eval, _focus)
@@ -1913,7 +1928,11 @@ func _is_cancelled() -> bool:
 ## Day rollover: rent comes due first, then overdue contracts are cancelled.
 func _on_day_changed(new_day: int) -> void:
 	job_board.rotate_day(new_day)  # fresh deterministic offerings each morning
-	if ledger.can_afford(RENT_CENTS):
+	_refresh_event()
+	# A rent holiday skips only the charge — the rest of the day still runs.
+	if bool(today_event.rent_free):
+		_set_prompt("Day %d — %s" % [new_day, today_event.name])
+	elif ledger.can_afford(RENT_CENTS):
 		ledger.charge(RENT_CENTS, "rent day %d" % new_day)
 		_set_prompt("Day %d — rent paid ($%s)" % [new_day, _cents_str(RENT_CENTS)])
 	else:
@@ -2134,6 +2153,7 @@ func _update_hud() -> void:
 	if ledger != null:
 		lines.append("Balance: $%s" % _cents_str(ledger.balance()))
 	lines.append("Day %d — rent $%s/day" % [day_cycle.day, _cents_str(RENT_CENTS)])
+	lines.append("Today: %s" % today_event.name)
 	if rent_debt_cents > 0:
 		lines.append("Unpaid rent: $%s" % _cents_str(rent_debt_cents))
 	var stars := ""
