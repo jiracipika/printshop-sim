@@ -89,6 +89,7 @@ var _status: Label
 var _prompt: Label
 var touch_controls: TouchControls
 var main_menu: MainMenu
+var design_studio: DesignStudio
 var debug_panel: DebugPanel
 var last_pack_grade := ""
 var save_status_line := "no save yet"
@@ -169,6 +170,9 @@ func _apply_upgrade_effects() -> void:
 ## main panel; the main panel closes to the resume prompt; playing opens the
 ## menu and pauses. Touch Pause button also lands here.
 func _route_escape() -> void:
+	if design_studio != null and design_studio.visible:
+		_close_design_studio()
+		return
 	if main_menu.is_open() and main_menu.visible:
 		if main_menu.subpanel_open():
 			main_menu.open_menu()
@@ -456,6 +460,7 @@ func _build_world() -> void:
 	add_child(lamp2)
 
 	_build_props()
+	_build_design_computer()
 
 	# Two printers: one on the bench, one on a steel floor stand against the back wall.
 	# Printer 2 is the "Pro machine": locked until purchased, 25% faster.
@@ -493,6 +498,7 @@ func _build_world() -> void:
 			"idx": i, "sim": s, "contract": null, "day": 0,
 			"orient": 0, "orient_pending": false, "part": null, "scrap": false,
 			"material_cents": 0,
+			"prototype": {},
 		})
 		s.print_started.connect(_on_print_started.bind(i))
 		s.print_finished.connect(_on_print_done.bind(i))
@@ -731,6 +737,71 @@ func _build_props() -> void:
 	pot_body.add_child(pot_shape)
 	pot_body.position = Vector3(-2.9, 0.3, 2.25)
 	add_child(pot_body)
+
+## World-space control target on the workbench; the monitor is immediately
+## readable as a usable tool and the body sits above the bench ray occluder.
+func _build_design_computer() -> void:
+	var pc := Node3D.new()
+	pc.name = "DesignComputer"
+	pc.position = Vector3(-2.55, 0.9, -2.0)
+	add_child(pc)
+	var casing_mat := StandardMaterial3D.new()
+	casing_mat.albedo_color = Color("#202B2B")
+	casing_mat.roughness = 0.58
+	var frame := MeshInstance3D.new()
+	var frame_mesh := BoxMesh.new()
+	frame_mesh.size = Vector3(0.48, 0.31, 0.055)
+	frame.mesh = frame_mesh
+	frame.material_override = casing_mat
+	frame.position = Vector3(0, 0.24, -0.06)
+	pc.add_child(frame)
+	var screen := MeshInstance3D.new()
+	var screen_mesh := QuadMesh.new()
+	screen_mesh.size = Vector2(0.43, 0.255)
+	screen.mesh = screen_mesh
+	var screen_mat := StandardMaterial3D.new()
+	screen_mat.albedo_color = Color("#A8C8AC")
+	screen_mat.emission_enabled = true
+	screen_mat.emission = Color("#4F8060")
+	screen_mat.emission_energy_multiplier = 0.55
+	screen_mat.roughness = 0.4
+	screen.material_override = screen_mat
+	screen.position = Vector3(0, 0.24, -0.027)
+	pc.add_child(screen)
+	var stand := MeshInstance3D.new()
+	var stand_mesh := BoxMesh.new()
+	stand_mesh.size = Vector3(0.09, 0.12, 0.08)
+	stand.mesh = stand_mesh
+	stand.material_override = casing_mat
+	stand.position = Vector3(0, 0.07, -0.055)
+	pc.add_child(stand)
+	var keyboard := MeshInstance3D.new()
+	var keyboard_mesh := BoxMesh.new()
+	keyboard_mesh.size = Vector3(0.38, 0.025, 0.13)
+	keyboard.mesh = keyboard_mesh
+	keyboard.material_override = casing_mat
+	keyboard.position = Vector3(0, 0.025, 0.13)
+	pc.add_child(keyboard)
+	var body := StaticBody3D.new()
+	body.name = "DesignComputerTarget"
+	body.collision_layer = 1
+	body.set_meta("design_computer", true)
+	var shape := CollisionShape3D.new()
+	var box := BoxShape3D.new()
+	box.size = Vector3(0.56, 0.44, 0.22)
+	shape.shape = box
+	shape.position = Vector3(0, 0.22, -0.04)
+	body.add_child(shape)
+	pc.add_child(body)
+	var prompt := Label3D.new()
+	prompt.name = "ComputerLabel"
+	prompt.text = "DESIGN COMPUTER  ·  E"
+	prompt.font_size = 44
+	prompt.pixel_size = 0.003
+	prompt.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	prompt.modulate = Color("#EEE5D3")
+	prompt.position = Vector3(0, 0.48, -0.04)
+	pc.add_child(prompt)
 
 func _add_poster(tex: ImageTexture, pos: Vector3, rot_deg: Vector3, caption: String) -> void:
 	var poster := MeshInstance3D.new()
@@ -1016,6 +1087,10 @@ func _build_hud() -> void:
 	main_menu.settings_changed.connect(_on_menu_setting)
 	main_menu.stats_pressed.connect(_on_menu_stats)
 	main_menu.open_menu()
+	design_studio = load("res://scripts/DesignStudio.gd").new()
+	design_studio.close_requested.connect(_close_design_studio)
+	design_studio.test_print_requested.connect(_on_design_test_print)
+	add_child(design_studio)
 
 	# Menus slice: dev-only debug panel (hidden by default; debug builds only).
 	debug_panel = load("res://scripts/DebugPanel.gd").new()
@@ -1242,6 +1317,8 @@ func _on_print_done(ok: bool, idx: int) -> void:
 	var m := _machine(idx)
 	var c: Contract = m.get("contract")
 	if c == null:
+		if not m.get("prototype", {}).is_empty() and ok:
+			_set_prompt("Prototype complete — press E at Printer %d to collect it" % (idx + 1))
 		return
 	if ok and c.state == Contract.State.PRINTING:
 		_advance(c, Contract.State.INSPECTION)
@@ -1290,6 +1367,27 @@ func _machine_for_part(part: Grabbable) -> int:
 func _collect_on(idx: int) -> bool:
 	var m := _machine(idx)
 	var c: Contract = m.get("contract")
+	var prototype: Dictionary = m.get("prototype", {})
+	var sim: PrintSim = m.get("sim")
+	if c == null and not prototype.is_empty() and sim.state == PrintSim.State.DONE_OK:
+		if is_instance_valid(m.get("part")):
+			_set_prompt("Grab the prototype and place it where you want it")
+			return true
+		if held != null:
+			_set_prompt("Hands full — put something down first")
+			return true
+		var sample := _make_prototype_part(prototype)
+		add_child(sample)
+		sample.global_position = _printers[idx].global_position + Vector3(0, 0.28, 0)
+		_attach_to_hand(sample)
+		m["part"] = null
+		m["prototype"] = {}
+		sim.reset()
+		if idx < _print_visuals.size():
+			_print_visuals[idx].reset()
+		sfx.play("grab")
+		_set_prompt("Prototype collected — place it on a shelf or bench")
+		return true
 	if c == null or c.state != Contract.State.INSPECTION:
 		return false
 	if is_instance_valid(m.get("part")):
@@ -1334,6 +1432,26 @@ func _make_part(c: Contract) -> Grabbable:
 	shape.shape = col
 	part.add_child(shape)
 	part.set_meta("part_contract", c.id)
+	return part
+
+func _make_prototype_part(design: Dictionary) -> Grabbable:
+	var d := DesignStudio.normalize(design)
+	var part := Grabbable.new()
+	part.name = "Prototype_%s" % str(d.name).replace(" ", "_")
+	part.mass = 0.35
+	var mesh := MeshInstance3D.new()
+	mesh.mesh = DesignStudio.create_mesh(d)
+	var mat := StandardMaterial3D.new()
+	mat.albedo_color = Color(DesignStudio.FILAMENTS[d.filament])
+	mat.roughness = 0.55 if d.material == "PETG" else 0.75
+	mesh.material_override = mat
+	part.add_child(mesh)
+	var shape := CollisionShape3D.new()
+	var box := BoxShape3D.new()
+	box.size = Vector3(float(d.width_mm), float(d.height_mm), float(d.depth_mm)) / 1000.0
+	shape.shape = box
+	part.add_child(shape)
+	part.set_meta("prototype", true)
 	return part
 
 ## Free machine `idx`'s part wherever it is (delivered or scrapped).
@@ -1441,6 +1559,8 @@ func _clear_failed_on(idx: int) -> bool:
 	var s: PrintSim = m.get("sim")
 	if s.state != PrintSim.State.DONE_FAIL:
 		return false
+	if not m.get("prototype", {}).is_empty():
+		m["prototype"] = {}
 	s.reset()
 	if idx < _print_visuals.size():
 		_print_visuals[idx].reset()
@@ -1706,6 +1826,9 @@ func _try_interact() -> void:
 	if held != null:
 		_try_place()
 		return
+	if _aimed_design_computer():
+		_open_design_studio()
+		return
 	# Near the packing table without the part in hand: nudge, don't act.
 	for m in machines:
 		var c: Contract = m.get("contract")
@@ -1748,7 +1871,86 @@ func _grab_prompt_line() -> String:
 	var g := _current_grabbable()
 	if g != null and g.can_grab():
 		return "[E] Grab"
+	if _aimed_design_computer():
+		return "[E] Use design computer"
 	return ""
+
+func _aimed_design_computer() -> bool:
+	if _camera == null or _player == null:
+		return false
+	var q := PhysicsRayQueryParameters3D.create(_camera.global_position,
+		_camera.global_position - _camera.global_transform.basis.z * INTERACT_RANGE)
+	q.collision_mask = 1
+	q.exclude = [_player.get_rid()]
+	var hit := get_world_3d().direct_space_state.intersect_ray(q)
+	return not hit.is_empty() and hit.collider.has_meta("design_computer")
+
+func _open_design_studio() -> void:
+	if design_studio == null:
+		return
+	if main_menu != null and main_menu.is_open():
+		main_menu.close_menu()
+	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+	captured = false
+	paused = true
+	if touch_controls != null:
+		touch_controls.set_motion_enabled(false)
+	_set_reticle(false)
+	design_studio.open()
+
+func _close_design_studio() -> void:
+	if design_studio != null:
+		design_studio.close()
+	if main_menu != null:
+		main_menu.open_menu()
+	paused = true
+	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+	captured = false
+	if touch_controls != null:
+		touch_controls.set_motion_enabled(false)
+	_set_reticle(false)
+	_prompt.text = ""
+
+func _on_design_test_print(design: Dictionary) -> void:
+	var d := DesignStudio.normalize(design)
+	var idx := -1
+	for i in machines.size():
+		var m: Dictionary = _machine(i)
+		if i == 1 and not upgrades.pro_machine_unlocked():
+			continue
+		var s: PrintSim = m.get("sim")
+		if m.get("contract") == null and s.state == PrintSim.State.IDLE \
+				and m.get("prototype", {}).is_empty() and not is_instance_valid(m.get("part")):
+			idx = i
+			break
+	if idx < 0:
+		design_studio.show_feedback("Both printers are occupied. Finish or collect a job, then try again.")
+		return
+	var grams := DesignStudio.estimate_grams(d)
+	var cents_per_gram := 4 if d.material == "PLA" else 6
+	var cost := grams * cents_per_gram
+	if not ledger.charge(cost, "prototype filament"):
+		design_studio.show_feedback("Not enough balance for this prototype. Reduce its size or finish a paid job first.")
+		return
+	var m: Dictionary = _machine(idx)
+	m.prototype = d.duplicate(true)
+	m.material_cents = cost
+	var sim: PrintSim = m.get("sim")
+	sim.support_need = 0.0
+	sim.adhesion_risk = 0.0
+	sim.stability_risk = 0.0
+	sim.failure_threshold = 0.0
+	sim.failure_seeded = false
+	var speed := upgrades.speed_multiplier()
+	if idx == 1:
+		speed *= upgrades.machine_speed_multiplier()
+	sim.speed_multiplier = speed
+	var layers := clampi(ceili(float(d.height_mm) / float(d.layer_mm)), 20, 800)
+	sim.start_job("PROTO-%d" % Time.get_ticks_msec(), d.name, layers)
+	_save_game()
+	design_studio.show_feedback("Prototype started on Printer %d. It is paid from your filament balance." % (idx + 1))
+	_close_design_studio()
+	_prompt.text = "Prototype printing — click Play to return to the shop"
 
 func _update_hud() -> void:
 	_set_reticle(paused == false)
@@ -1818,6 +2020,8 @@ func _update_hud() -> void:
 				var c2: Contract = m.get("contract")
 				if c2 != null and c2.state == Contract.State.INSPECTION:
 					lines.append("%sPrint complete — [E] collect the part" % prefix)
+				elif not m.get("prototype", {}).is_empty():
+					lines.append("%sPrototype complete — [E] collect it" % prefix)
 				elif mi != 0:
 					lines.append("%sPrint complete!" % prefix)
 			PrintSim.State.DONE_FAIL:
