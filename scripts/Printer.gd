@@ -129,11 +129,13 @@ func _box(size: Vector3, material: Variant) -> MeshInstance3D:
 	m.material_override = mat
 	return m
 
-## Drive the nozzle block X position; "life" while RUNNING. t = any clock.
-func set_nozzle_scan(t: float) -> void:
+## Sweep the nozzle across the layer and lift the gantry with the growing part.
+func set_nozzle_scan(t: float, progress := 0.0, print_height := 0.08) -> void:
 	if nozzle == null:
 		return
 	nozzle.position.x = sin(t * 1.7) * 0.14
+	if gantry != null:
+		gantry.position.y = clampf(progress, 0.0, 1.0) * clampf(print_height, 0.0, 0.2)
 
 ## Distinct failed-print look: nozzle block grays out (print spoilage cue).
 func set_failed(failed: bool) -> void:

@@ -54,6 +54,11 @@ func _run() -> void:
 	var bed: MeshInstance3D = printer.get_node("Bed")
 	_ok(bed.global_position.y > printer.global_position.y,
 		"bed sits above printer origin")
+	printer.set_nozzle_scan(0.0, 0.0, 0.08)
+	var gantry_low: float = printer.gantry.position.y
+	printer.set_nozzle_scan(1.0, 0.75, 0.08)
+	_ok(printer.gantry.position.y > gantry_low,
+		"gantry rises as printed layers accumulate")
 
 	# Collision body still present (player/occlusion contract).
 	var body := printer.get_node_or_null("PrinterBody")
@@ -69,6 +74,27 @@ func _run() -> void:
 	_ok(not visual.visible, "PrintVisual hidden at IDLE")
 	_ok(visual.visible == false and visual.slice_count_visible() == 0,
 		"PrintVisual shows zero slices at zero progress")
+
+	# --- blueprint-shaped layers + filament finish ---
+	var planter := {"name": "Desk planter", "shape": "cylinder", "width_mm": 60.0,
+		"depth_mm": 52.0, "height_mm": 64.0, "layer_mm": 0.16,
+		"wall_mm": 1.6, "infill_pct": 18.0, "material": "PETG", "filament": "Sage"}
+	visual.set_design(planter)
+	visual.set_progress(0.5, "Desk planter", planter)
+	_ok(visual._slices[1].mesh is CylinderMesh and visual._slices[2].mesh is ArrayMesh,
+		"planter print grows a solid base into hollow shell layers")
+	_ok(absf(float(visual._material.get_shader_parameter("layer_pitch")) - 0.00016) < 0.000001,
+		"printed surface ridges follow the selected layer height")
+	_ok(absf(float(visual._material.get_shader_parameter("polymer_roughness")) - 0.34) < 0.001,
+		"PETG print has a smoother material finish than PLA")
+	_ok(visual.slice_count_visible() == visual.N_BOXES / 2,
+		"custom design grows layer by layer against the existing print progress")
+	var ring := DesignStudio.normalize({"name": "Cable ring"})
+	visual.set_design(ring)
+	_ok(visual._slices.any(func(layer: MeshInstance3D) -> bool: return layer.mesh == null),
+		"cable ring layers follow the curved loop silhouette")
+	visual.set_design(PrintVisual.DEFAULT_DESIGN)
+	visual.reset()
 
 	# --- sim at 25%: visible, monotonic growth, progress matches ---
 	var sim = main.sim

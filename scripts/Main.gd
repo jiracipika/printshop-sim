@@ -1278,12 +1278,13 @@ func _update_print_visuals(delta: float) -> void:
 		var s: PrintSim = _machine(i).get("sim")
 		if s == null:
 			continue
+		var prototype_design: Dictionary = _machine(i).get("prototype", {})
 		if s.state == PrintSim.State.RUNNING:
 			any_running = true
-			visual.set_progress(s.progress(), s.model_name)
+			visual.set_progress(s.progress(), s.model_name, prototype_design)
 		elif s.state == PrintSim.State.DONE_OK or s.state == PrintSim.State.DONE_FAIL:
 			# DONE_OK: hold final shape. DONE_FAIL: gray it out once.
-			visual.set_progress(s.progress(), s.model_name)
+			visual.set_progress(s.progress(), s.model_name, prototype_design)
 			if s.state == PrintSim.State.DONE_FAIL and not visual.is_failed():
 				visual.mark_failed()
 		else:
@@ -1292,7 +1293,10 @@ func _update_print_visuals(delta: float) -> void:
 		if s.is_running() and i < _printers.size():
 			var printer = _printers[i]
 			if printer != null and printer.get("set_nozzle_scan") != null:
-				printer.set_nozzle_scan(elapsed_nozzle_clock)
+				var print_height := 0.056
+				if not prototype_design.is_empty():
+					print_height = float(prototype_design.height_mm) / 1000.0
+				printer.set_nozzle_scan(elapsed_nozzle_clock, s.progress(), print_height)
 			if _hum != null:
 				_hum.global_position = printer.global_position + Vector3(0, 0.3, 0)
 
@@ -1308,6 +1312,11 @@ var elapsed_nozzle_clock := 0.0
 ## Called whenever a fresh job begins so that machine's visual restarts clean.
 func _on_print_started(idx: int) -> void:
 	if idx < _print_visuals.size():
+		var design: Dictionary = _machine(idx).get("prototype", {})
+		if design.is_empty():
+			_print_visuals[idx].set_design(PrintVisual.DEFAULT_DESIGN)
+		else:
+			_print_visuals[idx].set_design(design)
 		_print_visuals[idx].reset()
 
 ## Sim finished on machine `idx`: park its contract at INSPECTION or FAILED.
@@ -1936,6 +1945,8 @@ func _on_design_test_print(design: Dictionary) -> void:
 	m.prototype = d.duplicate(true)
 	m.material_cents = cost
 	var sim: PrintSim = m.get("sim")
+	if idx < _print_visuals.size():
+		_print_visuals[idx].set_design(d)
 	sim.support_need = 0.0
 	sim.adhesion_risk = 0.0
 	sim.stability_risk = 0.0
