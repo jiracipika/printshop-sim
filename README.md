@@ -60,6 +60,11 @@ Working in local automated tests (15 suites, 656 checks):
   persists, and retires when done. Settings gained a two-press
   "Reset shop (new game)" button; collected prints free the printer
   immediately for the next job.
+- Art pass (v0.10.0): 512px plaster/wood/floor with plank gaps, stains and
+  scuffs; baseboards; pegboard with tools; wall calendar; printer build-plate
+  grid and live LCD status screens; cables and power strip; windowsill;
+  trash bin; packing-table tape and scale; pendant cords; second plant;
+  design-computer screen glow.
 - True parallel printing: each machine owns its sim, contract, prep state and
   printed part; both can print, fail, and deliver independently (v0.3.0).
 - Risk-driven deterministic failures (bad orientation can lose the print),

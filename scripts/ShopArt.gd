@@ -39,52 +39,70 @@ static func _finish(img: Image) -> ImageTexture:
 
 
 ## Painted plaster wall: low-contrast value noise over the base color.
-static func plaster(base: Color) -> ImageTexture:
-	return tex("plaster:%s" % base.to_html(), func() -> ImageTexture:
-		var img := Image.create(SIZE, SIZE, false, Image.FORMAT_RGBA8)
+## size=512 adds faint stains near the bottom for rooms-scale realism.
+static func plaster(base: Color, size := SIZE) -> ImageTexture:
+	return tex("plaster:%s:%d" % [base.to_html(), size], func() -> ImageTexture:
+		var img := Image.create(size, size, false, Image.FORMAT_RGBA8)
 		var n := _noise(21, 0.06)
 		var fine := _noise(22, 0.5)
-		for y in SIZE:
-			for x in SIZE:
+		var stain := _noise(23, 0.03)
+		for y in size:
+			for x in size:
 				var v := 0.94 + 0.05 * n.get_noise_2d(x, y) + 0.02 * fine.get_noise_2d(x, y)
+				var bottom := float(y) / float(size)
+				v -= 0.05 * bottom * clampf(0.6 + stain.get_noise_2d(x, y), 0.0, 1.6)
 				var c := base.darkened(1.0 - clampf(v, 0.0, 1.0))
 				img.set_pixel(x, y, Color(c.r, c.g, c.b, 1.0))
 		return _finish(img))
 
 
 ## Plywood / workbench top: sinusoidal ring bands warped by stretched noise.
-static func wood(base: Color, planks := 5) -> ImageTexture:
-	return tex("wood:%s:%d" % [base.to_html(), planks], func() -> ImageTexture:
-		var img := Image.create(SIZE, SIZE, false, Image.FORMAT_RGBA8)
+## size=512 adds plank gaps and a couple of darker knots.
+static func wood(base: Color, planks := 5, size := SIZE) -> ImageTexture:
+	return tex("wood:%s:%d:%d" % [base.to_html(), planks, size], func() -> ImageTexture:
+		var img := Image.create(size, size, false, Image.FORMAT_RGBA8)
 		var warp := _noise(11, 0.02)
 		var fine := _noise(12, 0.4)
-		var band := float(SIZE) / float(planks)
-		for y in SIZE:
-			for x in SIZE:
+		var knot := _noise(13, 0.08)
+		var band := float(size) / float(planks)
+		for y in size:
+			for x in size:
 				var wx := warp.get_noise_2d(x, y) * band * 0.35
 				var ring := 0.5 + 0.5 * sin((float(x) + wx) / band * TAU)
 				var streak := fine.get_noise_2d(x * 6.0, float(y) * 0.8)
 				var v := clampf(0.78 + 0.16 * ring + 0.09 * streak, 0.0, 1.0)
+				# Plank gaps: dark seam every `band` px on X.
+				var seam := absf(fmod(float(x), band))
+				if seam < 2.0:
+					v *= 0.55
+				# Occasional knots where the knot noise peaks.
+				if knot.get_noise_2d(x, y) > 0.72:
+					v *= 0.72
 				var c := base.darkened(1.0 - v)
 				img.set_pixel(x, y, Color(c.r, c.g, c.b, 1.0))
 		return _finish(img))
 
 
-## Workshop floor: tile grid with grout lines and grime around them.
-static func floor_tiles(base: Color, tiles := 4) -> ImageTexture:
-	return tex("floor:%s:%d" % [base.to_html(), tiles], func() -> ImageTexture:
-		var img := Image.create(SIZE, SIZE, false, Image.FORMAT_RGBA8)
+## Workshop floor: tile grid with grout lines, grime and scuffs.
+## size=512 doubles the resolution and adds dark scuff streaks along X.
+static func floor_tiles(base: Color, tiles := 4, size := SIZE) -> ImageTexture:
+	return tex("floor:%s:%d:%d" % [base.to_html(), tiles, size], func() -> ImageTexture:
+		var img := Image.create(size, size, false, Image.FORMAT_RGBA8)
 		var grime := _noise(31, 0.09)
 		var fine := _noise(32, 0.7)
-		var step := float(SIZE) / float(tiles)
-		for y in SIZE:
-			for x in SIZE:
+		var scuff := _noise(33, 0.25)
+		var step := float(size) / float(tiles)
+		for y in size:
+			for x in size:
 				var gx := absf(fmod(float(x), step) - step * 0.5)
 				var gy := absf(fmod(float(y), step) - step * 0.5)
 				var edge := minf(gx, gy)  # 0 at grout lines, ~step/2 at centers
-				var grout := clampf(edge / 3.0, 0.0, 1.0)  # dark within 3px of a line
+				var grout := clampf(edge / 5.0, 0.0, 1.0)
 				var v := clampf(0.86 + 0.10 * grime.get_noise_2d(x, y) + 0.05 * fine.get_noise_2d(x, y), 0.0, 1.0)
 				v *= lerpf(0.55, 1.0, grout)
+				# Scuffs: soft dark streaks where the scuff noise peaks.
+				if scuff.get_noise_2d(x * 0.5, y * 2.0) > 0.62:
+					v *= 0.85
 				var c := base.darkened(1.0 - v)
 				img.set_pixel(x, y, Color(c.r, c.g, c.b, 1.0))
 		return _finish(img))
@@ -169,4 +187,67 @@ static func vignette() -> ImageTexture:
 				var a := clampf((d - 0.55) / 0.45, 0.0, 1.0)
 				a = a * a  # ease-in so the center stays clean
 				img.set_pixel(x, y, Color(0.02, 0.03, 0.03, 0.55 * a))
+		return _finish(img))
+
+
+## Pegboard: perforated tool wall — grid of dark holes on a panel base.
+static func pegboard(base: Color) -> ImageTexture:
+	return tex("pegboard:%s" % base.to_html(), func() -> ImageTexture:
+		var img := Image.create(SIZE, SIZE, false, Image.FORMAT_RGBA8)
+		var n := _noise(81, 0.3)
+		var step := 32
+		for y in SIZE:
+			for x in SIZE:
+				var v := 0.9 + 0.08 * n.get_noise_2d(x, y)
+				var hx := absi(x % step - step / 2)
+				var hy := absi(y % step - step / 2)
+				if hx < 4 and hy < 4:
+					v *= 0.35  # hole
+				elif hx < 7 and hy < 7:
+					v *= 0.75  # hole rim
+				var c := base.darkened(1.0 - clampf(v, 0.0, 1.0))
+				img.set_pixel(x, y, Color(c.r, c.g, c.b, 1.0))
+		return _finish(img))
+
+
+## Printer build plate: dark honey plate with alignment grid and worn edges.
+static func bed_grid(base: Color) -> ImageTexture:
+	return tex("bedgrid:%s" % base.to_html(), func() -> ImageTexture:
+		var img := Image.create(SIZE, SIZE, false, Image.FORMAT_RGBA8)
+		var wear := _noise(91, 0.2)
+		for y in SIZE:
+			for x in SIZE:
+				var v := 0.95 + 0.06 * wear.get_noise_2d(x, y)
+				var on_grid := (x % 32) < 2 or (y % 32) < 2
+				if on_grid:
+					v *= 0.6
+				var edge := minf(minf(x, SIZE - 1 - x), minf(y, SIZE - 1 - y))
+				if edge < 8:
+					v *= 0.8  # worn border
+				var c := base.darkened(1.0 - clampf(v, 0.0, 1.0))
+				img.set_pixel(x, y, Color(c.r, c.g, c.b, 1.0))
+		return _finish(img))
+
+
+## Wall calendar: paper sheet with a red header band and a date grid.
+static func calendar() -> ImageTexture:
+	return tex("calendar", func() -> ImageTexture:
+		var img := Image.create(SIZE, SIZE, false, Image.FORMAT_RGBA8)
+		var paper := Color("#EFE8D8")
+		var red := Color("#DA623A")
+		var line := Color("#B9B2A0")
+		var header := int(SIZE / 6.0)
+		var col_w := int(SIZE / 7.0)
+		var row_h := int((SIZE - header) / 8.0)
+		for y in range(SIZE):
+			for x in range(SIZE):
+				var c := paper
+				if y < header:
+					c = red
+				elif y > header + 4 and y < SIZE - 12:
+					var gx := x % maxi(col_w, 1)
+					var gy := (y - header) % maxi(row_h, 1)
+					if gx < 2 or gy < 2:
+						c = line
+				img.set_pixel(x, y, c)
 		return _finish(img))

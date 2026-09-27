@@ -36,6 +36,18 @@ https://printshop-sim.vercel.app/.
 
 ## State at this checkpoint
 
+v0.10.0 (art pass) shipped on top of v0.9.0: ShopArt gained size parameters
+(512px detail variants for floor/walls/wood with plank gaps, knots, stains
+and scuffs; cached separately) plus pegboard, bed_grid and calendar
+generators. Printers got a build-plate grid and a front LCD status screen
+(set_status: Ready / Lx/y % / Done / ERROR — clear), driven from
+_update_print_visuals. Main dressed the shop: baseboards on all four walls,
+pegboard + three tools above the bench, wall calendar, power strip + cables
+to both printers, windowsill, pendant cords, trash bin (with collision),
+tape rolls + scale on the packing table, a second plant, and a teal glow
+light on the design computer. New suite tests/art_pass_test.gd (16 checks);
+all 25 suites green (989 checks).
+
 v0.9.0 (guided objectives) shipped on top of v0.8.0: a seven-step onboarding
 chain (accept, print, collect, deliver, load a spool, print a prototype, 4★
 reputation) tracked order-agnostically in guide_flags from the real loop
@@ -157,13 +169,14 @@ cardboard/posters/rug), procedural sky + fog, ceiling fixtures, window,
 props (spool shelf, crates, plant, ticking wall clock), center reticle,
 synthesized SFX + printer hum on an "SFX" bus.
 
-Verification evidence (local): 24 Godot headless suites green — contract 255,
-color 27, events 15, guide 21, spool 23, gen 24, features 31, upgrades 55,
-packing 58, touch 47, save 44, shop_art 51, economy 54, day 37,
+Verification evidence (local): 25 Godot headless suites green — contract 255,
+color 27, events 15, guide 21, art_pass 16, spool 23, gen 24, features 31,
+upgrades 55, packing 58, touch 47, save 44, shop_art 51, economy 54, day 37,
 design_computer 21, parallel 23, prep 29, printer_visual 34, grab 26,
-input_pause 23, menu 25, debug_panel 32, room 9, smoke 9 (973 checks, 0
+input_pause 23, menu 25, debug_panel 32, room 9, smoke 9 (989 checks, 0
 failures, no SCRIPT ERROR); Python build pipeline 21 pytest; engine
-screenshot confirms the objective HUD line.
+screenshots confirm the pegboard/tools/calendar, the bed grid and the live
+printer LCD.
 
 v0.1.0 RELEASED: commits 2f1f2af (loop/features) + ab05cc4 (shell help
 placement). Deployed to https://printshop-sim.vercel.app/ via vercel --prod;

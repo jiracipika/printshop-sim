@@ -24,6 +24,7 @@ var _lock_label: Label3D
 var _name_label: Label3D
 var _coil: MeshInstance3D
 var _coil_mat: StandardMaterial3D
+var _screen_label: Label3D
 
 func _ready() -> void:
 	add_to_group("printers")
@@ -47,11 +48,34 @@ func _build() -> void:
 	base.name = "Base"
 	add_child(base)
 
-	# Build plate: honey plywood, flat and visible from above.
+	# Build plate: honey ply with an alignment grid, flat and visible from above.
+	bed_mat.albedo_texture = ShopArt.bed_grid(BED_COLOR)
 	bed = _box(Vector3(FOOTPRINT * 0.92, BED_THICK, FOOTPRINT * 0.92), bed_mat)
 	bed.position = Vector3(0, 0.06 + BED_THICK / 2.0, 0)
 	bed.name = "Bed"
 	add_child(bed)
+
+	# Status screen on the front face: dark glass + mint text (set_status).
+	var screen := MeshInstance3D.new()
+	var screen_box := BoxMesh.new()
+	screen_box.size = Vector3(0.16, 0.09, 0.012)
+	screen.mesh = screen_box
+	var screen_mat := StandardMaterial3D.new()
+	screen_mat.albedo_color = Color("#101614")
+	screen_mat.emission_enabled = true
+	screen_mat.emission = Color("#183028")
+	screen_mat.emission_energy_multiplier = 0.5
+	screen_mat.roughness = 0.3
+	screen.material_override = screen_mat
+	screen.position = Vector3(0.12, 0.34, FOOTPRINT / 2.0 + 0.006)
+	add_child(screen)
+	_screen_label = Label3D.new()
+	_screen_label.text = "Ready"
+	_screen_label.font_size = 26
+	_screen_label.pixel_size = 0.0016
+	_screen_label.modulate = Color("#A8C8AC")
+	_screen_label.position = screen.position + Vector3(0, 0, 0.012)
+	add_child(_screen_label)
 
 	# Two vertical Z rails at the back.
 	for sx in [-0.18, 0.18]:
@@ -164,6 +188,11 @@ func set_locked(locked: bool) -> void:
 
 func is_locked() -> bool:
 	return _lock_label != null and _lock_label.visible
+
+## LCD text on the front screen ("Ready", "Layer 12/210 6%", "ERROR").
+func set_status(text: String) -> void:
+	if _screen_label != null and _screen_label.text != text:
+		_screen_label.text = text
 
 ## Spool coil resting on the cross-brace between the Z rails: shrinks
 ## downward toward the brace as filament is consumed, hides when empty.

@@ -413,11 +413,11 @@ func _build_world() -> void:
 
 	var sage := StandardMaterial3D.new()
 	sage.albedo_color = Color.WHITE
-	sage.albedo_texture = ShopArt.plaster(sage_col)
+	sage.albedo_texture = ShopArt.plaster(sage_col, 512)
 	sage.roughness = 0.95
 	var honey := StandardMaterial3D.new()
 	honey.albedo_color = Color.WHITE
-	honey.albedo_texture = ShopArt.wood(honey_col)
+	honey.albedo_texture = ShopArt.wood(honey_col, 5, 512)
 	honey.roughness = 0.7
 	var steel := StandardMaterial3D.new()
 	steel.albedo_color = Color.WHITE
@@ -429,7 +429,7 @@ func _build_world() -> void:
 	terracotta.roughness = 0.55
 	var floor_mat := StandardMaterial3D.new()
 	floor_mat.albedo_color = Color.WHITE
-	floor_mat.albedo_texture = ShopArt.floor_tiles(terra_col)
+	floor_mat.albedo_texture = ShopArt.floor_tiles(terra_col, 4, 512)
 	floor_mat.roughness = 0.9
 	world = {"sage": sage, "honey": honey, "steel": steel, "terracotta": terracotta,
 		"floor": floor_mat}
@@ -856,6 +856,208 @@ func _build_props() -> void:
 	spool_crate_body.add_child(spool_crate_shape)
 	spool_crate_body.position = CRATE_POS + Vector3(0, 0.25, 0)
 	add_child(spool_crate_body)
+
+	# Baseboards: dark skirting strips at the foot of every wall.
+	for bb in [
+		[Vector3(ROOM_W - 0.1, 0.12, 0.04), Vector3(0, 0.06, -ROOM_D / 2.0 + 0.12)],
+		[Vector3(ROOM_W - 0.1, 0.12, 0.04), Vector3(0, 0.06, ROOM_D / 2.0 - 0.12)],
+		[Vector3(0.04, 0.12, ROOM_D - 0.1), Vector3(-ROOM_W / 2.0 + 0.12, 0.06, 0)],
+		[Vector3(0.04, 0.12, ROOM_D - 0.1), Vector3(ROOM_W / 2.0 - 0.12, 0.06, 0)],
+	]:
+		var baseboard := MeshInstance3D.new()
+		var bb_mesh := BoxMesh.new()
+		bb_mesh.size = bb[0]
+		baseboard.mesh = bb_mesh
+		var bb_mat := StandardMaterial3D.new()
+		bb_mat.albedo_color = Color("#2E3A38")
+		bb_mat.roughness = 0.6
+		baseboard.material_override = bb_mat
+		baseboard.position = bb[1]
+		baseboard.add_to_group("props")
+		add_child(baseboard)
+
+	# Pegboard with hand tools above the bench (back wall).
+	var peg := MeshInstance3D.new()
+	var peg_quad := QuadMesh.new()
+	peg_quad.size = Vector2(1.8, 0.9)
+	peg.mesh = peg_quad
+	var peg_mat := StandardMaterial3D.new()
+	peg_mat.albedo_color = Color.WHITE
+	peg_mat.albedo_texture = ShopArt.pegboard(Color("#8A7A5E"))
+	peg_mat.roughness = 0.85
+	peg.material_override = peg_mat
+	peg.position = Vector3(-1.8, 1.95, -ROOM_D / 2.0 + 0.115)
+	peg.add_to_group("props")
+	add_child(peg)
+	# Tools: simple dark silhouettes hung on the board.
+	for tool in [
+		[Vector3(0.05, 0.34, 0.012), Vector3(-2.25, 1.98, -ROOM_D / 2.0 + 0.13)],  # rule
+		[Vector3(0.10, 0.22, 0.012), Vector3(-1.75, 1.94, -ROOM_D / 2.0 + 0.13)],  # pliers
+		[Vector3(0.26, 0.06, 0.012), Vector3(-1.30, 2.02, -ROOM_D / 2.0 + 0.13)],  # wrench
+	]:
+		var tool_mesh := MeshInstance3D.new()
+		var tool_box := BoxMesh.new()
+		tool_box.size = tool[0]
+		tool_mesh.mesh = tool_box
+		var tool_mat := StandardMaterial3D.new()
+		tool_mat.albedo_color = Color("#394341")
+		tool_mat.roughness = 0.4
+		tool_mat.metallic = 0.5
+		tool_mesh.material_override = tool_mat
+		tool_mesh.position = tool[1]
+		tool_mesh.add_to_group("props")
+		add_child(tool_mesh)
+
+	# Power strip + cables snaking to both printers (flat, no collision).
+	var strip := MeshInstance3D.new()
+	var strip_box := BoxMesh.new()
+	strip_box.size = Vector3(0.5, 0.05, 0.16)
+	strip.mesh = strip_box
+	var strip_mat := StandardMaterial3D.new()
+	strip_mat.albedo_color = Color("#3A4644")
+	strip_mat.roughness = 0.5
+	strip.material_override = strip_mat
+	strip.position = Vector3(-1.9, 0.025, -1.45)
+	strip.add_to_group("props")
+	add_child(strip)
+	for cable in [
+		[Vector3(0.05, 0.012, 0.6), Vector3(-1.9, 0.012, -1.75)],   # to printer 1
+		[Vector3(0.05, 0.012, 0.35), Vector3(1.85, 0.012, -2.05)],  # to printer 2
+		[Vector3(1.1, 0.012, 0.05), Vector3(-1.35, 0.012, -1.47)],
+	]:
+		var cable_mesh := MeshInstance3D.new()
+		var cable_box := BoxMesh.new()
+		cable_box.size = cable[0]
+		cable_mesh.mesh = cable_box
+		var cable_mat := StandardMaterial3D.new()
+		cable_mat.albedo_color = Color("#171E1C")
+		cable_mat.roughness = 0.7
+		cable_mesh.material_override = cable_mat
+		cable_mesh.position = cable[1]
+		add_child(cable_mesh)
+
+	# Windowsill under the back-wall window.
+	var sill := MeshInstance3D.new()
+	var sill_box := BoxMesh.new()
+	sill_box.size = Vector3(1.7, 0.05, 0.18)
+	sill.mesh = sill_box
+	sill.material_override = world.honey
+	sill.position = Vector3(1.9, 1.21, -ROOM_D / 2.0 + 0.19)
+	sill.add_to_group("props")
+	add_child(sill)
+
+	# Pendant cables from ceiling to the light fixtures.
+	for px in [-1.7, 1.7]:
+		var cord := MeshInstance3D.new()
+		var cord_cyl := CylinderMesh.new()
+		cord_cyl.top_radius = 0.012
+		cord_cyl.bottom_radius = 0.012
+		cord_cyl.height = 0.35
+		cord.mesh = cord_cyl
+		var cord_mat := StandardMaterial3D.new()
+		cord_mat.albedo_color = Color("#171E1C")
+		cord.material_override = cord_mat
+		cord.position = Vector3(px, ROOM_H - 0.24, 0)
+		add_child(cord)
+
+	# Trash bin beside the packing table.
+	var bin := MeshInstance3D.new()
+	var bin_cyl := CylinderMesh.new()
+	bin_cyl.top_radius = 0.17
+	bin_cyl.bottom_radius = 0.13
+	bin_cyl.height = 0.5
+	bin.mesh = bin_cyl
+	var bin_mat := StandardMaterial3D.new()
+	bin_mat.albedo_color = Color("#394341")
+	bin_mat.roughness = 0.55
+	bin.material_override = bin_mat
+	bin.position = Vector3(1.55, 0.25, 1.5)
+	bin.add_to_group("props")
+	add_child(bin)
+	var bin_body := StaticBody3D.new()
+	bin_body.collision_layer = 1
+	var bin_shape := CollisionShape3D.new()
+	var bin_col := CylinderShape3D.new()
+	bin_col.radius = 0.17
+	bin_col.height = 0.5
+	bin_shape.shape = bin_col
+	bin_body.add_child(bin_shape)
+	bin_body.position = Vector3(1.55, 0.25, 1.5)
+	add_child(bin_body)
+
+	# Packing-table dressing: two tape rolls + a scale plate.
+	for tape_i in 2:
+		var tape := MeshInstance3D.new()
+		var tape_torus := TorusMesh.new()
+		tape_torus.inner_radius = 0.045
+		tape_torus.outer_radius = 0.065
+		tape.mesh = tape_torus
+		var tape_mat := StandardMaterial3D.new()
+		tape_mat.albedo_color = Color("#D8CDB4") if tape_i == 0 else Color("#DA623A")
+		tape_mat.roughness = 0.5
+		tape.material_override = tape_mat
+		tape.position = Vector3(-0.38 + 0.14 * tape_i, 0.94, -0.28 + 0.05 * tape_i)
+		tape.add_to_group("props")
+		add_child(tape)
+	var scale := MeshInstance3D.new()
+	var scale_box := BoxMesh.new()
+	scale_box.size = Vector3(0.24, 0.045, 0.2)
+	scale.mesh = scale_box
+	var scale_mat := StandardMaterial3D.new()
+	scale_mat.albedo_color = Color("#2E3A38")
+	scale_mat.roughness = 0.4
+	scale.material_override = scale_mat
+	scale.position = Vector3(0.35, 0.92, -0.25)
+	scale.add_to_group("props")
+	add_child(scale)
+
+	# Second plant (front-right, by the window wall).
+	var pot2 := MeshInstance3D.new()
+	var pot2_cyl := CylinderMesh.new()
+	pot2_cyl.top_radius = 0.15
+	pot2_cyl.bottom_radius = 0.11
+	pot2_cyl.height = 0.22
+	pot2.mesh = pot2_cyl
+	pot2.material_override = world.terracotta
+	pot2.position = Vector3(3.0, 0.11, -2.35)
+	pot2.add_to_group("props")
+	add_child(pot2)
+	for i in 2:
+		var leaf2 := MeshInstance3D.new()
+		var sphere2 := SphereMesh.new()
+		sphere2.radius = 0.11 + 0.04 * i
+		sphere2.height = 2.0 * (0.11 + 0.04 * i)
+		leaf2.mesh = sphere2
+		var leaf2_mat := StandardMaterial3D.new()
+		leaf2_mat.albedo_color = Color("#5E7A5A").lightened(0.08 * i)
+		leaf2_mat.roughness = 0.9
+		leaf2.material_override = leaf2_mat
+		leaf2.position = Vector3(3.0, 0.34 + 0.12 * i, -2.35)
+		leaf2.add_to_group("props")
+		add_child(leaf2)
+
+	# Faint teal glow from the design computer's screen.
+	var glow := OmniLight3D.new()
+	glow.position = Vector3(-2.55, 1.25, -1.6)
+	glow.omni_range = 2.6
+	glow.light_energy = 0.35
+	glow.light_color = Color("#7FD4A8")
+	add_child(glow)
+
+	# Wall calendar next to the pegboard.
+	var cal := MeshInstance3D.new()
+	var cal_quad := QuadMesh.new()
+	cal_quad.size = Vector2(0.5, 0.7)
+	cal.mesh = cal_quad
+	var cal_mat := StandardMaterial3D.new()
+	cal_mat.albedo_color = Color.WHITE
+	cal_mat.albedo_texture = ShopArt.calendar()
+	cal_mat.roughness = 0.9
+	cal.material_override = cal_mat
+	cal.position = Vector3(-0.55, 1.95, -ROOM_D / 2.0 + 0.115)
+	cal.rotation_degrees = Vector3(0, 4, 0)
+	cal.add_to_group("props")
+	add_child(cal)
 
 	# Potted plant in the front-left corner.
 	var pot := MeshInstance3D.new()
@@ -1456,9 +1658,19 @@ func _update_print_visuals(delta: float) -> void:
 				printer.set_nozzle_scan(elapsed_nozzle_clock, s.progress(), print_height)
 			if _hum != null:
 				_hum.global_position = printer.global_position + Vector3(0, 0.3, 0)
-		# Spool coil reflects remaining filament.
+		# Spool coil reflects remaining filament; LCD mirrors the state.
 		if i < _printers.size() and _printers[i].get("set_filament") != null:
 			_printers[i].set_filament(clampf(float(machines[i].get("filament_g", 0)) / float(SPOOL_G), 0.0, 1.0))
+		if i < _printers.size() and _printers[i].get("set_status") != null:
+			if s.is_running():
+				_printers[i].set_status("L%d/%d %d%%" % [s.layers_done, s.layers_total,
+					roundi(s.progress() * 100.0)])
+			elif s.state == PrintSim.State.DONE_FAIL:
+				_printers[i].set_status("ERROR — clear")
+			elif s.state == PrintSim.State.DONE_OK:
+				_printers[i].set_status("Done")
+			else:
+				_printers[i].set_status("Ready")
 
 	if _hum != null:
 		if any_running and not _hum.playing:
