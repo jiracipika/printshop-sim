@@ -16,6 +16,8 @@ extends RefCounted
 ##     "upgrades": Array[String] (optional — owned upgrade ids),
 ##     "settings": Dictionary (optional — {mouse_sens_scale, sfx_volume, invert_y}),
 ##     "day": int >= 1 (optional — shop day counter),
+##     "reputation": float 0..5 (optional),
+##     "stats": Dictionary of non-negative int counters (optional),
 ##   }
 ##
 ## Optional keys are additive: payloads without them stay valid (older saves
@@ -85,6 +87,10 @@ static func validate(payload: Variant) -> Dictionary:
 		return {}
 	if not _day_valid(p):
 		return {}
+	if not _reputation_valid(p):
+		return {}
+	if not _stats_valid(p):
+		return {}
 
 	var out: Dictionary = p.duplicate(true)
 	out["version"] = int(p["version"])
@@ -144,6 +150,33 @@ static func _day_valid(p: Dictionary) -> bool:
 	if not p.has("day"):
 		return true
 	return _is_int(p["day"]) and int(p["day"]) >= 1
+
+
+## Optional "reputation" key: numeric in [0, 5].
+static func _reputation_valid(p: Dictionary) -> bool:
+	if not p.has("reputation"):
+		return true
+	var t := typeof(p["reputation"])
+	if t != TYPE_FLOAT and t != TYPE_INT:
+		return false
+	return float(p["reputation"]) >= 0.0 and float(p["reputation"]) <= 5.0
+
+
+## Optional "stats" key: dict of known non-negative int counters.
+const STAT_KEYS: Array[String] = ["delivered", "late", "scrapped", "cancelled", "earned_cents"]
+
+static func _stats_valid(p: Dictionary) -> bool:
+	if not p.has("stats"):
+		return true
+	if typeof(p["stats"]) != TYPE_DICTIONARY:
+		return false
+	var st: Dictionary = p["stats"]
+	for key in STAT_KEYS:
+		if not st.has(key):
+			continue
+		if not _is_int(st[key]) or int(st[key]) < 0:
+			return false
+	return true
 
 
 ## True for TYPE_INT or a float with an exactly integral value.

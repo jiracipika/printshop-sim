@@ -22,6 +22,11 @@ var upgrades: Upgrades
 var day_cycle: DayCycle
 var rent_debt_cents := 0
 var packing_station: PackingStation
+## Reputation (v0.5.0): 0..5 stars, start 3. Scales every payout by
+## 0.8 + rep/5 * 0.4 (x0.8 at rock bottom, x1.2 at five stars).
+var reputation := 3.0
+## Lifetime counters (v0.5.0), persisted and shown in the menu Stats panel.
+var stats := {"delivered": 0, "late": 0, "scrapped": 0, "cancelled": 0, "earned_cents": 0}
 
 ## --- machines (v0.3.0): true parallel printing -------------------------------
 ## One entry per printer: {idx, sim, contract, day, orient, orient_pending,
@@ -123,6 +128,18 @@ func _on_menu_upgrade_buy(id: String) -> void:
 func _on_menu_setting(key: String, value) -> void:
 	apply_setting(key, value, false)
 	_settings_dirty = true
+
+func _on_menu_stats() -> void:
+	var stars := ""
+	for i in range(5):
+		stars += "★" if i < roundi(reputation) else "☆"
+	main_menu.show_stats([
+		"Days in business: %d" % maxi(day_cycle.day - 1, 0),
+		"Parts delivered: %d  (%d late, %d scrapped, %d cancelled)" % [
+			int(stats.delivered), int(stats.late), int(stats.scrapped), int(stats.cancelled)],
+		"Lifetime earnings: $%s" % _cents_str(int(stats.earned_cents)),
+		"Reputation: %s %.1f / 5  (payout x%.2f)" % [stars, reputation, reputation_multiplier()],
+	])
 
 ## Settings sliders write through on menu close, not on every drag tick.
 func _flush_settings_if_dirty() -> void:
@@ -262,6 +279,12 @@ func _load_save() -> void:
 	if payload.has("day"):
 		day_cycle.restore(int(payload.day), 0.0)
 		job_board.rotate_day(day_cycle.day)
+	if payload.has("reputation"):
+		reputation = clampf(float(payload.reputation), 0.0, 5.0)
+	if payload.has("stats"):
+		for key in ["delivered", "late", "scrapped", "cancelled", "earned_cents"]:
+			if payload.stats.has(key):
+				stats[key] = maxi(int(payload.stats[key]), 0)
 
 func apply_setting(key: String, value, persist := true) -> void:
 	settings[key] = value
@@ -281,6 +304,8 @@ func _save_game() -> void:
 			"upgrades": upgrades.owned_ids(),
 			"settings": settings,
 			"day": day_cycle.day,
+			"reputation": reputation,
+			"stats": stats,
 		})
 	var ok: bool = load("res://scripts/BrowserSave.gd").save_payload(payload)
 	save_status_line = "%s at %s" % ["saved ok" if ok else "save FAILED",
@@ -467,6 +492,7 @@ func _build_world() -> void:
 		machines.append({
 			"idx": i, "sim": s, "contract": null, "day": 0,
 			"orient": 0, "orient_pending": false, "part": null, "scrap": false,
+			"material_cents": 0,
 		})
 		s.print_started.connect(_on_print_started.bind(i))
 		s.print_finished.connect(_on_print_done.bind(i))
@@ -988,6 +1014,7 @@ func _build_hud() -> void:
 	main_menu.settings_pressed.connect(func() -> void:
 		main_menu.show_settings(settings))
 	main_menu.settings_changed.connect(_on_menu_setting)
+	main_menu.stats_pressed.connect(_on_menu_stats)
 	main_menu.open_menu()
 
 	# Menus slice: dev-only debug panel (hidden by default; debug builds only).
@@ -1357,9 +1384,9 @@ func _try_pack_held() -> bool:
 		return true
 	if not _advance(c, Contract.State.DELIVERED):
 		return true
-	# Late deliveries pay half (the client still takes the part).
-	var payout: int = result.payout_cents
+	# Final payout: grade x reputation; late work halves before reputation.
 	var late := _is_late_for(m)
+	var payout: int = roundi(float(result.payout_cents) * reputation_multiplier())
 	if late:
 		payout = roundi(float(payout) * LATE_PAYOUT_FACTOR)
 	if not ledger.pay_once(c.id, payout, "payout %s" % c.id):
@@ -1368,13 +1395,22 @@ func _try_pack_held() -> bool:
 	_discard_part_for(m)
 	m["contract"] = null
 	last_pack_grade = result.grade
+	# Reputation and lifetime stats.
+	if late:
+		_rep_event(-0.2)
+		stats.late += 1
+	else:
+		_rep_event(0.2)
+	stats.delivered += 1
+	stats.earned_cents += payout
 	_save_game()
 	sfx.play("cash")
 	if late:
-		_set_prompt("Delivered LATE %s (%s) — $%s of $%s" % [c.model_name, result.grade,
-			_cents_str(payout), _cents_str(result.payout_cents)])
+		_set_prompt("Delivered LATE %s (%s) — $%s · rep down" % [c.model_name, result.grade,
+			_cents_str(payout)])
 	else:
-		_set_prompt("Delivered %s (%s) — $%s" % [c.model_name, result.grade, _cents_str(payout)])
+		_set_prompt("Delivered %s (%s) — $%s · rep up" % [c.model_name, result.grade,
+			_cents_str(payout)])
 	return true
 
 ## F-grade escape hatch: scrap the part, fail the contract, no payout.
@@ -1391,12 +1427,15 @@ func _scrap_held() -> bool:
 	_advance(c, Contract.State.FAILED)
 	_discard_part_for(m)
 	m["contract"] = null
+	_rep_event(-0.4)
+	stats.scrapped += 1
 	_save_game()
 	sfx.play("buzz")
-	_set_prompt("Scrapped %s. No payout." % c.model_name)
+	_set_prompt("Scrapped %s. No payout — reputation hit." % c.model_name)
 	return true
 
-## DONE_FAIL leaves the spoiled print on the bed; clear it before the next job.
+## DONE_FAIL leaves the spoiled print on the bed; clear it before the next
+## job. Half the material cost is salvaged back as usable filament.
 func _clear_failed_on(idx: int) -> bool:
 	var m := _machine(idx)
 	var s: PrintSim = m.get("sim")
@@ -1407,8 +1446,14 @@ func _clear_failed_on(idx: int) -> bool:
 		_print_visuals[idx].reset()
 	if idx < _printers.size() and _printers[idx].get("set_failed") != null:
 		_printers[idx].set_failed(false)
+	var salvage := int(m.get("material_cents", 0)) / 2
+	if salvage > 0:
+		ledger.credit(salvage, "salvage %s" % s.job_id)
 	sfx.play("place")
-	_set_prompt("Failed print cleared from the bed")
+	if salvage > 0:
+		_set_prompt("Cleared the failed print — $%s of filament salvaged" % _cents_str(salvage))
+	else:
+		_set_prompt("Failed print cleared from the bed")
 	return true
 
 func _clear_failed_print() -> bool:
@@ -1424,9 +1469,15 @@ func _orientation_name_for(idx: int) -> String:
 func _orientation_name() -> String:
 	return _orientation_name_for(_focus)
 
-## Prep evaluation for a contract, with owned-upgrade modifiers.
+## Prep evaluation for a contract, with owned-upgrade modifiers and the PEI
+## plate's flat-side unlock (Main-level effect; PrepSystem stays pure).
 func _prep_eval(contract: Contract, orientation: String) -> Dictionary:
 	var eval: Dictionary = PrepSystem.evaluate(contract, orientation)
+	if not eval.get("valid", false) and orientation == "flat_side" \
+			and str(eval.get("reason")) == "not printable flat" \
+			and upgrades.pei_plate_unlocks_flat():
+		eval["valid"] = true
+		eval["reason"] = ""
 	if not eval.get("valid", false):
 		return eval
 	var mods: Dictionary = upgrades.risk_modifiers()
@@ -1481,6 +1532,7 @@ func _prep_on(idx: int) -> void:
 		ledger.credit(c.material_cost_cents, "refund materials %s" % c.id)
 		m["contract"] = null
 		return
+	m["material_cents"] = c.material_cost_cents
 	_write_prep_to_sim(eval, idx)
 	m["orient_pending"] = false
 	var s: PrintSim = m.get("sim")
@@ -1608,8 +1660,18 @@ func _on_day_changed(new_day: int) -> void:
 				_printers[vi].set_failed(false)
 		_discard_part_for(m)
 		m["contract"] = null
+		_rep_event(-0.6)
+		stats.cancelled += 1
 		sfx.play("buzz")
-		_set_prompt("Client cancelled %s — far too late. No payout." % c.model_name)
+		_set_prompt("Client cancelled %s — far too late. Reputation hit." % c.model_name)
+
+## --- reputation + stats (v0.5.0) ----------------------------------------------
+
+func reputation_multiplier() -> float:
+	return 0.8 + (reputation / 5.0) * 0.4
+
+func _rep_event(delta: float) -> void:
+	reputation = clampf(reputation + delta, 0.0, 5.0)
 
 ## Payouts repay rent debt before anything else can be done with the money.
 func _repay_rent_debt() -> void:
@@ -1700,6 +1762,10 @@ func _update_hud() -> void:
 	lines.append("Day %d — rent $%s/day" % [day_cycle.day, _cents_str(RENT_CENTS)])
 	if rent_debt_cents > 0:
 		lines.append("Unpaid rent: $%s" % _cents_str(rent_debt_cents))
+	var stars := ""
+	for i in range(5):
+		stars += "★" if i < roundi(reputation) else "☆"
+	lines.append("Rep %s %.1f  (payout x%.2f)" % [stars, reputation, reputation_multiplier()])
 	# One contract/prep block per machine (v0.3.0: both can hold jobs).
 	for m in machines:
 		var c: Contract = m.get("contract")

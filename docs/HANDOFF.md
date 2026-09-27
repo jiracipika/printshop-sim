@@ -1,4 +1,4 @@
-# Current handoff — generated board + polish (v0.4.0)
+# Current handoff — reputation + stats + salvage (v0.5.0)
 
 Read AGENTS.md and design/implementation-plan.md. Working copy:
 /Users/rs-mac/.zcode/workspace/default/printshop-sim (canonical disk plan in
@@ -8,6 +8,20 @@ https://github.com/jiracipika/printshop-sim, main. Public prototype
 https://printshop-sim.vercel.app/.
 
 ## State at this checkpoint
+
+v0.5.0 shipped on top of v0.4.0: reputation (0-5, start 3; on-time +0.2,
+late -0.2, scrap -0.4, cancel -0.6) scales payouts x0.8-x1.2
+(Main.reputation_multiplier(); order: grade -> reputation -> late half) and
+shows as stars in the HUD. Lifetime stats (delivered/late/scrapped/cancelled/
+earned_cents) persist and render in a new menu Stats panel. Clearing a failed
+print salvages half its material cost (machine dict carries material_cents
+from confirm). Three new upgrades: Textured PEI plate ($35; Main._prep_eval
+unlocks flat_side on stability parts — PrepSystem stays pure), filament
+dryer ($45, adhesion -0.10) and print enclosure ($120, stability -0.25);
+risk modifiers stack and Main clamps to [0,1]. Contract-board cards show the
+deadline ("· Nd"). Save payload gained optional "reputation" (0..5) and
+"stats" (non-negative int counters), validated. New suite
+tests/features_test.gd (31 checks); all 19 suites green (890 checks).
 
 v0.4.0 shipped on top of v0.3.0: the live shop's board is procedurally
 generated per shop day (Contract.generate(day, slot), fully deterministic,
@@ -65,12 +79,12 @@ cardboard/posters/rug), procedural sky + fog, ceiling fixtures, window,
 props (spool shelf, crates, plant, ticking wall clock), center reticle,
 synthesized SFX + printer hum on an "SFX" bus.
 
-Verification evidence (local): 18 Godot headless suites green — contract 255,
-gen 24, packing 58, touch 47, save 44, shop_art 51, upgrades 52, economy 54,
-day 36, parallel 23, prep 29, printer_visual 28, grab 26, input_pause 23,
-menu 25, debug_panel 32, room 9, smoke 9 (849 checks, 0 failures, no SCRIPT
-ERROR); Python build pipeline 21 pytest; engine screenshots confirm the
-how-to panel, vignette, shadows and the generated board (Jobs waiting: 8).
+Verification evidence (local): 19 Godot headless suites green — contract 255,
+gen 24, features 31, upgrades 55, packing 58, touch 47, save 44, shop_art 51,
+economy 54, day 36, parallel 23, prep 29, printer_visual 28, grab 26,
+input_pause 23, menu 25, debug_panel 32, room 9, smoke 9 (859 checks, 0
+failures, no SCRIPT ERROR); Python build pipeline 21 pytest; engine
+screenshots confirm the HUD reputation stars, Stats panel and card due tags.
 
 v0.1.0 RELEASED: commits 2f1f2af (loop/features) + ab05cc4 (shell help
 placement). Deployed to https://printshop-sim.vercel.app/ via vercel --prod;

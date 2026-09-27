@@ -11,15 +11,21 @@ The deployed version may lag local development. Check the in-game version/build 
 ## Current Milestone
 
 Complete playable contract loop with the shop day, true two-machine parallel
-printing, and a procedural contract board (v0.4.0). Accept a job, pick an orientation, print it, carry
+printing, a procedural contract board, and a reputation system (v0.5.0). Accept a job, pick an orientation, print it, carry
 the part to the packing table, deliver, get paid — against the clock: days
 pass, rent comes due each day, late deliveries pay half, and clients cancel
 after two extra days. Both printers can hold and print separate contracts at
 the same time; printer 2 is a purchasable Pro machine that prints 25% faster.
 The contract board is generated fresh every shop morning (deterministic per
 day) with rush work paying a premium for 1-2 day deadlines. Menu has a
-How-to-play screen; the look includes glow, sun shadows (toggleable in
-Settings for slow devices) and a soft vignette.
+How-to-play screen and a Stats panel (lifetime deliveries, earnings,
+reputation). Reputation (0-5 stars, shown in the HUD) scales every payout
+x0.8-x1.2: on-time deliveries raise it, late work, scrapped parts and
+cancelled jobs cost it. Failed prints salvage half their filament back.
+Eight upgrades now include the Textured PEI plate (unlocks flat-side
+printing on tippy parts), filament dryer and print enclosure (stacking risk
+reductions). The look includes glow, sun shadows (toggleable in Settings for
+slow devices) and a soft vignette.
 
 Working in local automated tests (15 suites, 656 checks):
 - Workshop enclosure, collision walls, workbench, two FDM printers (frame, bed,

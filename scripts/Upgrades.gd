@@ -40,6 +40,24 @@ const CATALOG: Array[Dictionary] = [
 		"cost_cents": 6000,
 		"machine_speed_multiplier": 1.25,
 	},
+	{
+		"id": "pei_plate",
+		"name": "Textured PEI plate",
+		"desc": "Grips anything — flat-side printing works on tippy parts",
+		"cost_cents": 3500,
+	},
+	{
+		"id": "filament_dryer",
+		"name": "Filament dryer",
+		"desc": "Bone-dry spools — adhesion risk -0.10 more",
+		"cost_cents": 4500,
+	},
+	{
+		"id": "enclosure",
+		"name": "Print enclosure",
+		"desc": "Still air, steady warmth — stability risk -0.25 more",
+		"cost_cents": 12000,
+	},
 ]
 
 var _owned: Dictionary = {}  # id -> true
@@ -123,8 +141,21 @@ func failure_threshold_delta() -> float:
 
 
 ## Risk modifiers written into the prep evaluation before it reaches the sim.
+## Stacking upgrades sum; Main clamps the final risks to [0, 1].
 func risk_modifiers() -> Dictionary:
-	return {
-		"adhesion_risk": -0.15 if is_owned("heated_bed") else 0.0,
-		"stability_risk": -0.15 if is_owned("stiff_frame") else 0.0,
-	}
+	var adhesion := 0.0
+	var stability := 0.0
+	if is_owned("heated_bed"):
+		adhesion -= 0.15
+	if is_owned("filament_dryer"):
+		adhesion -= 0.10
+	if is_owned("stiff_frame"):
+		stability -= 0.15
+	if is_owned("enclosure"):
+		stability -= 0.25
+	return {"adhesion_risk": adhesion, "stability_risk": stability}
+
+
+## The PEI plate unlocks flat-side printing for stability-flagged parts.
+func pei_plate_unlocks_flat() -> bool:
+	return is_owned("pei_plate")

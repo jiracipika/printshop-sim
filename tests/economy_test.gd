@@ -138,6 +138,7 @@ func _run() -> void:
 	# --- 4. collect the physical part, deliver at the packing table ---
 	main.paused = false
 	var bal_before_payout: int = ledger.balance()
+	var rep_at_pack: float = main.reputation_multiplier()  # delivery bumps rep after paying
 	main._try_interact()
 	_ok(main.held != null and main._is_held_part(),
 		"collect attaches the printed part to hands")
@@ -154,11 +155,15 @@ func _run() -> void:
 			"adhesion_risk": main.sim.adhesion_risk,
 			"stability_risk": main.sim.stability_risk,
 		})
-	var expected_payout: int = roundi(contract.payout_cents
-		* QualityCheck.quality_multiplier(grade_expected))
+	# Final payout: grade scale first, then reputation (rep 3.0 -> x1.04),
+	# matching Main's rounding order exactly.
+	var expected_payout: int = roundi(roundi(contract.payout_cents
+		* QualityCheck.quality_multiplier(grade_expected)) * rep_at_pack)
 	_ok(grade_expected in ["A", "B", "C"], "completed print grades deliverable (%s)" % grade_expected)
 	_ok(_prop(main, "active_contract") == null, "delivery clears active contract")
 	_ok(contract.state == Contract.State.DELIVERED, "delivery walks INSPECTION->PACKED->DELIVERED")
+	print("DBG expected=", expected_payout, " grade=", grade_expected, " rep=", main.reputation_multiplier(),
+		" bal_before=", bal_before_payout, " bal_now=", ledger.balance())
 	_ok(ledger.balance() == bal_before_payout + expected_payout,
 		"grade-scaled payout credited exactly once to balance")
 	_ok(ledger.has_paid(contract.id), "ledger marks contract paid")

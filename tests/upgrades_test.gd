@@ -34,7 +34,7 @@ func _test_catalog_and_ownership() -> void:
 		ids.append(e.id)
 		_ok(int(e.cost_cents) > 0 and str(e.name) != "" and str(e.desc) != "",
 			"catalog entry %s well-formed" % e.id)
-	_ok(ids.size() == 5 and ids.size() == _unique(ids).size(), "five unique upgrade ids")
+	_ok(ids.size() == 8 and ids.size() == _unique(ids).size(), "eight unique upgrade ids")
 
 	var up := Upgrades.new()
 	_ok(not up.is_owned("heated_bed"), "nothing owned at start")
@@ -133,7 +133,7 @@ func _test_main_purchase_flow() -> void:
 	main.main_menu.open_menu()
 	main._on_menu_upgrades()
 	var cards: Array = main.main_menu.upgrade_cards_ui()
-	_ok(cards.size() == 5, "upgrades panel lists the full catalog")
+	_ok(cards.size() == 8, "upgrades panel lists the full catalog")
 	var found_owned := false
 	for card in cards:
 		if card.has_meta("upgrade_id") and str(card.get_meta("upgrade_id")) == "heated_bed" \

@@ -18,6 +18,7 @@ signal contracts_pressed
 signal upgrades_pressed
 signal upgrade_buy_pressed(id: String)
 signal settings_pressed
+signal stats_pressed
 signal settings_changed(key: String, value)
 
 ## Test-only: simulate a web export (hides Quit exactly like the real gate).
@@ -31,12 +32,14 @@ var _contracts_panel: Control
 var _upgrades_panel: Control
 var _settings_panel: Control
 var _howto_panel: Control
+var _stats_panel: Control
 var _settings_applying := false
 var _open := false
 var _contracts_open := false
 var _upgrades_open := false
 var _settings_open := false
 var _howto_open := false
+var _stats_open := false
 
 const COLOR_STEEL := Color("#202B2B")
 const COLOR_PAPER := Color("#EEE5D3")
@@ -56,30 +59,33 @@ func is_open() -> bool:
 
 func open_menu() -> void:
 	visible = true
-	for panel in [_contracts_panel, _upgrades_panel, _settings_panel, _howto_panel]:
+	for panel in [_contracts_panel, _upgrades_panel, _settings_panel, _howto_panel, _stats_panel]:
 		if panel != null:
 			panel.visible = false
 	_contracts_open = false
 	_upgrades_open = false
 	_settings_open = false
 	_howto_open = false
+	_stats_open = false
 	is_open()
 
 func close_menu() -> void:
 	visible = false
-	for panel in [_contracts_panel, _upgrades_panel, _settings_panel, _howto_panel]:
+	for panel in [_contracts_panel, _upgrades_panel, _settings_panel, _howto_panel, _stats_panel]:
 		if panel != null:
 			panel.visible = false
 	_contracts_open = false
 	_upgrades_open = false
 	_settings_open = false
 	_howto_open = false
+	_stats_open = false
 	is_open()
 
-## True while any subpanel (contracts/upgrades/settings/how-to) is showing —
-## Esc should step back to the main panel rather than close the menu.
+## True while any subpanel is showing — Esc should step back to the main
+## panel rather than close the menu.
 func subpanel_open() -> bool:
-	return visible and (_contracts_open or _upgrades_open or _settings_open or _howto_open)
+	return visible and (_contracts_open or _upgrades_open or _settings_open \
+		or _howto_open or _stats_open)
 
 func contracts_visible() -> bool:
 	return visible and _contracts_open
@@ -187,6 +193,10 @@ func _build() -> void:
 	howto.pressed.connect(func() -> void: _show_panel(_howto_panel))
 	buttons.add_child(howto)
 
+	var stats_btn := _make_button("Stats", "Stats")
+	stats_btn.pressed.connect(func() -> void: stats_pressed.emit())
+	buttons.add_child(stats_btn)
+
 	var quit := _make_button("Quit", "Quit")
 	quit.pressed.connect(func() -> void: get_tree().quit())
 	buttons.add_child(quit)
@@ -209,6 +219,7 @@ func _build() -> void:
 	_build_upgrades_panel()
 	_build_settings_panel()
 	_build_howto_panel()
+	_build_stats_panel()
 
 func _apply_quit_visibility() -> void:
 	if _root == null:
@@ -636,6 +647,64 @@ func _build_howto_panel() -> void:
 		_howto_open = false
 		is_open()))
 
+## --- stats panel (v0.5.0) --------------------------------------------------------
+
+func _build_stats_panel() -> void:
+	_stats_panel = Control.new()
+	_stats_panel.name = "StatsPanel"
+	_stats_panel.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_stats_panel.mouse_filter = Control.MOUSE_FILTER_STOP
+	_stats_panel.visible = false
+	_root.add_child(_stats_panel)
+
+	var dim := ColorRect.new()
+	dim.color = Color(COLOR_STEEL, 0.92)
+	dim.set_anchors_preset(Control.PRESET_FULL_RECT)
+	dim.mouse_filter = Control.MOUSE_FILTER_STOP
+	_stats_panel.add_child(dim)
+
+	var sheet := PanelContainer.new()
+	sheet.name = "Sheet"
+	sheet.set_anchors_preset(Control.PRESET_FULL_RECT)
+	sheet.offset_left = 260.0
+	sheet.offset_top = 130.0
+	sheet.offset_right = -260.0
+	sheet.offset_bottom = -300.0
+	sheet.add_theme_stylebox_override("panel", _sheet_style())
+	_stats_panel.add_child(sheet)
+
+	var sv := VBoxContainer.new()
+	sv.name = "SheetBox"
+	sv.add_theme_constant_override("separation", 12)
+	sheet.add_child(sv)
+
+	var h1 := Label.new()
+	h1.name = "Title"
+	h1.text = "SHOP STATS"
+	h1.add_theme_color_override("font_color", COLOR_PAPER)
+	h1.add_theme_font_size_override("font_size", 28)
+	sv.add_child(h1)
+
+	var body := Label.new()
+	body.name = "Body"
+	body.text = ""
+	body.add_theme_color_override("font_color", COLOR_PAPER)
+	body.add_theme_font_size_override("font_size", 17)
+	sv.add_child(body)
+
+	sv.add_child(_make_back_button(func() -> void:
+		_stats_panel.visible = false
+		_stats_open = false
+		is_open()))
+
+## lines: preformatted stat strings from Main.
+func show_stats(lines: Array[String]) -> void:
+	var body: Label = _stats_panel.get_node("Sheet/SheetBox/Body")
+	body.text = "\n".join(lines)
+	_show_panel(_stats_panel)
+	_stats_open = true
+	is_open()
+
 ## --- shared panel helpers ------------------------------------------------------
 
 func _sheet_style() -> StyleBoxFlat:
@@ -660,13 +729,14 @@ func _make_back_button(on_pressed: Callable) -> Button:
 	return back
 
 func _show_panel(panel: Control) -> void:
-	for p in [_contracts_panel, _upgrades_panel, _settings_panel, _howto_panel]:
+	for p in [_contracts_panel, _upgrades_panel, _settings_panel, _howto_panel, _stats_panel]:
 		if p != null:
 			p.visible = p == panel
 	_contracts_open = panel == _contracts_panel
 	_upgrades_open = panel == _upgrades_panel
 	_settings_open = panel == _settings_panel
 	_howto_open = panel == _howto_panel
+	_stats_open = panel == _stats_panel
 
 func _make_card(s: Dictionary) -> PanelContainer:
 	var card := PanelContainer.new()
@@ -719,6 +789,12 @@ func _make_card(s: Dictionary) -> PanelContainer:
 		rush_tag.add_theme_color_override("font_color", COLOR_TERRA)
 		rush_tag.add_theme_font_size_override("font_size", 12)
 		meta.add_child(rush_tag)
+	var due := Label.new()
+	due.name = "DueTag"
+	due.text = "  · %dd" % int(s.get("deadline_days", 0))
+	due.add_theme_color_override("font_color", COLOR_MUTED)
+	due.add_theme_font_size_override("font_size", 12)
+	meta.add_child(due)
 	for flag in s.get("risk_flags", []):
 		var tag := Label.new()
 		tag.text = "  [%s]" % flag

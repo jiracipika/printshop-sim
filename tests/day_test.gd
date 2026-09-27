@@ -123,14 +123,15 @@ func _test_deadlines() -> void:
 		main.sim.tick(1.0)
 	main._try_interact()  # collect part
 	var bal0: int = ledger.balance()
+	var rep0: float = main.reputation_multiplier()  # pack bumps rep after paying
 	main._try_pack_held()
 	var grade: String = QualityCheck.grade(c, main.sim.layers_done, main.sim.layers_total, {
 		"support_need": main.sim.support_need,
 		"adhesion_risk": main.sim.adhesion_risk,
 		"stability_risk": main.sim.stability_risk,
 	})
-	var full: int = roundi(c.payout_cents * QualityCheck.quality_multiplier(grade))
-	_ok(ledger.balance() == bal0 + full, "on-time delivery pays full grade-scaled payout")
+	var full: int = roundi(roundi(c.payout_cents * QualityCheck.quality_multiplier(grade)) * rep0)
+	_ok(ledger.balance() == bal0 + full, "on-time delivery pays rep-scaled grade payout")
 
 	# Late (deadline exceeded by 1 day): half payout.
 	main.sim.failure_seeded = false
@@ -146,10 +147,15 @@ func _test_deadlines() -> void:
 		main.sim.tick(1.0)
 	main._try_interact()
 	_ok(main._is_late() and not main._is_cancelled(), "deadline+1 is late but not cancelled")
+	var grade2: String = QualityCheck.grade(c2, main.sim.layers_done, main.sim.layers_total,
+		{"support_need": main.sim.support_need, "adhesion_risk": main.sim.adhesion_risk,
+		"stability_risk": main.sim.stability_risk})
 	var bal1: int = ledger.balance()
+	var rep1: float = main.reputation_multiplier()
 	main._try_pack_held()
-	_ok(ledger.balance() == bal1 + roundi(c2.payout_cents * 0.5),
-		"late delivery pays exactly half")
+	_ok(ledger.balance() == bal1 + roundi(roundi(roundi(c2.payout_cents
+		* QualityCheck.quality_multiplier(grade2)) * rep1) * 0.5),
+		"late delivery pays exactly half (rep-scaled)")
 	_ok("LATE" in str(main._prompt.text), "HUD explains the late penalty")
 
 	# Cancellation window: deadline + 2 days fails the contract at rollover.
