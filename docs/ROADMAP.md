@@ -1,0 +1,233 @@
+# Print Shop Sim — roadmap for the next 8 slices (v0.12 → v0.19)
+
+Planning document. Every slice follows the same definition of done (see the
+bottom of this file) — the per-slice checklists below only list what is NEW.
+Each slice ships as: features → tests (all suites green) → engine screenshots
+→ commit/push → web export → Vercel deploy → live browser verify → docs.
+
+Baseline at planning time: v0.11.0 (27e2b38), 26 suites / 1005 checks green.
+
+---
+
+## Slice 1 — v0.12.0 "The print farm" (second room, printers 3 & 4)
+
+Goal: give late-game money somewhere to go and make parallel printing scale.
+
+Feature checks:
+- [ ] Back-room door on the back wall (visual frame + blocked collision) that
+      opens when any farm printer is purchased
+- [ ] `machines` array extends from 2 to 4; printers 3 and 4 placed in the
+      back room on stands
+- [ ] Printer 3 unlock: "Farm kit A" upgrade, $80; printer 4: "Farm kit B",
+      $120 (Upgrades catalog, same exactly-once purchase rules)
+- [ ] Farm printers ship empty (no filament) and unlocked once bought
+- [ ] Locked farm printers show the LOCKED tag like printer 2 does today
+- [ ] Back room lighting: at least one ceiling fixture + omni so prints are
+      visible in there at night
+- [ ] Upgrades panel refresh shows the new kit cards with owned/affordable
+      state
+- [ ] Pro machine speed bonus stays exclusive to printer 2 (farm printers run
+      at base speed)
+
+Test checks:
+- [ ] machines.size() == 4 after both kits; locked before purchase
+- [ ] buy flow charges, unlocks, grants no filament
+- [ ] 4-machine simultaneous print smoke (two contracts + one prototype +
+      one idle)
+- [ ] all 26 existing suites stay green (machine-array code paths)
+- [ ] door collision removed after purchase (physics query check)
+
+Risk: medium — touches the machines array every loop depends on.
+
+---
+
+## Slice 2 — v0.13.0 "First come, first served" (board pressure)
+
+Goal: make the job board competitive instead of an infinite shelf.
+
+Feature checks:
+- [ ] Rush contracts expire: unaccepted rush jobs leave the board at the next
+      day rollover (replaced by a fresh generated job)
+- [ ] Expired jobs cost nothing but reduce reputation by 0.1 ("missed
+      opportunity")
+- [ ] Some contracts show a competing-buyer marker ("2 waiting") — if not
+      accepted within the same day, they expire like rush jobs
+- [ ] Expiry is deterministic per (day, slot) — same save replays the same
+      outcomes
+- [ ] HUD board line notes expiring jobs ("2 expire tonight")
+- [ ] Chalkboard tracks "Missed: N"
+
+Test checks:
+- [ ] rush expiry at rollover: queue shrinks and refills correctly
+- [ ] no expiry for non-rush, non-competing contracts
+- [ ] reputation penalty applied exactly once per expired job
+- [ ] save/reload across a rollover night replays identically
+- [ ] all suites green
+
+Risk: medium-low; touches JobBoard rotation and the rollover handler.
+
+---
+
+## Slice 3 — v0.14.0 "The workshop log" (history & forensics)
+
+Goal: players should be able to answer "what happened overnight?" and
+"why did that print fail?"
+
+Feature checks:
+- [ ] Ring buffer of the last 30 shop events (delivered/failed/expired/
+      rent/upgrades/prototypes) with day stamp and one-line detail
+- [ ] Failure cause strings: PrintSim records the worst risk that triggered a
+      failure ("support collapse at layer 34") and the log shows it
+- [ ] New menu panel "Log" (or a page in Stats) rendering the buffer
+- [ ] Buffer persists in the save (validated, capped at 30 entries)
+- [ ] DebugPanel action [7]: dump the log to stdout for headless debugging
+
+Test checks:
+- [ ] events append in order, cap at 30, oldest dropped
+- [ ] persistence round-trip preserves the buffer
+- [ ] failure cause recorded for seeded and risk-driven failures
+- [ ] all suites green
+
+Risk: low.
+
+---
+
+## Slice 4 — v0.15.0 "The radio" (ambient audio)
+
+Goal: fill the silence with a toggleable procedural soundtrack.
+
+Feature checks:
+- [ ] Runtime-generated lo-fi loop (soft chord pad, 4-8 bars, ~60-80 BPM
+      feel) built as an AudioStreamWAV at load — no external assets
+- [ ] Separate "Music" bus + Music volume slider in Settings (persisted)
+- [ ] Music ducks automatically while the design computer is open
+- [ ] Printer servo blips while printing (subtle, rate-limited)
+- [ ] Settings: "Music" checkbox + volume slider; default on at low volume
+
+Test checks:
+- [ ] music stream builds (non-empty, loops) headless
+- [ ] music bus exists and the slider changes its volume
+- [ ] duck on design-studio open/close
+- [ ] all suites green
+
+Risk: medium — subjective audio quality is unverifiable headless; keep the
+loop extremely simple and quiet.
+
+---
+
+## Slice 5 — v0.16.0 "Weather in the windows"
+
+Goal: make seasons visible, not just numeric.
+
+Feature checks:
+- [ ] Season visuals: humid = hazy window sheen; cold snap = frost tint on
+      the window pane + cooler sun color; boom = warm golden light; calm =
+      current look
+- [ ] Rain streaks during humid weeks (cheap animated quads on the window
+      only — no room-wide particles)
+- [ ] Sky/sun tint shifts per season (existing _apply_daylight extended)
+- [ ] HUD season line gains an icon word ("This week: Cold snap ❄ ...")
+- [ ] All effects Compatibility-safe and gated behind the existing quality
+      toggle where they cost anything
+
+Test checks:
+- [ ] per-season visual state flips when the week changes (node/param probe)
+- [ ] effects disabled by the quality toggle where applicable
+- [ ] frame budget: a 60-second headless run shows no tick growth
+- [ ] all suites green
+
+Risk: medium — visual tuning is iterative; ship conservative.
+
+---
+
+## Slice 6 — v0.17.0 "Multi-part orders" (contracts v2)
+
+Goal: deepen the core job into a small production run.
+
+Feature checks:
+- [ ] Generated contracts can require 2-3 copies of a model ("×3" on the
+      card); fixture contracts stay single-part
+- [ ] Each copy is a separate print on any machine; parts track their order
+      id + copy index
+- [ ] Packing table accepts partial deliveries: packed parts stack on the
+      table visually (max 3), contract stays INSPECTION until all copies
+      are packed
+- [ ] Payout, grade (average of copies), tips and deadlines all apply at the
+      final completion
+- [ ] Board card, HUD contract line, and chalkboard reflect "parts 2/3"
+- [ ] F-grade on any copy caps the whole order at C; two F copies fail it
+
+Test checks:
+- [ ] multi-part state machine: partial packs, completion payout exactly
+      once, deadline applies to the LAST copy
+- [ ] grade aggregation rules (single F caps to C; two F = FAILED)
+- [ ] cancel path refunds/discards cleanly across machines
+- [ ] all suites green (economy, parallel, color updated for parts)
+
+Risk: high — the deepest slice; consider splitting if it exceeds ~600
+changed lines.
+
+---
+
+## Slice 7 — v0.18.0 "Reputation tiers" (progression gates)
+
+Goal: tie reputation to what the board offers.
+
+Feature checks:
+- [ ] Board tiers: generated contracts roll difficulty ≤ 2 below 3.0 rep,
+      ≤ 3 below 3.5, ≤ 4 below 4.25, anything at 4.25+
+- [ ] Tier-up moment announces itself ("The board is buzzing — bigger jobs
+      available") once per tier
+- [ ] Rush premiums scale with tier (+10% per tier above the first)
+- [ ] Two new achievements: "Board regular" (3.5★), "Top of the market"
+      (4.25★)
+- [ ] Stats panel shows the current tier and what the next unlocks
+
+Test checks:
+- [ ] generated pool difficulty distribution per rep band (sweep)
+- [ ] tier-up announcement fires exactly once per threshold
+- [ ] achievements integration
+- [ ] all suites green
+
+Risk: low-medium.
+
+---
+
+## Slice 8 — v0.19.0 "Hardening & release polish"
+
+Goal: performance, mobile confidence, and a clean 1.0-rc.
+
+Feature checks:
+- [ ] Quality presets: Low / Standard / High (shadows + 512px textures +
+      glow mapped to presets; single dropdown replacing the lone checkbox,
+      checkbox kept in sync)
+- [ ] Draw-call / instance budget audit on the web export; props merged or
+      trimmed if over budget
+- [ ] Portrait-mode HUD validation: status card, prompt, touch controls all
+      readable at 390×844; touch targets stay ≥ 48px
+- [ ] Reset/first-run flow re-verified end to end after all v0.12-v0.18
+      systems
+- [ ] HANDOFF/README rewritten as a 1.0-rc summary
+
+Test checks:
+- [ ] preset dropdown applies all underlying settings
+- [ ] small-viewport HUD assertions (headless viewport resize)
+- [ ] full-loop end-to-end test at Low quality
+- [ ] all suites green; python pipeline green; export artifacts validated
+
+Risk: medium; mostly audit work.
+
+---
+
+## Definition of done (every slice)
+
+- [ ] Feature checks above all ticked
+- [ ] Test checks above all ticked; FULL suite green (no SCRIPT ERROR, no
+      Parse Error, exit 0) — count grows, never shrinks
+- [ ] `python3 -m pytest tests/test_build_web.py -q` green
+- [ ] Engine screenshots of the new features captured and reviewed
+- [ ] Commit message documents slice + test counts; pushed to main
+- [ ] `bash tools/build_web.sh` clean (stamped sha, not dirty)
+- [ ] `vercel --prod --yes` deployed; live build-info.json matches the push
+- [ ] Live browser check: game boots, menu renders, new feature visible
+- [ ] README milestone + HANDOFF updated; Version.gd bumped
