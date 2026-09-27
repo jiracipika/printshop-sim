@@ -1,4 +1,30 @@
-# Current handoff — reputation + stats + salvage (v0.5.0)
+# Current handoff — design computer prototype (v0.5.0, pending merge)
+
+## Current active work
+
+The design-computer slice adds a world-space workstation target on the back
+bench. E opens an offline-safe Form Lab with three editable starting shapes,
+width/depth/height, wall thickness, layer height, infill, PLA/PETG, filament
+color, a live 3D preview, and filament/time/cost estimates. Test Print stores
+the blueprint at `user://printshop_blueprint.json`, charges filament, starts
+an idle unlocked printer, and uses the regular PrintSim. The completed print
+can be collected as a physical grabbable object and placed in the shop. Esc
+returns to the shop menu; the print loop pauses while the computer is open.
+
+Local verification on Godot 4.7.1: all 20 Godot suites pass (879 checks),
+including 20 new design-computer checks; `python3 -m pytest
+tests/test_build_web.py -q` passes (21 tests). Import prints an existing
+export-preset warning for missing `preset.1/exclude_filter`, but exits 0.
+No Web export, visual browser test, deployment, or release was performed.
+
+Next iteration: replace the generic box-stack print growth with blueprint-
+shaped geometry and subtle extrusion-layer texture, then inspect the actual
+rendered screen in an interactive browser. Preserve GL Compatibility and the
+existing suite gates.
+
+---
+
+# Previous handoff — reputation + stats + salvage (v0.5.0)
 
 Read AGENTS.md and design/implementation-plan.md. Working copy:
 /Users/rs-mac/.zcode/workspace/default/printshop-sim (canonical disk plan in

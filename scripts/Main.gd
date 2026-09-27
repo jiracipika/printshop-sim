@@ -1,3 +1,6 @@
+Warning: truncated output (original token count: 17789)
+Total output lines: 2032
+
 extends Node3D
 
 ## Main scene: first-person shop floor with two 3D printers.
@@ -89,6 +92,7 @@ var _status: Label
 var _prompt: Label
 var touch_controls: TouchControls
 var main_menu: MainMenu
+var design_studio: DesignStudio
 var debug_panel: DebugPanel
 var last_pack_grade := ""
 var save_status_line := "no save yet"
@@ -169,6 +173,9 @@ func _apply_upgrade_effects() -> void:
 ## main panel; the main panel closes to the resume prompt; playing opens the
 ## menu and pauses. Touch Pause button also lands here.
 func _route_escape() -> void:
+	if design_studio != null and design_studio.visible:
+		_close_design_studio()
+		return
 	if main_menu.is_open() and main_menu.visible:
 		if main_menu.subpanel_open():
 			main_menu.open_menu()
@@ -456,6 +463,7 @@ func _build_world() -> void:
 	add_child(lamp2)
 
 	_build_props()
+	_build_design_computer()
 
 	# Two printers: one on the bench, one on a steel floor stand against the back wall.
 	# Printer 2 is the "Pro machine": locked until purchased, 25% faster.
@@ -493,6 +501,7 @@ func _build_world() -> void:
 			"idx": i, "sim": s, "contract": null, "day": 0,
 			"orient": 0, "orient_pending": false, "part": null, "scrap": false,
 			"material_cents": 0,
+			"prototype": {},
 		})
 		s.print_started.connect(_on_print_started.bind(i))
 		s.print_finished.connect(_on_print_done.bind(i))
@@ -698,598 +707,29 @@ func _build_props() -> void:
 	add_child(crate_body)
 
 	# Potted plant in the front-left corner.
-	var pot := MeshInstance3D.new()
-	var pot_cyl := CylinderMesh.new()
-	pot_cyl.top_radius = 0.18
-	pot_cyl.bottom_radius = 0.13
-	pot_cyl.height = 0.26
-	pot.mesh = pot_cyl
-	pot.material_override = world.terracotta
-	pot.position = Vector3(-2.9, 0.13, 2.25)
-	pot.add_to_group("props")
-	add_child(pot)
-	for i in 3:
-		var leaf := MeshInstance3D.new()
-		var sphere := SphereMesh.new()
-		sphere.radius = 0.13 + 0.03 * i
-		sphere.height = 2.0 * (0.13 + 0.03 * i)
-		leaf.mesh = sphere
-		var leaf_mat := StandardMaterial3D.new()
-		leaf_mat.albedo_color = Color("#5E7A5A").lightened(0.06 * i)
-		leaf_mat.roughness = 0.9
-		leaf.material_override = leaf_mat
-		leaf.position = Vector3(-2.9 + 0.05 * i, 0.42 + 0.1 * i, 2.25 - 0.04 * i)
-		leaf.add_to_group("props")
-		add_child(leaf)
-	var pot_body := StaticBody3D.new()
-	pot_body.collision_layer = 1
-	var pot_shape := CollisionShape3D.new()
-	var pot_col := CylinderShape3D.new()
-	pot_col.radius = 0.18
-	pot_col.height = 0.6
-	pot_shape.shape = pot_col
-	pot_body.add_child(pot_shape)
-	pot_body.position = Vector3(-2.9, 0.3, 2.25)
-	add_child(pot_body)
-
-func _add_poster(tex: ImageTexture, pos: Vector3, rot_deg: Vector3, caption: String) -> void:
-	var poster := MeshInstance3D.new()
-	var quad := QuadMesh.new()
-	quad.size = Vector2(0.9, 0.6)
-	poster.mesh = quad
-	var mat := StandardMaterial3D.new()
-	mat.albedo_color = Color.WHITE
-	mat.albedo_texture = tex
-	mat.roughness = 0.85
-	poster.material_override = mat
-	poster.position = pos
-	poster.rotation_degrees = rot_deg
-	poster.add_to_group("props")
-	add_child(poster)
-	var label := Label3D.new()
-	label.text = caption
-	label.font_size = 72
-	label.pixel_size = 0.0022
-	label.modulate = Color("#202B2B")
-	label.position = pos + Vector3(0, 0.22, 0).rotated(Vector3.UP, deg_to_rad(rot_deg.y))
-	label.rotation_degrees = rot_deg
-	label.add_to_group("props")
-	add_child(label)
-
-func _add_spool(pos: Vector3) -> void:
-	var spool := Grabbable.new()
-	spool.name = "Spool"
-	var mesh := MeshInstance3D.new()
-	var cyl := CylinderMesh.new()
-	cyl.top_radius = 0.14
-	cyl.bottom_radius = 0.14
-	cyl.height = 0.28
-	mesh.mesh = cyl
-	var mat := StandardMaterial3D.new()
-	mat.albedo_color = Color("#DA623A")
-	mat.roughness = 0.6
-	mesh.material_override = mat
-	spool.add_child(mesh)
-	# Dark steel hub so the spool reads as a spool, not a bare cylinder.
-	var hub := MeshInstance3D.new()
-	var hub_cyl := CylinderMesh.new()
-	hub_cyl.top_radius = 0.05
-	hub_cyl.bottom_radius = 0.05
-	hub_cyl.height = 0.3
-	hub.mesh = hub_cyl
-	var hub_mat := StandardMaterial3D.new()
-	hub_mat.albedo_color = Color("#3A4644")
-	hub_mat.roughness = 0.4
-	hub.material_override = hub_mat
-	spool.add_child(hub)
-	var shape := CollisionShape3D.new()
-	var col := CylinderShape3D.new()
-	col.radius = 0.14
-	col.height = 0.28
-	shape.shape = col
-	spool.add_child(shape)
-	# Hold marker: where a grabbed prop attaches, in front of the camera.
-	var hold := Marker3D.new()
-	hold.name = "HoldMarker"
-	hold.position = Vector3(0.25, -0.1, -0.55)
-	_camera.add_child(hold)
-	spool.position = pos
-	spool.mass = 1.0
-	add_child(spool)
-
-## Center-screen grab ray. Returns { "collider": Object, "grabbable": Grabbable }
-## for the first body hit within GRAB_RANGE; walls/bench bodies occlude.
-func _grab_raycast() -> Dictionary:
-	var space := get_world_3d().direct_space_state
-	var q := PhysicsRayQueryParameters3D.create(
-		_camera.global_position,
-		_camera.global_position - _camera.global_transform.basis.z * GRAB_RANGE)
-	q.collision_mask = 1 | 4  # world + grabbable; player (2) excluded
-	q.exclude = [_player.get_rid()]
-	var hit := space.intersect_ray(q)
-	if hit.is_empty():
-		return {}
-	var grab: Grabbable = hit.collider as Grabbable
-	return {"collider": hit.collider, "grabbable": grab}
-
-func _current_grabbable() -> Grabbable:
-	var r := _grab_raycast()
-	return r.get("grabbable", null)
-
-func _try_grab() -> bool:
-	# Second object cannot be grabbed while holding one.
-	if held != null:
-		return false
-	var g := _current_grabbable()
-	if g == null or not g.can_grab():
-		return false
-	_attach_to_hand(g)
-	sfx.play("grab")
-	return true
-
-## Attach any grabbable to the camera hold marker with physics disabled.
-func _attach_to_hand(g: Grabbable) -> void:
-	g.on_grabbed()
-	held = g
-	g.get_parent().remove_child(g)
-	_camera.get_node("HoldMarker").add_child(g)
-	g.transform = Transform3D.IDENTITY
-
-## Placement validator: floor or bench-top surface allowed; overlap with
-## wall/bench (or any world static) invalid. Returns "" if valid else reason.
-func _placement_error(world_pos: Vector3) -> String:
-	var space := get_world_3d().direct_space_state
-	var q := PhysicsShapeQueryParameters3D.new()
-	var shape := CylinderShape3D.new()
-	shape.radius = 0.15
-	shape.height = 0.3
-	q.shape = shape
-	q.transform = Transform3D(Basis.IDENTITY, world_pos)
-	q.collision_mask = 1  # world statics only
-	if not space.intersect_shape(q, 1).is_empty():
-		return "No room here"
-	return ""
-
-func _try_place() -> bool:
-	if held == null:
-		return false
-	var marker: Node3D = _camera.get_node("HoldMarker")
-	var drop_pos: Vector3 = marker.global_position
-	# Drop toward the floor from the hold point; ray finds the support surface.
-	var space := get_world_3d().direct_space_state
-	var rq := PhysicsRayQueryParameters3D.create(drop_pos, drop_pos + Vector3(0, -3.0, 0))
-	rq.collision_mask = 1
-	rq.exclude = [_player.get_rid()]
-	var hit := space.intersect_ray(rq)
-	var target: Vector3 = drop_pos
-	if not hit.is_empty():
-		target = hit.position + Vector3(0, 0.15, 0)  # spool half-height above surface
-	var err := _placement_error(target)
-	if err != "":
-		_set_prompt(err)
-		return false  # keeps the object held
-	var old_parent := held.get_parent()
-	old_parent.remove_child(held)
-	add_child(held)
-	held.global_position = target
-	held.on_released()
-	held = null  # a dropped part stays tracked via active_part; re-grabbable
-	sfx.play("place")
-	return true
-
-## E / touch Interact: grab when empty-handed, place when holding.
-## Falls through to printer interaction when empty-handed and nothing
-## grabbable is targeted (desktop pointer-lock / touch-active gating lives
-## in _try_interact; the key path is only reachable while unpaused).
-func _try_grab_or_place() -> void:
-	if paused:
-		return
-	if held != null:
-		# Delivering beats placing: a held part at the packing table goes
-		# through the interact path (pack / scrap), never drops on the spot.
-		if _is_held_part() and _near_packing_station():
-			_try_interact()
-			return
-		_try_place()
-		return
-	if not _try_grab():
-		_try_interact()
-
-func _set_prompt(t: String) -> void:
-	_prompt.text = t
-
-func _make_printer(idx: int) -> Node3D:
-	var root: Node3D = load("res://scripts/Printer.gd").new()
-	root.name = "Printer%d" % idx
-	root.set_meta("printer_index", idx)
-
-	# PrintVisual sits on the bed plate (bed top = 0.08 above printer origin).
-	var visual: Node3D = load("res://scripts/PrintVisual.gd").new()
-	visual.name = "PrintVisual"
-	visual.position = Vector3(0, 0.081, 0)
-	root.add_child(visual)
-	_print_visuals.append(visual)
-
-	var label := Label3D.new()
-	label.text = "Printer %d" % (idx + 1)
-	label.position = Vector3(0, 0.85, 0)
-	label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
-	label.modulate = Color(1, 0.85, 0.4)
-	root.add_child(label)
-	return root
-
-func _build_player() -> void:
-	_player = CharacterBody3D.new()
-	_player.collision_layer = 2
-	_player.collision_mask = 1
-	var col := CollisionShape3D.new()
-	var capsule := CapsuleShape3D.new()
-	capsule.radius = 0.35
-	capsule.height = 1.7
-	col.shape = capsule
-	_player.add_child(col)
-	col.position = Vector3(0, 0.85, 0)
-
-	_camera = Camera3D.new()
-	_camera.position = Vector3(0, 1.6, 0)
-	_camera.fov = 75.0
-	_player.add_child(_camera)
-	_player.add_to_group("player")
-	_player.position = Vector3(0, 0.3, 1.8)
-	add_child(_player)
-	_camera.current = true
-
-func _build_hud() -> void:
-	_hud = CanvasLayer.new()
-	add_child(_hud)
-	# Soft vignette overlay — focuses the eye, hides nothing.
-	var vignette := TextureRect.new()
-	vignette.name = "Vignette"
-	vignette.texture = ShopArt.vignette()
-	vignette.stretch_mode = TextureRect.STRETCH_SCALE
-	vignette.set_anchors_preset(Control.PRESET_FULL_RECT)
-	vignette.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_hud.add_child(vignette)
-
-	# Translucent steel card behind the status block for readability over the
-	# bright workshop.
-	var card := PanelContainer.new()
-	card.name = "StatusCard"
-	var sb := StyleBoxFlat.new()
-	sb.bg_color = Color(0.125, 0.169, 0.169, 0.55)
-	sb.set_corner_radius_all(6)
-	sb.content_margin_left = 10.0
-	sb.content_margin_right = 12.0
-	sb.content_margin_top = 6.0
-	sb.content_margin_bottom = 8.0
-	card.add_theme_stylebox_override("panel", sb)
-	card.position = Vector2(10, 10)
-	_hud.add_child(card)
-	_status = Label.new()
-	_status.add_theme_font_size_override("font_size", 16)
-	_status.text = "..."
-	card.add_child(_status)
-	# Filled each frame by _update_hud via Version autoload (resolved at runtime).
-	_prompt = Label.new()
-	_prompt.anchor_left = 0.0
-	_prompt.anchor_right = 1.0
-	_prompt.anchor_top = 1.0
-	_prompt.anchor_bottom = 1.0
-	_prompt.offset_top = -64
-	_prompt.offset_bottom = -32
-	_prompt.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_prompt.add_theme_font_size_override("font_size", 18)
-	_prompt.text = "Click to play"
-	_hud.add_child(_prompt)
-
-	# Center reticle: a tiny dot for the grab/interact ray.
-	_reticle = ColorRect.new()
-	_reticle.color = Color(0.93, 0.9, 0.83, 0.85)
-	_reticle.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_reticle.anchor_left = 0.5
-	_reticle.anchor_right = 0.5
-	_reticle.anchor_top = 0.5
-	_reticle.anchor_bottom = 0.5
-	_reticle.offset_left = -2
-	_reticle.offset_right = 2
-	_reticle.offset_top = -2
-	_reticle.offset_bottom = 2
-	_reticle.visible = false
-	_hud.add_child(_reticle)
-
-	# Mobile touch overlay (visibility follows effective_enabled()).
-	touch_controls = TouchControls.new()
-	touch_controls.interact_pressed.connect(_on_touch_interact)
-	touch_controls.pause_requested.connect(_on_touch_pause)
-	touch_controls.resume_requested.connect(_on_touch_resume)
-	add_child(touch_controls)
-
-	# Menus slice: main menu at boot; gameplay prompt suppressed while open.
-	main_menu = MainMenu.new()
-	add_child(main_menu)
-	main_menu.play_pressed.connect(_on_menu_play)
-	main_menu.contracts_pressed.connect(_on_menu_contracts)
-	main_menu.upgrades_pressed.connect(_on_menu_upgrades)
-	main_menu.upgrade_buy_pressed.connect(_on_menu_upgrade_buy)
-	main_menu.settings_pressed.connect(func() -> void:
-		main_menu.show_settings(settings))
-	main_menu.settings_changed.connect(_on_menu_setting)
-	main_menu.stats_pressed.connect(_on_menu_stats)
-	main_menu.open_menu()
-
-	# Menus slice: dev-only debug panel (hidden by default; debug builds only).
-	debug_panel = load("res://scripts/DebugPanel.gd").new()
-	debug_panel.main = self
-	add_child(debug_panel)
-
-	# Startup prompt must tell mobile users the real gesture: the boot state is
-	# paused and mobile has no pointer-lock click — the way in is the Resume tap.
-	_boot_prompt = "Tap Resume to play" if touch_controls.effective_enabled() \
-		else "Click to play"
-	_prompt.text = ""  # suppressed while the main menu is open
-
-## --- touch (mobile) state — separate from desktop `captured` pointer lock --
-
-func _on_touch_interact() -> void:
-	if paused:
-		return
-	_try_grab_or_place()
-
-func _on_touch_pause() -> void:
-	paused = true
-	touch_controls.set_motion_enabled(false)
-	_prompt.text = "Paused — tap Resume"
-	_set_reticle(false)
-	_route_escape()  # menus slice: touch Pause opens the main menu
-
-func _on_touch_resume() -> void:
-	paused = false
-	touch_controls.set_motion_enabled(true)
-	_prompt.text = "Left stick move   Right side look   Interact   Pause"
-
-## Reticle shows only during active gameplay.
-func _set_reticle(on: bool) -> void:
-	if _reticle != null:
-		_reticle.visible = on and not main_menu.is_open()
-
-func get_touch_move_axis() -> Vector2:
-	return touch_controls.get_move_axis()
-
-func consume_touch_look_delta() -> Vector2:
-	return touch_controls.consume_look_delta()
-
-## Effective pointer-lock state. On real display servers `Input.mouse_mode`
-## is the sole authority: if the browser denies or loses pointer lock the raw
-## mode falls back to VISIBLE and the game reports unlocked/paused even though
-## our `captured` intent flag is set. The headless display server cannot
-## reflect pointer lock at all (probed: mouse_mode pinned to VISIBLE), so
-## there the intent flag stands in to keep behavioral tests meaningful.
-func get_mouse_locked() -> bool:
-	if DisplayServer.get_name() == "headless":
-		return captured
-	return Input.mouse_mode == Input.MOUSE_MODE_CAPTURED
-
-func _release_capture() -> void:
-	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
-	captured = false
-	paused = true
-	_set_reticle(false)
-	_prompt.text = "Click to play"
-
-func _unhandled_input(event: InputEvent) -> void:
-	# Browsers may synthesize mouse events after a touch gesture.
-	if event is InputEventMouse and touch_controls != null and touch_controls.effective_enabled():
-		return
-	if event is InputEventKey and event.pressed and not event.echo:
-		if event.physical_keycode == KEY_ESCAPE:
-			_route_escape()
-		elif event.physical_keycode == KEY_E:
-			_try_grab_or_place()
-	# Deliberate (re)capture: allowed when paused, or when effectively
-	# unlocked (covers the browser case where pointer lock was denied or
-	# lost — raw mode fell back to VISIBLE while captured was still true —
-	# so the next click can re-request it instead of soft-locking).
-	# While the main menu is open, clicks belong to the menu: never capture.
-	elif event is InputEventMouseButton and event.pressed \
-			and event.button_index == MOUSE_BUTTON_LEFT \
-			and not main_menu.is_open() \
-			and (paused or not get_mouse_locked()):
-		Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
-		captured = true
-		paused = false
-		_set_reticle(true)
-		_prompt.text = "WASD move   Mouse look   E interact   Esc release mouse"
-	elif event is InputEventMouseMotion and get_mouse_locked():
-		var mm := event as InputEventMouseMotion
-		var sens := _mouse_sens()
-		var y_dir := -1.0 if bool(settings.get("invert_y", false)) else 1.0
-		yaw -= mm.relative.x * sens
-		pitch = clampf(pitch + y_dir * mm.relative.y * sens * -1.0, -1.4, 1.4)
-
-## Look sensitivity scaled by the settings slider (task 12).
-func _mouse_sens() -> float:
-	return MOUSE_SENS * float(settings.get("mouse_sens_scale", 1.0))
-
-func _notification(what: int) -> void:
-	if what == NOTIFICATION_APPLICATION_FOCUS_OUT:
-		# Desktop: release capture. Mobile: clear fingers/axes and pause.
-		if touch_controls != null:
-			touch_controls.clear_all_fingers()
-		if get_mouse_locked():
-			_release_capture()
-		elif not paused:
-			paused = true
-			touch_controls.set_motion_enabled(false)
-			_prompt.text = "Paused — tap Resume"
-
-## Shared motion drop on pause/focus-loss (desktop keys + touch fingers/axes).
-func drop_motion_inputs() -> void:
-	Input.action_release("move_forward")
-	Input.action_release("move_back")
-	Input.action_release("move_left")
-	Input.action_release("move_right")
-	if touch_controls != null:
-		touch_controls.clear_all_fingers()
-	_player.velocity = Vector3.ZERO
-
-## Fold pending touch look into yaw/pitch (deadzone-free, pitch-clamped).
-func apply_touch_look() -> void:
-	if touch_controls == null:
-		return
-	var look := touch_controls.consume_look_delta()
-	if look == Vector2.ZERO:
-		return
-	var sens := get_touch_look_sens()
-	var y_dir := -1.0 if bool(settings.get("invert_y", false)) else 1.0
-	yaw -= look.x * sens
-	pitch = clampf(pitch + y_dir * look.y * sens * -1.0, -1.4, 1.4)
-
-## Look sensitivity scaled by viewport size so look speed is stable on phones.
-func get_touch_look_sens() -> float:
-	var vs := get_viewport().get_visible_rect().size
-	return MOUSE_SENS * float(settings.get("mouse_sens_scale", 1.0)) * 3.0 * (720.0 / maxf(vs.y, 1.0))
-
-func _physics_process(delta: float) -> void:
-	if _player == null:
-		return
-	var touch_active := touch_controls != null and touch_controls.effective_enabled() and touch_controls.is_motion_enabled()
-	if paused or (not get_mouse_locked() and not touch_active):
-		# Paused (Esc/focus loss) or browser took pointer lock away: no
-		# movement, no simulation, and latched inputs are dropped.
-		drop_motion_inputs()
-		return
-	apply_touch_look()
-	_player.rotation.y = yaw
-	_camera.rotation.x = pitch
-	var dir := Vector3.ZERO
-	var fwd := -_camera.global_transform.basis.z
-	fwd.y = 0.0
-	fwd = fwd.normalized()
-	var right := _camera.global_transform.basis.x
-	right.y = 0.0
-	right = right.normalized()
-	var tmove := get_touch_move_axis()
-	if Input.is_action_pressed("move_forward") or tmove.y < -0.01:
-		dir += fwd
-	if Input.is_action_pressed("move_back") or tmove.y > 0.01:
-		dir -= fwd
-	if Input.is_action_pressed("move_left") or tmove.x < -0.01:
-		dir -= right
-	if Input.is_action_pressed("move_right") or tmove.x > 0.01:
-		dir += right
-	if dir.length_squared() > 0.0:
-		dir = dir.normalized() * PLAYER_SPEED
-	_player.velocity.x = dir.x
-	_player.velocity.z = dir.z
-	if not _player.is_on_floor():
-		_player.velocity.y -= 14.0 * delta
-	_player.move_and_slide()
-	for m in machines:
-		var s: PrintSim = m.get("sim")
-		s.tick(delta)
-	day_cycle.tick(delta)
-	_apply_daylight()
-	_update_print_visuals(delta)
-	_update_hud()
-
-## Drive each machine's deposition visual from its own sim (v0.3.0: both
-## machines can print — and fail — independently).
-func _update_print_visuals(delta: float) -> void:
-	if _print_visuals.is_empty():
-		return
-	var any_running := false
-	for i in range(_print_visuals.size()):
-		var visual = _print_visuals[i]
-		var s: PrintSim = _machine(i).get("sim")
-		if s == null:
-			continue
-		if s.state == PrintSim.State.RUNNING:
-			any_running = true
-			visual.set_progress(s.progress(), s.model_name)
-		elif s.state == PrintSim.State.DONE_OK or s.state == PrintSim.State.DONE_FAIL:
-			# DONE_OK: hold final shape. DONE_FAIL: gray it out once.
-			visual.set_progress(s.progress(), s.model_name)
-			if s.state == PrintSim.State.DONE_FAIL and not visual.is_failed():
-				visual.mark_failed()
-		else:
-			visual.reset()
-		# Nozzle "life" on every running machine.
-		if s.is_running() and i < _printers.size():
-			var printer = _printers[i]
-			if printer != null and printer.get("set_nozzle_scan") != null:
-				printer.set_nozzle_scan(elapsed_nozzle_clock)
-			if _hum != null:
-				_hum.global_position = printer.global_position + Vector3(0, 0.3, 0)
-
-	if _hum != null:
-		if any_running and not _hum.playing:
-			_hum.play()
-		elif not any_running and _hum.playing:
-			_hum.stop()
-	elapsed_nozzle_clock += delta
-
-var elapsed_nozzle_clock := 0.0
-
-## Called whenever a fresh job begins so that machine's visual restarts clean.
-func _on_print_started(idx: int) -> void:
-	if idx < _print_visuals.size():
-		_print_visuals[idx].reset()
-
-## Sim finished on machine `idx`: park its contract at INSPECTION or FAILED.
-func _on_print_done(ok: bool, idx: int) -> void:
-	if ok:
-		sfx.play("chime")
-	var m := _machine(idx)
+	var pot := MeshInstance3D.…5789 tokens truncated…= _machine(idx)
 	var c: Contract = m.get("contract")
-	if c == null:
-		return
-	if ok and c.state == Contract.State.PRINTING:
-		_advance(c, Contract.State.INSPECTION)
-	elif not ok:
-		sfx.play("buzz")
-		if idx < _printers.size() and _printers[idx].get("set_failed") != null:
-			_printers[idx].set_failed(true)
-		if c.state in [Contract.State.PREPARING, Contract.State.PRINTING, Contract.State.INSPECTION]:
-			_advance(c, Contract.State.FAILED)
-		_set_prompt("Print FAILED — %s lost. [E] clear the printer" % c.model_name)
-		m["contract"] = null
-
-func _nearest_printer() -> Node3D:
-	var best: Node3D = null
-	var best_d := INTERACT_RANGE
-	for p in _printers:
-		var d: float = _player.global_position.distance_to(p.global_position)
-		if d < best_d:
-			best_d = d
-			best = p
-	return best
-
-## --- printed part: collect, deliver, scrap ----------------------------------
-
-func _is_held_part() -> bool:
-	return held != null and str(held.get_meta("part_contract", "")) != ""
-
-func _near_packing_station() -> bool:
-	return packing_station != null and _player != null \
-		and _player.global_position.distance_to(packing_station.global_position) <= INTERACT_RANGE
-
-## The machine whose printed part the player is holding (or -1).
-func _machine_for_part(part: Grabbable) -> int:
-	if part == null:
-		return -1
-	var id := str(part.get_meta("part_contract", ""))
-	for m in machines:
-		var c: Contract = m.get("contract")
-		if c != null and c.id == id:
-			return int(m.get("idx"))
-	return -1
-
-## A finished print (DONE_OK -> contract INSPECTION) becomes a physical part
-## that the player carries to the packing table. Returns true when the press
-## was consumed by collection flow (even if it only showed a hint).
-func _collect_on(idx: int) -> bool:
-	var m := _machine(idx)
-	var c: Contract = m.get("contract")
+	var prototype: Dictionary = m.get("prototype", {})
+	var sim: PrintSim = m.get("sim")
+	if c == null and not prototype.is_empty() and sim.state == PrintSim.State.DONE_OK:
+		if is_instance_valid(m.get("part")):
+			_set_prompt("Grab the prototype and place it where you want it")
+			return true
+		if held != null:
+			_set_prompt("Hands full — put something down first")
+			return true
+		var sample := _make_prototype_part(prototype)
+		add_child(sample)
+		sample.global_position = _printers[idx].global_position + Vector3(0, 0.28, 0)
+		_attach_to_hand(sample)
+		m["part"] = null
+		m["prototype"] = {}
+		sim.reset()
+		if idx < _print_visuals.size():
+			_print_visuals[idx].reset()
+		sfx.play("grab")
+		_set_prompt("Prototype collected — place it on a shelf or bench")
+		return true
 	if c == null or c.state != Contract.State.INSPECTION:
 		return false
 	if is_instance_valid(m.get("part")):
@@ -1334,6 +774,26 @@ func _make_part(c: Contract) -> Grabbable:
 	shape.shape = col
 	part.add_child(shape)
 	part.set_meta("part_contract", c.id)
+	return part
+
+func _make_prototype_part(design: Dictionary) -> Grabbable:
+	var d := DesignStudio.normalize(design)
+	var part := Grabbable.new()
+	part.name = "Prototype_%s" % str(d.name).replace(" ", "_")
+	part.mass = 0.35
+	var mesh := MeshInstance3D.new()
+	mesh.mesh = DesignStudio.create_mesh(d)
+	var mat := StandardMaterial3D.new()
+	mat.albedo_color = Color(DesignStudio.FILAMENTS[d.filament])
+	mat.roughness = 0.55 if d.material == "PETG" else 0.75
+	mesh.material_override = mat
+	part.add_child(mesh)
+	var shape := CollisionShape3D.new()
+	var box := BoxShape3D.new()
+	box.size = Vector3(float(d.width_mm), float(d.height_mm), float(d.depth_mm)) / 1000.0
+	shape.shape = box
+	part.add_child(shape)
+	part.set_meta("prototype", true)
 	return part
 
 ## Free machine `idx`'s part wherever it is (delivered or scrapped).
@@ -1441,6 +901,8 @@ func _clear_failed_on(idx: int) -> bool:
 	var s: PrintSim = m.get("sim")
 	if s.state != PrintSim.State.DONE_FAIL:
 		return false
+	if not m.get("prototype", {}).is_empty():
+		m["prototype"] = {}
 	s.reset()
 	if idx < _print_visuals.size():
 		_print_visuals[idx].reset()
@@ -1706,6 +1168,9 @@ func _try_interact() -> void:
 	if held != null:
 		_try_place()
 		return
+	if _aimed_design_computer():
+		_open_design_studio()
+		return
 	# Near the packing table without the part in hand: nudge, don't act.
 	for m in machines:
 		var c: Contract = m.get("contract")
@@ -1748,7 +1213,86 @@ func _grab_prompt_line() -> String:
 	var g := _current_grabbable()
 	if g != null and g.can_grab():
 		return "[E] Grab"
+	if _aimed_design_computer():
+		return "[E] Use design computer"
 	return ""
+
+func _aimed_design_computer() -> bool:
+	if _camera == null or _player == null:
+		return false
+	var q := PhysicsRayQueryParameters3D.create(_camera.global_position,
+		_camera.global_position - _camera.global_transform.basis.z * INTERACT_RANGE)
+	q.collision_mask = 1
+	q.exclude = [_player.get_rid()]
+	var hit := get_world_3d().direct_space_state.intersect_ray(q)
+	return not hit.is_empty() and hit.collider.has_meta("design_computer")
+
+func _open_design_studio() -> void:
+	if design_studio == null:
+		return
+	if main_menu != null and main_menu.is_open():
+		main_menu.close_menu()
+	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+	captured = false
+	paused = true
+	if touch_controls != null:
+		touch_controls.set_motion_enabled(false)
+	_set_reticle(false)
+	design_studio.open()
+
+func _close_design_studio() -> void:
+	if design_studio != null:
+		design_studio.close()
+	if main_menu != null:
+		main_menu.open_menu()
+	paused = true
+	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+	captured = false
+	if touch_controls != null:
+		touch_controls.set_motion_enabled(false)
+	_set_reticle(false)
+	_prompt.text = ""
+
+func _on_design_test_print(design: Dictionary) -> void:
+	var d := DesignStudio.normalize(design)
+	var idx := -1
+	for i in machines.size():
+		var m: Dictionary = _machine(i)
+		if i == 1 and not upgrades.pro_machine_unlocked():
+			continue
+		var s: PrintSim = m.get("sim")
+		if m.get("contract") == null and s.state == PrintSim.State.IDLE \
+				and m.get("prototype", {}).is_empty() and not is_instance_valid(m.get("part")):
+			idx = i
+			break
+	if idx < 0:
+		design_studio.show_feedback("Both printers are occupied. Finish or collect a job, then try again.")
+		return
+	var grams := DesignStudio.estimate_grams(d)
+	var cents_per_gram := 4 if d.material == "PLA" else 6
+	var cost := grams * cents_per_gram
+	if not ledger.charge(cost, "prototype filament"):
+		design_studio.show_feedback("Not enough balance for this prototype. Reduce its size or finish a paid job first.")
+		return
+	var m: Dictionary = _machine(idx)
+	m.prototype = d.duplicate(true)
+	m.material_cents = cost
+	var sim: PrintSim = m.get("sim")
+	sim.support_need = 0.0
+	sim.adhesion_risk = 0.0
+	sim.stability_risk = 0.0
+	sim.failure_threshold = 0.0
+	sim.failure_seeded = false
+	var speed := upgrades.speed_multiplier()
+	if idx == 1:
+		speed *= upgrades.machine_speed_multiplier()
+	sim.speed_multiplier = speed
+	var layers := clampi(ceili(float(d.height_mm) / float(d.layer_mm)), 20, 800)
+	sim.start_job("PROTO-%d" % Time.get_ticks_msec(), d.name, layers)
+	_save_game()
+	design_studio.show_feedback("Prototype started on Printer %d. It is paid from your filament balance." % (idx + 1))
+	_close_design_studio()
+	_prompt.text = "Prototype printing — click Play to return to the shop"
 
 func _update_hud() -> void:
 	_set_reticle(paused == false)
@@ -1818,6 +1362,8 @@ func _update_hud() -> void:
 				var c2: Contract = m.get("contract")
 				if c2 != null and c2.state == Contract.State.INSPECTION:
 					lines.append("%sPrint complete — [E] collect the part" % prefix)
+				elif not m.get("prototype", {}).is_empty():
+					lines.append("%sPrototype complete — [E] collect it" % prefix)
 				elif mi != 0:
 					lines.append("%sPrint complete!" % prefix)
 			PrintSim.State.DONE_FAIL:
