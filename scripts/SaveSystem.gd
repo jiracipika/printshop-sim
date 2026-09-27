@@ -19,6 +19,7 @@ extends RefCounted
 ##     "reputation": float 0..5 (optional),
 ##     "stats": Dictionary of non-negative int counters (optional),
 ##     "filament": Array[int] grams per machine (optional),
+##     "spool_colors": Array[String] per machine (optional),
 ##   }
 ##
 ## Optional keys are additive: payloads without them stay valid (older saves
@@ -93,6 +94,8 @@ static func validate(payload: Variant) -> Dictionary:
 	if not _stats_valid(p):
 		return {}
 	if not _filament_valid(p):
+		return {}
+	if not _spool_colors_valid(p):
 		return {}
 
 	var out: Dictionary = p.duplicate(true)
@@ -173,6 +176,18 @@ static func _filament_valid(p: Dictionary) -> bool:
 		return false
 	for g in p["filament"]:
 		if not _is_int(g) or int(g) < 0:
+			return false
+	return true
+
+
+## Optional "spool_colors" key: array of known color names (or "").
+static func _spool_colors_valid(p: Dictionary) -> bool:
+	if not p.has("spool_colors"):
+		return true
+	if typeof(p["spool_colors"]) != TYPE_ARRAY:
+		return false
+	for c in p["spool_colors"]:
+		if not (c is String):
 			return false
 	return true
 

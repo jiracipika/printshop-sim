@@ -137,7 +137,8 @@ func _test_deadlines() -> void:
 		"adhesion_risk": main.sim.adhesion_risk,
 		"stability_risk": main.sim.stability_risk,
 	})
-	var full: int = roundi(roundi(c.payout_cents * QualityCheck.quality_multiplier(grade)) * rep0)
+	var full: int = roundi(roundi(c.payout_cents
+		* QualityCheck.quality_multiplier(main._cap_grade_for_color(grade, c, main._machine(0)))) * rep0)
 	_ok(ledger.balance() == bal0 + full, "on-time delivery pays rep-scaled grade payout")
 
 	# Late (deadline exceeded by 1 day): half payout.
@@ -161,8 +162,9 @@ func _test_deadlines() -> void:
 	var bal1: int = ledger.balance()
 	var rep1: float = main.reputation_multiplier()
 	main._try_pack_held()
+	var eff2: String = main._cap_grade_for_color(grade2, c2, main._machine(0))
 	_ok(ledger.balance() == bal1 + roundi(roundi(roundi(c2.payout_cents
-		* QualityCheck.quality_multiplier(grade2)) * rep1) * 0.5),
+		* QualityCheck.quality_multiplier(eff2)) * rep1) * 0.5),
 		"late delivery pays exactly half (rep-scaled)")
 	_ok("LATE" in str(main._prompt.text), "HUD explains the late penalty")
 

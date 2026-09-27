@@ -65,8 +65,9 @@ func _test_reputation_and_stats() -> void:
 		s0.tick(1.0)
 	main._try_interact()  # collect
 	main._player.global_position = Vector3(2.0, 0.3, 0.9)
+	var eff_a: String = main._cap_grade_for_color("A", c, main._machine(0))
 	var expected: int = roundi(roundi(c.payout_cents
-		* QualityCheck.quality_multiplier("A")) * main.reputation_multiplier())
+		* QualityCheck.quality_multiplier(eff_a)) * main.reputation_multiplier())
 	main._try_interact()  # deliver
 	_ok(absf(main.reputation - 3.2) < 0.0001, "on-time delivery raises reputation by 0.2")
 	_ok(int(main.stats.delivered) == 1, "delivered counter incremented")

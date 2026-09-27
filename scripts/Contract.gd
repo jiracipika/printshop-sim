@@ -32,6 +32,7 @@ enum State {
 }
 
 const VALID_RISK_FLAGS: Array[String] = ["overhangs", "bed adhesion", "stability"]
+const VALID_COLORS: Array[String] = ["Clay", "Sage", "Honey"]
 
 @export var id: String = ""
 @export var client: String = ""
@@ -43,6 +44,9 @@ const VALID_RISK_FLAGS: Array[String] = ["overhangs", "bed adhesion", "stability
 @export var layers: int = 0
 @export var deadline_days: int = 0
 @export var rush: bool = false
+## Filament color the client expects ("" = any). A mismatch caps the delivery
+## grade at B — the part still ships, just for less money.
+@export var color: String = ""
 @export var state: State = State.OFFERED
 
 static var _RISK_FLAG_SET: Dictionary = {
@@ -72,6 +76,8 @@ func is_valid() -> bool:
 	for flag in risk_flags:
 		if not _RISK_FLAG_SET.has(flag):
 			return false
+	if color != "" and not (color in VALID_COLORS):
+		return false
 	return true
 
 
@@ -121,6 +127,7 @@ static func make_fixture_jobs() -> Array:
 	planter.material_cost_cents = 840 # mockup est. material $8.40
 	planter.difficulty = 2
 	planter.risk_flags = ["bed adhesion"]
+	planter.color = "Clay"
 	planter.layers = 210
 	planter.deadline_days = 2
 	jobs.append(planter)
@@ -133,6 +140,7 @@ static func make_fixture_jobs() -> Array:
 	clips.material_cost_cents = 610
 	clips.difficulty = 1
 	clips.risk_flags = []
+	clips.color = "Sage"
 	clips.layers = 120
 	clips.deadline_days = 3
 	jobs.append(clips)
@@ -145,6 +153,7 @@ static func make_fixture_jobs() -> Array:
 	brackets.material_cost_cents = 2350
 	brackets.difficulty = 4
 	brackets.risk_flags = ["overhangs", "stability"]
+	brackets.color = "Honey"
 	brackets.layers = 480
 	brackets.deadline_days = 5
 	jobs.append(brackets)
@@ -157,6 +166,7 @@ static func make_fixture_jobs() -> Array:
 	hook.material_cost_cents = 1220
 	hook.difficulty = 3
 	hook.risk_flags = ["overhangs"]
+	hook.color = "Clay"
 	hook.layers = 310
 	hook.deadline_days = 4
 	jobs.append(hook)
@@ -169,6 +179,7 @@ static func make_fixture_jobs() -> Array:
 	gauge.material_cost_cents = 700
 	gauge.difficulty = 2
 	gauge.risk_flags = ["overhangs"]
+	gauge.color = "Sage"
 	gauge.layers = 150
 	gauge.deadline_days = 2
 	gauge.rush = true
@@ -182,6 +193,7 @@ static func make_fixture_jobs() -> Array:
 	bike.material_cost_cents = 2600
 	bike.difficulty = 4
 	bike.risk_flags = ["stability"]
+	bike.color = "Honey"
 	bike.layers = 440
 	bike.deadline_days = 6
 	jobs.append(bike)
@@ -194,6 +206,7 @@ static func make_fixture_jobs() -> Array:
 	ramen.material_cost_cents = 1400
 	ramen.difficulty = 3
 	ramen.risk_flags = ["bed adhesion", "stability"]
+	ramen.color = "Clay"
 	ramen.layers = 220
 	ramen.deadline_days = 1
 	ramen.rush = true
@@ -207,6 +220,7 @@ static func make_fixture_jobs() -> Array:
 	library.material_cost_cents = 520
 	library.difficulty = 1
 	library.risk_flags = []
+	library.color = "Sage"
 	library.layers = 90
 	library.deadline_days = 4
 	jobs.append(library)
@@ -271,6 +285,9 @@ static func generate(day: int, index: int) -> Contract:
 	# Materials: layers * rate, hard-capped at 2400 cents (always affordable
 	# against the $25 opening balance).
 	c.material_cost_cents = mini(c.layers * rng.randi_range(3, 6), 2400)
+
+	# Clients have opinions about color (deterministic per slot).
+	c.color = VALID_COLORS[rng.randi_range(0, VALID_COLORS.size() - 1)]
 
 	# Rush: a quarter of the board; short deadline, ~1.4x premium.
 	c.rush = rng.randf() < 0.25

@@ -789,6 +789,13 @@ func _make_card(s: Dictionary) -> PanelContainer:
 		rush_tag.add_theme_color_override("font_color", COLOR_TERRA)
 		rush_tag.add_theme_font_size_override("font_size", 12)
 		meta.add_child(rush_tag)
+	var color_tag := Label.new()
+	color_tag.name = "ColorTag"
+	var wanted := str(s.get("color", ""))
+	color_tag.text = "  [%s]" % wanted if wanted != "" else ""
+	color_tag.add_theme_color_override("font_color", COLOR_MINT)
+	color_tag.add_theme_font_size_override("font_size", 12)
+	meta.add_child(color_tag)
 	var due := Label.new()
 	due.name = "DueTag"
 	due.text = "  · %dd" % int(s.get("deadline_days", 0))

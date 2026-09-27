@@ -36,6 +36,17 @@ https://printshop-sim.vercel.app/.
 
 ## State at this checkpoint
 
+v0.8.0 (color demands) shipped on top of v0.7.0: contracts (fixtures and
+generated) demand a filament color (Contract.color, valid set =
+DesignStudio's Clay/Sage/Honey); the crate cycles colors deterministically
+(_crate_next, sign shows the next color + today's price) and each buy sets
+the spool's meta; loading sets the machine's color (shown in the HUD
+filament line); a mismatch caps the delivery grade at B via
+Main._cap_grade_for_color (single source of truth shared with tests; applied
+after PackingStation grades, before reputation/event/late). Machine colors
+persist in the save ("spool_colors", validated). New suite
+tests/color_test.gd (27 checks); all 23 suites green (952 checks).
+
 v0.7.0 (daily events) shipped on top of v0.6.0: Events.for_day(day) deals a
 deterministic event per shop day (day 1 always quiet; from day 2 a hashed
 pool of filament_sale $8 spools, rush_week payouts x1.25, power_hiccup
@@ -135,13 +146,13 @@ cardboard/posters/rug), procedural sky + fog, ceiling fixtures, window,
 props (spool shelf, crates, plant, ticking wall clock), center reticle,
 synthesized SFX + printer hum on an "SFX" bus.
 
-Verification evidence (local): 22 Godot headless suites green — contract 255,
-events 15, spool 23, gen 24, features 31, upgrades 55, packing 58, touch 47,
-save 44, shop_art 51, economy 54, day 37, design_computer 21, parallel 23,
-prep 29, printer_visual 34, grab 26, input_pause 23, menu 25, debug_panel 32,
-room 9, smoke 9 (940 checks, 0 failures, no SCRIPT ERROR); Python build
-pipeline 21 pytest; engine screenshots confirm the sale-day HUD line and the
-$8 crate sign.
+Verification evidence (local): 23 Godot headless suites green — contract 255,
+color 27, events 15, spool 23, gen 24, features 31, upgrades 55, packing 58,
+touch 47, save 44, shop_art 51, economy 54, day 37, design_computer 21,
+parallel 23, prep 29, printer_visual 34, grab 26, input_pause 23, menu 25,
+debug_panel 32, room 9, smoke 9 (952 checks, 0 failures, no SCRIPT ERROR);
+Python build pipeline 21 pytest; engine screenshots confirm card color tags,
+the 'wants X' HUD line and per-machine color words.
 
 v0.1.0 RELEASED: commits 2f1f2af (loop/features) + ab05cc4 (shell help
 placement). Deployed to https://printshop-sim.vercel.app/ via vercel --prod;

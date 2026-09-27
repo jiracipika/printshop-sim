@@ -247,8 +247,9 @@ func debug_spawn_test_print() -> bool:
 	if m.get("contract") != best:
 		return false
 	# Confirm the "upright" prep so the print actually starts (risks written).
-	# Dev cheat: top up filament so the seam never blocks on supplies.
+	# Dev cheat: top up filament and match the color so the seam never degrades.
 	m["filament_g"] = maxi(int(m.get("filament_g")), best.layers * 6 + 500)
+	m["color"] = best.color
 	m["orient"] = 0
 	m["orient_pending"] = true
 	_prep_on(0)
@@ -331,6 +332,11 @@ func _load_save() -> void:
 	if payload.has("filament") and typeof(payload.filament) == TYPE_ARRAY:
 		for i in mini(2, payload.filament.size()):
 			machines[i]["filament_g"] = maxi(int(payload.filament[i]), 0)
+	if payload.has("spool_colors") and typeof(payload.spool_colors) == TYPE_ARRAY:
+		for i in mini(2, payload.spool_colors.size()):
+			var col = payload.spool_colors[i]
+			if col is String and (col == "" or col in Contract.VALID_COLORS):
+				machines[i]["color"] = col
 
 func apply_setting(key: String, value, persist := true) -> void:
 	settings[key] = value
@@ -353,6 +359,7 @@ func _save_game() -> void:
 			"reputation": reputation,
 			"stats": stats,
 			"filament": [int(_machine(0).get("filament_g")), int(_machine(1).get("filament_g"))],
+			"spool_colors": [str(_machine(0).get("color")), str(_machine(1).get("color"))],
 		})
 	var ok: bool = load("res://scripts/BrowserSave.gd").save_payload(payload)
 	save_status_line = "%s at %s" % ["saved ok" if ok else "save FAILED",
@@ -541,6 +548,7 @@ func _build_world() -> void:
 			"idx": i, "sim": s, "contract": null, "day": 0,
 			"orient": 0, "orient_pending": false, "part": null, "scrap": false,
 			"filament_g": SPOOL_G if i == 0 else 0,  # shop opens with one spool loaded
+			"color": "Clay" if i == 0 else "",
 			"last_est_g": 0,
 			"prototype": {},
 		})
@@ -555,8 +563,12 @@ func _build_world() -> void:
 ## Recompute today's event and anything that displays it (crate price tag).
 func _refresh_event() -> void:
 	today_event = Events.for_day(day_cycle.day)
+	_refresh_crate_label()
+
+func _refresh_crate_label() -> void:
 	if _crate_label != null:
-		_crate_label.text = "SPOOL CRATE\n$%d" % (int(today_event.spool_price_cents) / 100)
+		_crate_label.text = "SPOOL CRATE\n$%d · %s" % [
+			int(today_event.spool_price_cents) / 100, _crate_color()]
 
 ## Day/night (v0.2.0): brightness and warmth follow the shop clock. Direction
 ## stays fixed (interior scene); energy/color carry the time of day.
@@ -767,7 +779,7 @@ func _build_props() -> void:
 	spool_crate.add_to_group("props")
 	add_child(spool_crate)
 	var spool_crate_lbl := Label3D.new()
-	spool_crate_lbl.text = "SPOOL CRATE\n$%d" % (int(today_event.spool_price_cents) / 100)
+	spool_crate_lbl.text = "SPOOL CRATE\n$%d · %s" % [int(today_event.spool_price_cents) / 100, _crate_color()]
 	_crate_label = spool_crate_lbl
 	spool_crate_lbl.font_size = 40
 	spool_crate_lbl.pixel_size = 0.0028
@@ -1468,14 +1480,22 @@ func _load_spool(idx: int) -> void:
 	if idx == 1 and not upgrades.pro_machine_unlocked():
 		_set_prompt("Printer 2 is locked — buy the Pro machine upgrade (menu)")
 		return
+	var loaded_color := str(held.get_meta("spool_color", "Clay"))
 	held.get_parent().remove_child(held)
 	held.queue_free()
 	held = null
 	m["filament_g"] = int(m.get("filament_g")) + SPOOL_G
+	m["color"] = loaded_color
 	sfx.play("place")
-	_set_prompt("Printer %d loaded — %dg of filament on the machine" % [idx + 1, int(m.get("filament_g"))])
+	_set_prompt("Printer %d loaded — %dg of %s filament" % [idx + 1, int(m.get("filament_g")), loaded_color])
 
 ## Buy a spool at the crate and put it straight into the player's hands.
+## Crate stock cycles deterministically; the sign always shows the next color.
+var _crate_next := 0
+
+func _crate_color() -> String:
+	return Contract.VALID_COLORS[_crate_next % Contract.VALID_COLORS.size()]
+
 func _buy_spool() -> void:
 	var price := int(today_event.spool_price_cents)
 	if not ledger.can_afford(price):
@@ -1483,18 +1503,22 @@ func _buy_spool() -> void:
 		return
 	if not ledger.charge(price, "spool"):
 		return
-	var spool := _make_crate_spool()
+	var color := _crate_color()
+	_crate_next += 1
+	_refresh_crate_label()
+	var spool := _make_crate_spool(color)
 	add_child(spool)
 	spool.global_position = _player.global_position + Vector3(0, 1.2, 0)
 	_attach_to_hand(spool)
 	sfx.play("grab")
-	_set_prompt("Spool bought — carry it to a printer and press E to load it")
+	_set_prompt("%s spool bought — carry it to a printer and press E to load it" % color)
 
-func _make_crate_spool() -> Grabbable:
+func _make_crate_spool(color: String) -> Grabbable:
 	var spool := Grabbable.new()
 	spool.name = "Spool"
 	spool.mass = 1.0
 	spool.set_meta("spool", true)
+	spool.set_meta("spool_color", color)
 	var mesh := MeshInstance3D.new()
 	var cyl := CylinderMesh.new()
 	cyl.top_radius = 0.14
@@ -1502,7 +1526,7 @@ func _make_crate_spool() -> Grabbable:
 	cyl.height = 0.28
 	mesh.mesh = cyl
 	var mat := StandardMaterial3D.new()
-	mat.albedo_color = Color("#738771")
+	mat.albedo_color = Color(DesignStudio.FILAMENTS.get(color, "#DA623A"))
 	mat.roughness = 0.6
 	mesh.material_override = mat
 	spool.add_child(mesh)
@@ -1673,13 +1697,15 @@ func _try_pack_held() -> bool:
 		else:
 			_set_prompt("Pack refused: %s" % result.get("reason", "?"))
 		return true
+	var eff_grade: String = _cap_grade_for_color(result.grade, c, m)
+	var eff_payout: int = roundi(c.payout_cents * QualityCheck.quality_multiplier(eff_grade))
 	if not _advance(c, Contract.State.PACKED):
 		return true
 	if not _advance(c, Contract.State.DELIVERED):
 		return true
-	# Final payout: grade x reputation x event; late work halves at the end.
+	# Final payout: effective grade x reputation x event; late halves last.
 	var late := _is_late_for(m)
-	var payout: int = roundi(float(result.payout_cents) * reputation_multiplier())
+	var payout: int = roundi(float(eff_payout) * reputation_multiplier())
 	payout = roundi(float(payout) * float(today_event.payout_mult))
 	if late:
 		payout = roundi(float(payout) * LATE_PAYOUT_FACTOR)
@@ -1688,7 +1714,7 @@ func _try_pack_held() -> bool:
 	_repay_rent_debt()
 	_discard_part_for(m)
 	m["contract"] = null
-	last_pack_grade = result.grade
+	last_pack_grade = eff_grade
 	# Reputation and lifetime stats.
 	if late:
 		_rep_event(-0.2)
@@ -1706,6 +1732,13 @@ func _try_pack_held() -> bool:
 		_set_prompt("Delivered %s (%s) — $%s · rep up" % [c.model_name, result.grade,
 			_cents_str(payout)])
 	return true
+
+## A wrong spool color caps the grade at B (the part still ships).
+func _cap_grade_for_color(grade: String, contract: Contract, m: Dictionary) -> String:
+	if grade == "A" and contract.color != "" \
+			and str(m.get("color")) != contract.color:
+		return "B"
+	return grade
 
 ## F-grade escape hatch: scrap the part, fail the contract, no payout.
 func _scrap_held() -> bool:
@@ -2169,9 +2202,11 @@ func _update_hud() -> void:
 		var tag := "" if mi == 0 else " · Printer %d" % (mi + 1)
 		var due := _days_remaining_for(m)
 		var due_text := "due in %dd" % due if due >= 0 else "LATE — half pay"
-		lines.append("Contract %s — %s [%s] pays $%s · %s%s" % [
+		var want: String = c.color
+		lines.append("Contract %s — %s [%s] pays $%s · %s%s%s" % [
 			c.id, c.model_name, Contract.state_name(c.state),
 			_cents_str(c.payout_cents), due_text, tag,
+			"" if want == "" else " · wants %s" % want,
 		])
 		if c.state == Contract.State.PREPARING:
 			var orient := _orientation_name_for(mi)
@@ -2191,7 +2226,8 @@ func _update_hud() -> void:
 	var fil_bits: Array[String] = []
 	for m in machines:
 		var fg := int(m.get("filament_g"))
-		fil_bits.append("P%d %dg" % [int(m.get("idx")) + 1, fg])
+		var col: String = str(m.get("color", ""))
+		fil_bits.append("P%d %dg %s" % [int(m.get("idx")) + 1, fg, col if col != "" else "—"])
 	lines.append("Filament — " + " · ".join(fil_bits))
 	# Focused machine's action line, then per-machine print progress.
 	var fm := _machine(_focus)
