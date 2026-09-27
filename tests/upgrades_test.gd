@@ -112,6 +112,7 @@ func _test_main_purchase_flow() -> void:
 	ledger.credit(4000, "test funds 2")
 	main._on_menu_upgrade_buy("dual_gear")
 	_ok(absf(main.sim.speed_multiplier - 1.3) < 0.0001, "sim speed multiplier applied to live sim")
+	main._machine(0)["filament_g"] = 5000  # test setup: plenty of filament
 	main._accept_print()
 	var c: Contract = main.active_contract
 	if c != null:

@@ -18,6 +18,7 @@ extends RefCounted
 ##     "day": int >= 1 (optional — shop day counter),
 ##     "reputation": float 0..5 (optional),
 ##     "stats": Dictionary of non-negative int counters (optional),
+##     "filament": Array[int] grams per machine (optional),
 ##   }
 ##
 ## Optional keys are additive: payloads without them stay valid (older saves
@@ -91,6 +92,8 @@ static func validate(payload: Variant) -> Dictionary:
 		return {}
 	if not _stats_valid(p):
 		return {}
+	if not _filament_valid(p):
+		return {}
 
 	var out: Dictionary = p.duplicate(true)
 	out["version"] = int(p["version"])
@@ -160,6 +163,18 @@ static func _reputation_valid(p: Dictionary) -> bool:
 	if t != TYPE_FLOAT and t != TYPE_INT:
 		return false
 	return float(p["reputation"]) >= 0.0 and float(p["reputation"]) <= 5.0
+
+
+## Optional "filament" key: array of non-negative gram counts per machine.
+static func _filament_valid(p: Dictionary) -> bool:
+	if not p.has("filament"):
+		return true
+	if typeof(p["filament"]) != TYPE_ARRAY:
+		return false
+	for g in p["filament"]:
+		if not _is_int(g) or int(g) < 0:
+			return false
+	return true
 
 
 ## Optional "stats" key: dict of known non-negative int counters.

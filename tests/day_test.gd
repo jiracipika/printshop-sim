@@ -134,6 +134,7 @@ func _test_deadlines() -> void:
 	_ok(ledger.balance() == bal0 + full, "on-time delivery pays rep-scaled grade payout")
 
 	# Late (deadline exceeded by 1 day): half payout.
+	main._machine(0)["filament_g"] = 5000  # test setup: plenty of filament
 	main.sim.failure_seeded = false
 	main._try_interact()
 	var c2: Contract = main.active_contract
@@ -159,6 +160,7 @@ func _test_deadlines() -> void:
 	_ok("LATE" in str(main._prompt.text), "HUD explains the late penalty")
 
 	# Cancellation window: deadline + 2 days fails the contract at rollover.
+	main._machine(0)["filament_g"] = 5000
 	main._try_interact()
 	var c3: Contract = main.active_contract
 	if c3 != null:
@@ -195,6 +197,7 @@ func _test_pro_machine() -> void:
 
 	# Buy the pro machine: unlock + display refresh.
 	main._on_menu_upgrade_buy("pro_machine")
+	main._machine(1)["filament_g"] = 5000  # test setup: plenty of filament
 	_ok(main.upgrades.pro_machine_unlocked(), "pro machine purchase unlocks")
 	_ok(not p2.is_locked(), "printer 2 shows unlocked")
 	_ok("PRO" in str(p2._name_label.text), "printer 2 renamed to PRO")

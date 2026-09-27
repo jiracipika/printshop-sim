@@ -86,7 +86,9 @@ func _run() -> void:
 	_ok(contract.state == Contract.State.PREPARING,
 		"accept parks contract at PREPARING for orientation prep")
 	_ok(not main.sim.is_running(), "print does not start before orientation confirm")
-	_ok(ledger.balance() == 2500, "no material charge before orientation confirm")
+	_ok(ledger.balance() == 2500, "no money spent before orientation confirm")
+	_ok(int(main._machine(0).get("filament_g")) == 1500,
+		"printer ships with a 1500 g spool, untouched before confirm")
 	main._update_hud()
 	_ok("Prep" in main._status.text, "HUD shows prep prompt while PREPARING")
 	main._try_interact()  # first prep press: preview (index advances to tilted)
@@ -103,19 +105,15 @@ func _run() -> void:
 	_ok(absf(main.sim.support_need - float(tilted_eval.support_need)) < 0.001 \
 		and absf(main.sim.adhesion_risk - float(tilted_eval.adhesion_risk)) < 0.001,
 		"prep risks written into sim (tilted, matches PrepSystem)")
-	_ok(ledger.balance() == 2500 - contract.material_cost_cents,
-		"material_cost_cents charged at orientation confirm")
-	var charged := false
-	for t in ledger.transactions:
-		if contract.id in str(t["reason"]) and t["delta_cents"] == -contract.material_cost_cents:
-			charged = true
-	_ok(charged, "material charge logged in transactions with contract id")
+	var tilted_est: int = int(PrepSystem.evaluate(contract, "tilted").estimated_material_g)
+	_ok(int(main._machine(0).get("filament_g")) == 1500 - tilted_est,
+		"confirm consumes the prep estimate from the loaded spool (%d g)" % tilted_est)
+	_ok(ledger.balance() == 2500, "filament, not money, is the material cost")
 	main._update_hud()
 	_ok(contract.model_name in main._status.text
 		and Contract.state_name(contract.state) in main._status.text,
 		"HUD active-contract line shows model and state")
-	_ok("Balance: $%s" % _fmt(2500 - contract.material_cost_cents) in main._status.text,
-		"HUD balance reflects material charge")
+	_ok("Filament" in main._status.text, "HUD shows the filament line")
 
 	# --- 2. cannot accept a second contract while one is active ---
 	var bal_running: int = ledger.balance()
@@ -184,6 +182,7 @@ func _run() -> void:
 		"HUD shows post-payout balance")
 
 	# --- 5. failure path: FAILED via legal path, clear required, zero payout ---
+	main._machine(0)["filament_g"] = 5000  # test setup: plenty of filament
 	main.sim.failure_seeded = true
 	main._try_interact()  # accept next fixture job -> PREPARING
 	_ok(_prop(main, "active_contract") != null
@@ -198,8 +197,8 @@ func _run() -> void:
 		_finish(1)
 		return
 	var bal2: int = ledger.balance()
-	_ok(bal2 == bal_before_payout + expected_payout - contract2.material_cost_cents,
-		"material charged for second job")
+	_ok(bal2 == bal_before_payout + expected_payout,
+		"confirm spends filament, not money")
 	main.paused = true
 	_drive()
 	_ok(main.sim.state == PrintSim.State.DONE_FAIL, "seeded failure reaches DONE_FAIL")
@@ -213,14 +212,16 @@ func _run() -> void:
 	main._try_interact()  # clear the spoiled print off the bed
 	_ok(main.sim.state == PrintSim.State.IDLE, "failed print must be cleared before the next job")
 
-	# --- 6. insufficient funds refuses print start ---
+	# --- 6. no funds, no spools: the crate refuses, nothing prints ---
 	ledger.charge(ledger.balance(), "test drain")  # keeps tx-replay invariant
+	main._player.global_position = Vector3(-2.95, 0.3, 0.3)  # at the spool crate
 	main.paused = false
+	var hands_before: int = 0 if main.held == null else 1
 	main._try_interact()
-	_ok(_prop(main, "active_contract") == null, "no contract active after refused start")
-	_ok(not main.sim.is_running(), "print did not start without funds")
-	_ok(ledger.balance() == 0, "no material charge without funds")
-	_ok("Not enough funds" in main._prompt.text, "HUD explains Not enough funds")
+	_ok(main.held == null and hands_before == 0, "crate refuses when broke: no spool in hand")
+	_ok("not enough funds" in str(main._prompt.text), "HUD explains the spool price")
+	_ok(_prop(main, "active_contract") == null and not main.sim.is_running(),
+		"nothing started while broke")
 
 	_finish(1 if failures > 0 else 0)
 

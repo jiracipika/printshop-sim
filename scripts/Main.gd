@@ -16,6 +16,14 @@ const BASE_FAILURE_THRESHOLD := 0.55
 const RENT_CENTS := 400
 const LATE_PAYOUT_FACTOR := 0.5
 
+## --- spool economy (v0.6.0) ---
+## Filament is physical: printers hold grams from loaded spools, jobs consume
+## the prep estimate, failed clears salvage half back. New spools come from
+## the crate by the shelf.
+const SPOOL_G := 1500
+const SPOOL_PRICE_CENTS := 1200
+const CRATE_POS := Vector3(-3.0, 0.0, 1.4)  # supplies corner, clear of the printers
+
 var job_board: Node
 var ledger: Ledger
 var upgrades: Upgrades
@@ -119,6 +127,8 @@ func _on_menu_upgrade_buy(id: String) -> void:
 		return
 	upgrades.buy(id)
 	_apply_upgrade_effects()
+	if id == "pro_machine":
+		_machine(1)["filament_g"] = SPOOL_G  # ships with a spool loaded
 	_refresh_printer_locks()
 	_save_game()
 	sfx.play("upgrade")
@@ -134,13 +144,35 @@ func _on_menu_stats() -> void:
 	var stars := ""
 	for i in range(5):
 		stars += "★" if i < roundi(reputation) else "☆"
-	main_menu.show_stats([
+	var lines: Array[String] = [
 		"Days in business: %d" % maxi(day_cycle.day - 1, 0),
 		"Parts delivered: %d  (%d late, %d scrapped, %d cancelled)" % [
 			int(stats.delivered), int(stats.late), int(stats.scrapped), int(stats.cancelled)],
 		"Lifetime earnings: $%s" % _cents_str(int(stats.earned_cents)),
 		"Reputation: %s %.1f / 5  (payout x%.2f)" % [stars, reputation, reputation_multiplier()],
-	])
+		"",
+		"MILESTONES",
+	]
+	for a in _achievements():
+		lines.append(("%s  %s" % ["✓", a.name]) if a.done else ("·  %s — %s" % [a.name, a.hint]))
+	main_menu.show_stats(lines)
+
+## Computed milestones (v0.6.0) — derived from live state, nothing to persist.
+func _achievements() -> Array[Dictionary]:
+	return [
+		{"name": "First sale", "hint": "deliver your first part",
+			"done": int(stats.delivered) >= 1},
+		{"name": "Ten orders", "hint": "deliver 10 parts",
+			"done": int(stats.delivered) >= 10},
+		{"name": "Five stars", "hint": "reach a 4.5+ reputation",
+			"done": reputation >= 4.5},
+		{"name": "Fully kitted", "hint": "own all 8 upgrades",
+			"done": upgrades.owned_count() == 8},
+		{"name": "Week one", "hint": "keep the shop open past day 7",
+			"done": day_cycle.day > 7},
+		{"name": "High earner", "hint": "earn $500 lifetime",
+			"done": int(stats.earned_cents) >= 50000},
+	]
 
 ## Settings sliders write through on menu close, not on every drag tick.
 func _flush_settings_if_dirty() -> void:
@@ -212,6 +244,8 @@ func debug_spawn_test_print() -> bool:
 	if m.get("contract") != best:
 		return false
 	# Confirm the "upright" prep so the print actually starts (risks written).
+	# Dev cheat: top up filament so the seam never blocks on supplies.
+	m["filament_g"] = maxi(int(m.get("filament_g")), best.layers * 6 + 500)
 	m["orient"] = 0
 	m["orient_pending"] = true
 	_prep_on(0)
@@ -289,6 +323,9 @@ func _load_save() -> void:
 		for key in ["delivered", "late", "scrapped", "cancelled", "earned_cents"]:
 			if payload.stats.has(key):
 				stats[key] = maxi(int(payload.stats[key]), 0)
+	if payload.has("filament") and typeof(payload.filament) == TYPE_ARRAY:
+		for i in mini(2, payload.filament.size()):
+			machines[i]["filament_g"] = maxi(int(payload.filament[i]), 0)
 
 func apply_setting(key: String, value, persist := true) -> void:
 	settings[key] = value
@@ -310,6 +347,7 @@ func _save_game() -> void:
 			"day": day_cycle.day,
 			"reputation": reputation,
 			"stats": stats,
+			"filament": [int(_machine(0).get("filament_g")), int(_machine(1).get("filament_g"))],
 		})
 	var ok: bool = load("res://scripts/BrowserSave.gd").save_payload(payload)
 	save_status_line = "%s at %s" % ["saved ok" if ok else "save FAILED",
@@ -497,7 +535,8 @@ func _build_world() -> void:
 		machines.append({
 			"idx": i, "sim": s, "contract": null, "day": 0,
 			"orient": 0, "orient_pending": false, "part": null, "scrap": false,
-			"material_cents": 0,
+			"filament_g": SPOOL_G if i == 0 else 0,  # shop opens with one spool loaded
+			"last_est_g": 0,
 			"prototype": {},
 		})
 		s.print_started.connect(_on_print_started.bind(i))
@@ -703,6 +742,39 @@ func _build_props() -> void:
 	crate_body.position = Vector3(3.0, 0.35, 1.78)
 	add_child(crate_body)
 
+	# Spool crate: buy fresh spools here ($12, one per press with free hands).
+	var spool_crate := MeshInstance3D.new()
+	var crate_box := BoxMesh.new()
+	crate_box.size = Vector3(0.55, 0.5, 0.45)
+	spool_crate.mesh = crate_box
+	var spool_crate_mat := StandardMaterial3D.new()
+	spool_crate_mat.albedo_color = Color.WHITE
+	spool_crate_mat.albedo_texture = ShopArt.cardboard(Color("#A8845A"))
+	spool_crate_mat.roughness = 0.9
+	spool_crate.material_override = spool_crate_mat
+	spool_crate.position = CRATE_POS + Vector3(0, 0.25, 0)
+	spool_crate.add_to_group("props")
+	add_child(spool_crate)
+	var spool_crate_lbl := Label3D.new()
+	spool_crate_lbl.text = "SPOOL CRATE\n$%d" % (SPOOL_PRICE_CENTS / 100)
+	spool_crate_lbl.font_size = 40
+	spool_crate_lbl.pixel_size = 0.0028
+	spool_crate_lbl.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	spool_crate_lbl.modulate = Color("#EEE5D3")
+	spool_crate_lbl.outline_modulate = Color("#202B2B")
+	spool_crate_lbl.outline_size = 4
+	spool_crate_lbl.position = CRATE_POS + Vector3(0, 0.75, 0)
+	add_child(spool_crate_lbl)
+	var spool_crate_body := StaticBody3D.new()
+	spool_crate_body.collision_layer = 1
+	var spool_crate_shape := CollisionShape3D.new()
+	var spool_crate_col := BoxShape3D.new()
+	spool_crate_col.size = Vector3(0.55, 0.5, 0.45)
+	spool_crate_shape.shape = spool_crate_col
+	spool_crate_body.add_child(spool_crate_shape)
+	spool_crate_body.position = CRATE_POS + Vector3(0, 0.25, 0)
+	add_child(spool_crate_body)
+
 	# Potted plant in the front-left corner.
 	var pot := MeshInstance3D.new()
 	var pot_cyl := CylinderMesh.new()
@@ -830,6 +902,7 @@ func _add_poster(tex: ImageTexture, pos: Vector3, rot_deg: Vector3, caption: Str
 func _add_spool(pos: Vector3) -> void:
 	var spool := Grabbable.new()
 	spool.name = "Spool"
+	spool.set_meta("spool", true)
 	var mesh := MeshInstance3D.new()
 	var cyl := CylinderMesh.new()
 	cyl.top_radius = 0.14
@@ -1299,6 +1372,9 @@ func _update_print_visuals(delta: float) -> void:
 				printer.set_nozzle_scan(elapsed_nozzle_clock, s.progress(), print_height)
 			if _hum != null:
 				_hum.global_position = printer.global_position + Vector3(0, 0.3, 0)
+		# Spool coil reflects remaining filament.
+		if i < _printers.size() and _printers[i].get("set_filament") != null:
+			_printers[i].set_filament(clampf(float(machines[i].get("filament_g", 0)) / float(SPOOL_G), 0.0, 1.0))
 
 	if _hum != null:
 		if any_running and not _hum.playing:
@@ -1358,6 +1434,83 @@ func _is_held_part() -> bool:
 func _near_packing_station() -> bool:
 	return packing_station != null and _player != null \
 		and _player.global_position.distance_to(packing_station.global_position) <= INTERACT_RANGE
+
+func _near_crate() -> bool:
+	# Tight radius: buying must be a deliberate act at the crate, never an
+	# accident while interacting with the nearby printer or shelf.
+	return _player != null and _player.global_position.distance_to(CRATE_POS) <= 1.6
+
+func _is_held_spool() -> bool:
+	return held != null and bool(held.get_meta("spool", false))
+
+## Nearest printer within interact range, as a machine index (-1 if none).
+func _printer_index_near() -> int:
+	var printer := _nearest_printer()
+	if printer == null:
+		return -1
+	return clampi(int(printer.get_meta("printer_index", 0)), 0, maxi(machines.size() - 1, 0))
+
+## Consume the held spool into machine `idx`'s filament supply.
+func _load_spool(idx: int) -> void:
+	var m := _machine(idx)
+	if idx == 1 and not upgrades.pro_machine_unlocked():
+		_set_prompt("Printer 2 is locked — buy the Pro machine upgrade (menu)")
+		return
+	held.get_parent().remove_child(held)
+	held.queue_free()
+	held = null
+	m["filament_g"] = int(m.get("filament_g")) + SPOOL_G
+	sfx.play("place")
+	_set_prompt("Printer %d loaded — %dg of filament on the machine" % [idx + 1, int(m.get("filament_g"))])
+
+## Buy a spool at the crate and put it straight into the player's hands.
+func _buy_spool() -> void:
+	if not ledger.can_afford(SPOOL_PRICE_CENTS):
+		_set_prompt("A new spool costs $%s — not enough funds" % _cents_str(SPOOL_PRICE_CENTS))
+		return
+	if not ledger.charge(SPOOL_PRICE_CENTS, "spool"):
+		return
+	var spool := _make_crate_spool()
+	add_child(spool)
+	spool.global_position = _player.global_position + Vector3(0, 1.2, 0)
+	_attach_to_hand(spool)
+	sfx.play("grab")
+	_set_prompt("Spool bought — carry it to a printer and press E to load it")
+
+func _make_crate_spool() -> Grabbable:
+	var spool := Grabbable.new()
+	spool.name = "Spool"
+	spool.mass = 1.0
+	spool.set_meta("spool", true)
+	var mesh := MeshInstance3D.new()
+	var cyl := CylinderMesh.new()
+	cyl.top_radius = 0.14
+	cyl.bottom_radius = 0.14
+	cyl.height = 0.28
+	mesh.mesh = cyl
+	var mat := StandardMaterial3D.new()
+	mat.albedo_color = Color("#738771")
+	mat.roughness = 0.6
+	mesh.material_override = mat
+	spool.add_child(mesh)
+	var hub := MeshInstance3D.new()
+	var hub_cyl := CylinderMesh.new()
+	hub_cyl.top_radius = 0.05
+	hub_cyl.bottom_radius = 0.05
+	hub_cyl.height = 0.3
+	hub.mesh = hub_cyl
+	var hub_mat := StandardMaterial3D.new()
+	hub_mat.albedo_color = Color("#3A4644")
+	hub_mat.roughness = 0.4
+	hub.material_override = hub_mat
+	spool.add_child(hub)
+	var shape := CollisionShape3D.new()
+	var col := CylinderShape3D.new()
+	col.radius = 0.14
+	col.height = 0.28
+	shape.shape = col
+	spool.add_child(shape)
+	return spool
 
 ## The machine whose printed part the player is holding (or -1).
 func _machine_for_part(part: Grabbable) -> int:
@@ -1575,12 +1728,12 @@ func _clear_failed_on(idx: int) -> bool:
 		_print_visuals[idx].reset()
 	if idx < _printers.size() and _printers[idx].get("set_failed") != null:
 		_printers[idx].set_failed(false)
-	var salvage := int(m.get("material_cents", 0)) / 2
-	if salvage > 0:
-		ledger.credit(salvage, "salvage %s" % s.job_id)
+	var salvage_g := int(m.get("last_est_g", 0)) / 2
+	if salvage_g > 0:
+		m["filament_g"] = int(m.get("filament_g")) + salvage_g
 	sfx.play("place")
-	if salvage > 0:
-		_set_prompt("Cleared the failed print — $%s of filament salvaged" % _cents_str(salvage))
+	if salvage_g > 0:
+		_set_prompt("Cleared the failed print — %dg of filament salvaged onto the spool" % salvage_g)
 	else:
 		_set_prompt("Failed print cleared from the bed")
 	return true
@@ -1648,20 +1801,19 @@ func _prep_on(idx: int) -> void:
 		m["orient"] = (int(m.get("orient")) + 1) % PrepSystem.orientations().size()
 		_show_prep_preview_for(idx)
 		return
-	if not ledger.can_afford(c.material_cost_cents):
-		c.state = Contract.State.OFFERED
-		job_board.put_back(c)
-		m["contract"] = null
-		m["orient_pending"] = false
-		_set_prompt("Not enough funds for materials ($%s)" % _cents_str(c.material_cost_cents))
-		return
-	if not ledger.charge(c.material_cost_cents, "materials %s" % c.id):
+	# Filament is the material: the print consumes the prep estimate from the
+	# loaded spool. Stay PREPARING (preview kept) so E re-confirms after a load.
+	var est_g: int = int(eval.estimated_material_g)
+	if int(m.get("filament_g")) < est_g:
+		m["orient_pending"] = true
+		_set_prompt("Printer %d needs %dg of filament — load a spool ($%s at the crate)" % [
+			idx + 1, est_g, _cents_str(SPOOL_PRICE_CENTS)])
 		return
 	if not _advance(c, Contract.State.PRINTING):
-		ledger.credit(c.material_cost_cents, "refund materials %s" % c.id)
 		m["contract"] = null
 		return
-	m["material_cents"] = c.material_cost_cents
+	m["filament_g"] = int(m.get("filament_g")) - est_g
+	m["last_est_g"] = est_g
 	_write_prep_to_sim(eval, idx)
 	m["orient_pending"] = false
 	var s: PrintSim = m.get("sim")
@@ -1720,12 +1872,6 @@ func _accept_on(idx: int) -> void:
 	if not _advance(job, Contract.State.PREPARING):
 		_advance(job, Contract.State.FAILED)
 		job_board.put_back(job)
-		return
-	if not ledger.can_afford(job.material_cost_cents):
-		# Refuse BEFORE any irreversible step; hand the job back untouched.
-		job.state = Contract.State.OFFERED
-		job_board.put_back(job)
-		_set_prompt("Not enough funds for materials ($%s)" % _cents_str(job.material_cost_cents))
 		return
 	m["contract"] = job
 	m["day"] = day_cycle.day
@@ -1831,6 +1977,17 @@ func _try_interact() -> void:
 		else:
 			_try_pack_held()
 		return
+	# Holding a spool at a printer loads its filament (beats placing).
+	if held != null and _is_held_spool():
+		var pi := _printer_index_near()
+		if pi >= 0:
+			_load_spool(pi)
+			return
+	# Empty-handed at the crate buys a spool.
+	if _near_crate():
+		if held == null:
+			_buy_spool()
+			return
 	# Holding an object: E means place, not start a print.
 	if held != null:
 		_try_place()
@@ -1876,6 +2033,10 @@ func _grab_prompt_line() -> String:
 				return "[E] Scrap this part" if (mi >= 0 and bool(_machine(mi).get("scrap"))) \
 					else "[E] Pack & deliver"
 			return "Carry it to the packing table ([E] sets it down)"
+		if _is_held_spool() and _printer_index_near() >= 0:
+			return "[E] Load spool into Printer %d" % (_printer_index_near() + 1)
+		if _is_held_spool():
+			return "Carry it to a printer and press E to load it"
 		return "[E] Place"
 	var g := _current_grabbable()
 	if g != null and g.can_grab():
@@ -1936,14 +2097,14 @@ func _on_design_test_print(design: Dictionary) -> void:
 		design_studio.show_feedback("Both printers are occupied. Finish or collect a job, then try again.")
 		return
 	var grams := DesignStudio.estimate_grams(d)
-	var cents_per_gram := 4 if d.material == "PLA" else 6
-	var cost := grams * cents_per_gram
-	if not ledger.charge(cost, "prototype filament"):
-		design_studio.show_feedback("Not enough balance for this prototype. Reduce its size or finish a paid job first.")
-		return
 	var m: Dictionary = _machine(idx)
+	if int(m.get("filament_g")) < grams:
+		design_studio.show_feedback("Printer %d needs %dg of filament — load a spool ($%s at the crate), then try again." % [
+			idx + 1, grams, _cents_str(SPOOL_PRICE_CENTS)])
+		return
 	m.prototype = d.duplicate(true)
-	m.material_cents = cost
+	m.filament_g = int(m.get("filament_g")) - grams
+	m.last_est_g = grams
 	var sim: PrintSim = m.get("sim")
 	if idx < _print_visuals.size():
 		_print_visuals[idx].set_design(d)
@@ -2007,6 +2168,11 @@ func _update_hud() -> void:
 			else:
 				lines.append("Prep: [E] preview orientation")
 	lines.append("Jobs waiting: %d" % job_board.get_available_count())
+	var fil_bits: Array[String] = []
+	for m in machines:
+		var fg := int(m.get("filament_g"))
+		fil_bits.append("P%d %dg" % [int(m.get("idx")) + 1, fg])
+	lines.append("Filament — " + " · ".join(fil_bits))
 	# Focused machine's action line, then per-machine print progress.
 	var fm := _machine(_focus)
 	var fs: PrintSim = fm.get("sim")

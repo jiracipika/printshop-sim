@@ -72,12 +72,13 @@ func _test_reputation_and_stats() -> void:
 	_ok(int(main.stats.delivered) == 1, "delivered counter incremented")
 	_ok(int(main.stats.earned_cents) == expected,
 		"earned_cents includes the rep-scaled payout ($%s)" % main._cents_str(expected))
-	_ok(ledger.balance() == bal0 - c.material_cost_cents + expected,
-		"balance reflects materials + rep-scaled grade-A payout")
+	_ok(ledger.balance() == bal0 + expected,
+		"balance reflects the rep-scaled grade-A payout (filament was the material)")
 	main._update_hud()
 	_ok("Rep ★★★☆☆ 3.2" in main._status.text, "HUD rep text updates (still 3 stars)")
 
 	# Late delivery: half pay, rep -0.2, late counter.
+	main._machine(0)["filament_g"] = 5000  # test setup: plenty of filament
 	ledger.credit(30000, "test funds 2")
 	main._player.global_position = Vector3(-1.8, 0.3, -1.0)
 	main._focus = 0
@@ -99,6 +100,7 @@ func _test_reputation_and_stats() -> void:
 		"late delivery still pays (half, rep-scaled)")
 
 	# Scrap path: rep -0.4, scrapped counter.
+	main._machine(0)["filament_g"] = 5000
 	ledger.credit(30000, "test funds 3")
 	main._player.global_position = Vector3(-1.8, 0.3, -1.0)
 	main._try_interact()
@@ -161,6 +163,7 @@ func _test_salvage_and_upgrades() -> void:
 
 	# Salvage: clearing a failed print refunds half the material cost.
 	# (failure_seeded bites mid-print even on a job already running.)
+	main._machine(0)["filament_g"] = 5000
 	main._player.global_position = Vector3(-1.8, 0.3, -1.0)
 	main._focus = 0
 	main._try_interact()
@@ -175,11 +178,12 @@ func _test_salvage_and_upgrades() -> void:
 	while s0.is_running():
 		s0.tick(1.0)
 	_ok(s0.state == PrintSim.State.DONE_FAIL, "seeded failure reaches DONE_FAIL")
-	var bal0: int = ledger.balance()
+	var fil_before: int = int(main._machine(0).get("filament_g"))
+	var est: int = int(PrepSystem.evaluate(c, "upright").estimated_material_g)
 	main._try_interact()  # clear the spoiled print
-	var expected_salvage: int = c.material_cost_cents / 2
-	_ok(ledger.balance() == bal0 + expected_salvage,
-		"clearing a failed print salvages half the material ($%s)" % main._cents_str(expected_salvage))
+	var expected_salvage: int = est / 2
+	_ok(int(main._machine(0).get("filament_g")) == fil_before + expected_salvage,
+		"clearing a failed print salvages half the grams (%d g)" % expected_salvage)
 	_ok("salvaged" in str(main._prompt.text), "HUD explains the salvage")
 	main.sim.failure_seeded = false
 

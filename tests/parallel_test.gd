@@ -40,6 +40,8 @@ func _run() -> void:
 	# Unlock printer 2 for the parallel section.
 	main._on_menu_upgrade_buy("pro_machine")
 	_ok(main.upgrades.pro_machine_unlocked(), "pro machine unlocked for the test")
+	main._machine(0)["filament_g"] = 5000  # test setup: plenty of filament
+	main._machine(1)["filament_g"] = 5000
 
 	# --- machine 0: accept + confirm at printer A ---
 	main._player.global_position = Vector3(-1.8, 0.3, -1.0)

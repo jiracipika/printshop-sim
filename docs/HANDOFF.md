@@ -36,6 +36,24 @@ https://printshop-sim.vercel.app/.
 
 ## State at this checkpoint
 
+v0.6.0 (spool economy) shipped on top of v0.5.0 + the concurrent design-
+computer commits (80f18ae, 6e6b349 — note: those sessions share this clone;
+ALWAYS git pull --rebase before pushing and re-grep files before patching,
+their edits landed mid-slice and silently voided three of my patches):
+filament is physical now. Machines carry filament_g (printer 1 opens with a
+1500 g spool; printer 2 ships loaded when bought); confirming a prep (or
+sending a design-computer prototype) consumes the estimate in grams and
+refuses while short (job stays PREPARING, E re-confirms after a load); the
+spool crate (front-left corner, $12, tight 1.6 m radius) sells spools into
+your hands; E while holding a spool at a printer loads it (meta "spool"
+tagging, not names — name collisions auto-rename); failed-print clears
+salvage half the consumed grams back onto the spool; printers render a
+shrinking coil; HUD shows per-machine grams; filament persists in the save
+("filament" validated array). Stats panel gained computed milestone
+achievements (First sale, Ten orders, Five stars, Fully kitted, Week one,
+High earner). debug_spawn_test_print tops up filament (dev seam). New suite
+tests/spool_test.gd (23 checks); all 21 suites green (932 checks).
+
 v0.5.0 shipped on top of v0.4.0: reputation (0-5, start 3; on-time +0.2,
 late -0.2, scrap -0.4, cancel -0.6) scales payouts x0.8-x1.2
 (Main.reputation_multiplier(); order: grade -> reputation -> late half) and
@@ -106,12 +124,13 @@ cardboard/posters/rug), procedural sky + fog, ceiling fixtures, window,
 props (spool shelf, crates, plant, ticking wall clock), center reticle,
 synthesized SFX + printer hum on an "SFX" bus.
 
-Verification evidence (local): 19 Godot headless suites green — contract 255,
-gen 24, features 31, upgrades 55, packing 58, touch 47, save 44, shop_art 51,
-economy 54, day 36, parallel 23, prep 29, printer_visual 28, grab 26,
-input_pause 23, menu 25, debug_panel 32, room 9, smoke 9 (859 checks, 0
-failures, no SCRIPT ERROR); Python build pipeline 21 pytest; engine
-screenshots confirm the HUD reputation stars, Stats panel and card due tags.
+Verification evidence (local): 21 Godot headless suites green — contract 255,
+spool 23, gen 24, features 31, upgrades 55, packing 58, touch 47, save 44,
+shop_art 51, economy 54, day 36, design_computer 21, parallel 23, prep 29,
+printer_visual 34, grab 26, input_pause 23, menu 25, debug_panel 32, room 9,
+smoke 9 (932 checks, 0 failures, no SCRIPT ERROR); Python build pipeline 21
+pytest; engine screenshots confirm the crate, the depleted coil and the
+per-machine filament HUD line.
 
 v0.1.0 RELEASED: commits 2f1f2af (loop/features) + ab05cc4 (shell help
 placement). Deployed to https://printshop-sim.vercel.app/ via vercel --prod;

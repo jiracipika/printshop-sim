@@ -22,6 +22,8 @@ var bed: MeshInstance3D
 var _nozzle_mat: StandardMaterial3D
 var _lock_label: Label3D
 var _name_label: Label3D
+var _coil: MeshInstance3D
+var _coil_mat: StandardMaterial3D
 
 func _ready() -> void:
 	add_to_group("printers")
@@ -162,6 +164,29 @@ func set_locked(locked: bool) -> void:
 
 func is_locked() -> bool:
 	return _lock_label != null and _lock_label.visible
+
+## Spool coil resting on the cross-brace between the Z rails: shrinks
+## downward toward the brace as filament is consumed, hides when empty.
+func set_filament(frac: float) -> void:
+	if _coil == null:
+		_coil_mat = StandardMaterial3D.new()
+		_coil_mat.albedo_color = Color("#DA623A")
+		_coil_mat.roughness = 0.6
+		var pivot := Node3D.new()
+		pivot.name = "CoilPivot"
+		pivot.position = Vector3(0, HEIGHT - 0.04, -0.20)  # brace top surface
+		_coil = MeshInstance3D.new()
+		var cyl := CylinderMesh.new()
+		cyl.top_radius = 0.07
+		cyl.bottom_radius = 0.07
+		cyl.height = 0.09
+		_coil.mesh = cyl
+		_coil.material_override = _coil_mat
+		_coil.position = Vector3(0, 0.045, 0)  # grows up from the brace
+		pivot.add_child(_coil)
+		add_child(pivot)
+	_coil.scale = Vector3(1.0, clampf(frac, 0.02, 1.0), 1.0)
+	_coil.visible = frac > 0.02
 
 ## Main sets the display name ("Printer 1" / "Printer 2 — PRO").
 func set_display_name(text: String) -> void:

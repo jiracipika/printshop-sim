@@ -60,6 +60,8 @@ func _run() -> void:
 		"depth_mm": 50.0, "height_mm": 40.0, "layer_mm": 0.2,
 		"wall_mm": 1.6, "infill_pct": 22.0, "material": "PETG", "filament": "Sage"}
 	var balance_before: int = main.ledger.balance()
+	main._machine(0)["filament_g"] = 5000  # test setup: plenty of filament
+	var filament_before: int = int(main._machine(0).get("filament_g"))
 	main.design_studio._design = design.duplicate(true)
 	main.design_studio._save_and_print() # exercise the real button path + signal
 	var machine: Dictionary = main._machine(0)
@@ -68,8 +70,10 @@ func _run() -> void:
 		"test print starts through the normal printer simulation")
 	_ok(machine.prototype.name == "Storage block" and main.main_menu.visible,
 		"chosen blueprint is assigned to the printer and the shop pauses safely")
-	_ok(main.ledger.balance() < balance_before,
-		"prototype filament is charged before printing")
+	_ok(main.ledger.balance() == balance_before,
+		"prototypes cost filament, not money")
+	_ok(int(main._machine(0).get("filament_g")) < filament_before,
+		"prototype consumes real filament from the loaded spool")
 	_ok(main.design_studio.visible == false,
 		"successful send closes the designer")
 	_ok(FileAccess.file_exists(DesignStudio.SAVE_PATH),

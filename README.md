@@ -11,7 +11,10 @@ The deployed version may lag local development. Check the in-game version/build 
 ## Current Milestone
 
 Complete playable contract loop with the shop day, true two-machine parallel
-printing, a procedural contract board, and a reputation system (v0.5.0). Accept a job, pick an orientation, print it, carry
+printing, a procedural contract board, a reputation system, and a physical
+spool economy (v0.6.0). Filament is real: printers hold grams from loaded
+spools, every print consumes its estimate, failed prints salvage half the
+grams back, and new spools come from the crate ($12). Accept a job, pick an orientation, print it, carry
 the part to the packing table, deliver, get paid — against the clock: days
 pass, rent comes due each day, late deliveries pay half, and clients cancel
 after two extra days. Both printers can hold and print separate contracts at
@@ -36,10 +39,15 @@ Working in local automated tests (15 suites, 656 checks):
 - First-person WASD/mouse movement, click-to-play, Escape/focus pause, center
   reticle; full mobile touch overlay (stick, look, Interact, Pause).
 - Full loop: E at a printer accepts a contract, E previews/cycles orientation
-  (support %, material estimate, risk level), E confirms and charges materials,
-  the print grows visibly on the bed, failed prints must be cleared, finished
-  parts are carried to the packing table, graded A/B/C/F by quality, delivered
-  for a grade-scaled payout. Exactly-once payouts in an integer-cents ledger.
+  (support %, material estimate, risk level), E confirms and consumes filament
+  from the loaded spool, the print grows visibly on the bed, failed prints are
+  cleared (half the grams salvaged), finished parts are carried to the packing
+  table, graded A/B/C/F, delivered for a reputation-scaled grade payout.
+  Exactly-once payouts in an integer-cents ledger.
+- Spool economy (v0.6.0): buy spools at the crate, carry and load them into a
+  printer (E while holding), printers show a shrinking coil, HUD shows grams
+  per machine, filament persists in the save. Milestone achievements render
+  in the Stats panel.
 - True parallel printing: each machine owns its sim, contract, prep state and
   printed part; both can print, fail, and deliver independently (v0.3.0).
 - Risk-driven deterministic failures (bad orientation can lose the print),
