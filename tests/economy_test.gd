@@ -147,12 +147,10 @@ func _run() -> void:
 		"contract stays INSPECTION while the part is carried")
 	_ok(not ledger.has_paid(contract.id), "no payout on collect alone")
 	_ok(main._try_pack_held(), "packing table packs the carried part")
-	var grade_expected: String = QualityCheck.grade(contract, main.sim.layers_done,
-		main.sim.layers_total, {
-			"support_need": main.sim.support_need,
-			"adhesion_risk": main.sim.adhesion_risk,
-			"stability_risk": main.sim.stability_risk,
-		})
+	var snap: Dictionary = main._machine(0).get("grade_snapshot", {})
+	var grade_expected: String = QualityCheck.grade(contract,
+		int(snap.get("final_layer", 0)), int(snap.get("total_layers", 0)),
+		snap.get("risks", {}))
 	# Final payout: grade scale first, then reputation (rep 3.0 -> x1.04),
 	# matching Main's rounding order exactly.
 	var eff_grade: String = main._cap_grade_for_color(grade_expected, contract, main._machine(0))

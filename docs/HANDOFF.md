@@ -36,6 +36,17 @@ https://printshop-sim.vercel.app/.
 
 ## State at this checkpoint
 
+v0.9.0 (guided objectives) shipped on top of v0.8.0: a seven-step onboarding
+chain (accept, print, collect, deliver, load a spool, print a prototype, 4★
+reputation) tracked order-agnostically in guide_flags from the real loop
+event points, shown as "▸ Objective: ..." in the HUD, persisted via
+"guide_flags"/"guide_done" (validated), and retired when complete. Settings
+gained a two-press "Reset shop (new game)" button (arm -> confirm -> save
+wipe + scene reload; disarm on leaving settings). Play-flow fix that fell out
+of the guide tests: collecting the part (contract or prototype) now resets
+that printer to IDLE immediately, and the pack grade reads a machine
+"grade_snapshot" captured at collect time instead of live sim fields.
+
 v0.8.0 (color demands) shipped on top of v0.7.0: contracts (fixtures and
 generated) demand a filament color (Contract.color, valid set =
 DesignStudio's Clay/Sage/Honey); the crate cycles colors deterministically
@@ -146,13 +157,13 @@ cardboard/posters/rug), procedural sky + fog, ceiling fixtures, window,
 props (spool shelf, crates, plant, ticking wall clock), center reticle,
 synthesized SFX + printer hum on an "SFX" bus.
 
-Verification evidence (local): 23 Godot headless suites green — contract 255,
-color 27, events 15, spool 23, gen 24, features 31, upgrades 55, packing 58,
-touch 47, save 44, shop_art 51, economy 54, day 37, design_computer 21,
-parallel 23, prep 29, printer_visual 34, grab 26, input_pause 23, menu 25,
-debug_panel 32, room 9, smoke 9 (952 checks, 0 failures, no SCRIPT ERROR);
-Python build pipeline 21 pytest; engine screenshots confirm card color tags,
-the 'wants X' HUD line and per-machine color words.
+Verification evidence (local): 24 Godot headless suites green — contract 255,
+color 27, events 15, guide 21, spool 23, gen 24, features 31, upgrades 55,
+packing 58, touch 47, save 44, shop_art 51, economy 54, day 37,
+design_computer 21, parallel 23, prep 29, printer_visual 34, grab 26,
+input_pause 23, menu 25, debug_panel 32, room 9, smoke 9 (973 checks, 0
+failures, no SCRIPT ERROR); Python build pipeline 21 pytest; engine
+screenshot confirms the objective HUD line.
 
 v0.1.0 RELEASED: commits 2f1f2af (loop/features) + ab05cc4 (shell help
 placement). Deployed to https://printshop-sim.vercel.app/ via vercel --prod;

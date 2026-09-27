@@ -19,6 +19,8 @@ signal upgrades_pressed
 signal upgrade_buy_pressed(id: String)
 signal settings_pressed
 signal stats_pressed
+signal reset_requested
+signal reset_disarmed
 signal settings_changed(key: String, value)
 
 ## Test-only: simulate a web export (hides Quit exactly like the real gate).
@@ -59,6 +61,7 @@ func is_open() -> bool:
 
 func open_menu() -> void:
 	visible = true
+	disarm_reset_button()
 	for panel in [_contracts_panel, _upgrades_panel, _settings_panel, _howto_panel, _stats_panel]:
 		if panel != null:
 			panel.visible = false
@@ -529,6 +532,14 @@ func _build_settings_panel() -> void:
 			settings_changed.emit("shadows", on))
 	sv.add_child(shadows)
 
+	var reset := Button.new()
+	reset.name = "ResetButton"
+	reset.text = "Reset shop (new game)"
+	reset.add_theme_color_override("font_color", COLOR_TERRA)
+	reset.add_theme_font_size_override("font_size", 15)
+	reset.pressed.connect(func() -> void: reset_requested.emit())
+	sv.add_child(reset)
+
 	sv.add_child(_make_back_button(func() -> void:
 		_settings_panel.visible = false
 		_settings_open = false
@@ -559,6 +570,18 @@ func _labeled_slider(label_text: String, slider_name: String, min_v: float, max_
 
 static func slider_name_to_key(slider_name: String) -> String:
 	return "mouse_sens_scale" if slider_name == "SensSlider" else "sfx_volume"
+
+## Second-press confirm state for the reset button.
+func arm_reset_button() -> void:
+	var reset: Button = _settings_panel.get_node("Sheet/SheetBox/ResetButton")
+	reset.text = "Really reset? Press again"
+
+## Leaving settings (or any re-show) cancels the armed reset.
+func disarm_reset_button() -> void:
+	var reset: Button = _settings_panel.get_node_or_null("Sheet/SheetBox/ResetButton")
+	if reset != null:
+		reset.text = "Reset shop (new game)"
+	reset_disarmed.emit()
 
 ## Push current settings into the sliders without re-emitting signals.
 func show_settings(current: Dictionary) -> void:
@@ -729,6 +752,7 @@ func _make_back_button(on_pressed: Callable) -> Button:
 	return back
 
 func _show_panel(panel: Control) -> void:
+	disarm_reset_button()
 	for p in [_contracts_panel, _upgrades_panel, _settings_panel, _howto_panel, _stats_panel]:
 		if p != null:
 			p.visible = p == panel

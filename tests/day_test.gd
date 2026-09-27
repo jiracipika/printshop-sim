@@ -132,11 +132,9 @@ func _test_deadlines() -> void:
 	var bal0: int = ledger.balance()
 	var rep0: float = main.reputation_multiplier()  # pack bumps rep after paying
 	main._try_pack_held()
-	var grade: String = QualityCheck.grade(c, main.sim.layers_done, main.sim.layers_total, {
-		"support_need": main.sim.support_need,
-		"adhesion_risk": main.sim.adhesion_risk,
-		"stability_risk": main.sim.stability_risk,
-	})
+	var snap: Dictionary = main._machine(0).get("grade_snapshot", {})
+	var grade: String = QualityCheck.grade(c, int(snap.get("final_layer", 0)),
+		int(snap.get("total_layers", 0)), snap.get("risks", {}))
 	var full: int = roundi(roundi(c.payout_cents
 		* QualityCheck.quality_multiplier(main._cap_grade_for_color(grade, c, main._machine(0)))) * rep0)
 	_ok(ledger.balance() == bal0 + full, "on-time delivery pays rep-scaled grade payout")
@@ -156,9 +154,9 @@ func _test_deadlines() -> void:
 		main.sim.tick(1.0)
 	main._try_interact()
 	_ok(main._is_late() and not main._is_cancelled(), "deadline+1 is late but not cancelled")
-	var grade2: String = QualityCheck.grade(c2, main.sim.layers_done, main.sim.layers_total,
-		{"support_need": main.sim.support_need, "adhesion_risk": main.sim.adhesion_risk,
-		"stability_risk": main.sim.stability_risk})
+	var snap2: Dictionary = main._machine(0).get("grade_snapshot", {})
+	var grade2: String = QualityCheck.grade(c2, int(snap2.get("final_layer", 0)),
+		int(snap2.get("total_layers", 0)), snap2.get("risks", {}))
 	var bal1: int = ledger.balance()
 	var rep1: float = main.reputation_multiplier()
 	main._try_pack_held()

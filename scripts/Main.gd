@@ -38,6 +38,21 @@ var stats := {"delivered": 0, "late": 0, "scrapped": 0, "cancelled": 0, "earned_
 ## Today's shop event (v0.7.0) — deterministic per day, refreshed on rollover.
 var today_event: Dictionary = Events.QUIET.duplicate(true)
 var _crate_label: Label3D
+## First-run objectives (v0.9.0): order-agnostic completion flags; the HUD
+## shows the first unfinished step until everything is done (persisted).
+var guide_flags := {"accepted": false, "printed": false, "collected": false,
+	"delivered": false, "loaded": false, "prototype": false, "stars": false}
+var guide_done := false
+
+const GUIDE_TEXT := {
+	"accepted": "Accept a job at a printer [E]",
+	"printed": "Confirm an orientation to start the print [E]",
+	"collected": "Collect the finished part [E]",
+	"delivered": "Deliver it at the packing table [E]",
+	"loaded": "Low on filament? Buy a spool at the crate and load it [E]",
+	"prototype": "Print a prototype at the design computer",
+	"stars": "Grow the shop to a 4-star reputation",
+}
 
 ## --- machines (v0.3.0): true parallel printing -------------------------------
 ## One entry per printer: {idx, sim, contract, day, orient, orient_pending,
@@ -281,6 +296,19 @@ func _ready() -> void:
 	_apply_quality()
 	_refresh_event()
 
+## Reset the shop: clear the save and reload. Two-press confirm lives in the
+## Settings button (MainMenu feeds this).
+var _reset_armed := false
+
+func request_reset_shop() -> void:
+	if not _reset_armed:
+		_reset_armed = true
+		main_menu.arm_reset_button()
+		_set_prompt("This wipes balance, upgrades and progress — press again to confirm")
+		return
+	BrowserSave.clear()
+	get_tree().reload_current_scene()
+
 ## Quality settings (v0.4.0): directional shadows can be turned off for weak
 ## devices; persists in the save like the rest of the settings.
 func _apply_quality() -> void:
@@ -337,6 +365,12 @@ func _load_save() -> void:
 			var col = payload.spool_colors[i]
 			if col is String and (col == "" or col in Contract.VALID_COLORS):
 				machines[i]["color"] = col
+	if payload.has("guide_flags") and typeof(payload.guide_flags) == TYPE_DICTIONARY:
+		for key in guide_flags.keys():
+			if payload.guide_flags.has(key):
+				guide_flags[key] = bool(payload.guide_flags[key])
+	if payload.has("guide_done"):
+		guide_done = bool(payload.guide_done)
 
 func apply_setting(key: String, value, persist := true) -> void:
 	settings[key] = value
@@ -360,6 +394,8 @@ func _save_game() -> void:
 			"stats": stats,
 			"filament": [int(_machine(0).get("filament_g")), int(_machine(1).get("filament_g"))],
 			"spool_colors": [str(_machine(0).get("color")), str(_machine(1).get("color"))],
+			"guide_flags": guide_flags.duplicate(),
+			"guide_done": guide_done,
 		})
 	var ok: bool = load("res://scripts/BrowserSave.gd").save_payload(payload)
 	save_status_line = "%s at %s" % ["saved ok" if ok else "save FAILED",
@@ -559,6 +595,28 @@ func _build_world() -> void:
 	job_board.add_to_group("job_board")
 	add_child(job_board)
 	_apply_daylight()
+
+## Mark one onboarding objective done; guide_done flips when all are.
+func _guide(flag: String) -> void:
+	if guide_done or guide_flags.get(flag, true):
+		return
+	guide_flags[flag] = true
+	if flag == "stars" or (_guide_all_done()):
+		guide_done = true
+		_save_game()
+
+func _guide_all_done() -> bool:
+	for done in guide_flags.values():
+		if not bool(done):
+			return false
+	return true
+
+func _guide_current() -> String:
+	for key in ["accepted", "printed", "collected", "delivered", "loaded",
+			"prototype", "stars"]:
+		if not bool(guide_flags.get(key, false)):
+			return str(GUIDE_TEXT.get(key, ""))
+	return ""
 
 ## Recompute today's event and anything that displays it (crate price tag).
 func _refresh_event() -> void:
@@ -1183,6 +1241,8 @@ func _build_hud() -> void:
 		main_menu.show_settings(settings))
 	main_menu.settings_changed.connect(_on_menu_setting)
 	main_menu.stats_pressed.connect(_on_menu_stats)
+	main_menu.reset_requested.connect(request_reset_shop)
+	main_menu.reset_disarmed.connect(func() -> void: _reset_armed = false)
 	main_menu.open_menu()
 	design_studio = load("res://scripts/DesignStudio.gd").new()
 	design_studio.close_requested.connect(_close_design_studio)
@@ -1486,6 +1546,7 @@ func _load_spool(idx: int) -> void:
 	held = null
 	m["filament_g"] = int(m.get("filament_g")) + SPOOL_G
 	m["color"] = loaded_color
+	_guide("loaded")
 	sfx.play("place")
 	_set_prompt("Printer %d loaded — %dg of %s filament" % [idx + 1, int(m.get("filament_g")), loaded_color])
 
@@ -1604,6 +1665,20 @@ func _collect_on(idx: int) -> bool:
 	part.global_position = origin + Vector3(0, 0.28, 0)
 	_attach_to_hand(part)
 	m["part"] = part
+	# Snapshot the finished print for grading, then ready the printer (the
+	# bed is empty again; the part carries the result to the packing table).
+	m["grade_snapshot"] = {
+		"final_layer": sim.layers_done,
+		"total_layers": sim.layers_total,
+		"risks": {
+			"support_need": sim.support_need,
+			"adhesion_risk": sim.adhesion_risk,
+			"stability_risk": sim.stability_risk,
+		},
+	}
+	if sim.state == PrintSim.State.DONE_OK:
+		sim.reset()
+	_guide("collected")
 	sfx.play("grab")
 	_set_prompt("%s printed — take it to the packing table" % c.model_name)
 	return true
@@ -1680,15 +1755,11 @@ func _try_pack_held() -> bool:
 	var c: Contract = m.get("contract")
 	if c == null or c.state != Contract.State.INSPECTION:
 		return false
-	var s: PrintSim = m.get("sim")
+	var snap: Dictionary = m.get("grade_snapshot", {})
 	var result := packing_station.try_pack(c, {
-		"final_layer": s.layers_done,
-		"total_layers": s.layers_total,
-		"risks": {
-			"support_need": s.support_need,
-			"adhesion_risk": s.adhesion_risk,
-			"stability_risk": s.stability_risk,
-		},
+		"final_layer": int(snap.get("final_layer", 0)),
+		"total_layers": int(snap.get("total_layers", 0)),
+		"risks": snap.get("risks", {}),
 	})
 	if not result.get("packed", false):
 		if result.get("grade", "") == "F":
@@ -1723,6 +1794,9 @@ func _try_pack_held() -> bool:
 		_rep_event(0.2)
 	stats.delivered += 1
 	stats.earned_cents += payout
+	_guide("delivered")
+	if reputation >= 4.0:
+		_guide("stars")
 	_save_game()
 	sfx.play("cash")
 	if late:
@@ -1866,6 +1940,7 @@ func _prep_on(idx: int) -> void:
 	m["orient_pending"] = false
 	var s: PrintSim = m.get("sim")
 	s.start_job(c.id, c.model_name, c.layers)
+	_guide("printed")
 	sfx.play("beep")
 	_set_prompt("Printing %s — %s orientation confirmed" % [c.model_name, _orientation_name_for(idx)])
 
@@ -1923,6 +1998,7 @@ func _accept_on(idx: int) -> void:
 		return
 	m["contract"] = job
 	m["day"] = day_cycle.day
+	_guide("accepted")
 	m["orient"] = 0
 	m["orient_pending"] = false
 	sfx.play("click")
@@ -2171,6 +2247,7 @@ func _on_design_test_print(design: Dictionary) -> void:
 	sim.speed_multiplier = speed
 	var layers := clampi(ceili(float(d.height_mm) / float(d.layer_mm)), 20, 800)
 	sim.start_job("PROTO-%d" % Time.get_ticks_msec(), d.name, layers)
+	_guide("prototype")
 	_save_game()
 	design_studio.show_feedback("Prototype started on Printer %d. It is paid from your filament balance." % (idx + 1))
 	_close_design_studio()
@@ -2187,6 +2264,8 @@ func _update_hud() -> void:
 		lines.append("Balance: $%s" % _cents_str(ledger.balance()))
 	lines.append("Day %d — rent $%s/day" % [day_cycle.day, _cents_str(RENT_CENTS)])
 	lines.append("Today: %s" % today_event.name)
+	if not guide_done:
+		lines.append("▸ Objective: %s" % _guide_current())
 	if rent_debt_cents > 0:
 		lines.append("Unpaid rent: $%s" % _cents_str(rent_debt_cents))
 	var stars := ""

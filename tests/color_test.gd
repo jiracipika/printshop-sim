@@ -144,9 +144,9 @@ func _test_crate_and_cap() -> void:
 			s0.tick(1.0)
 		main._try_interact()  # collect
 		main._player.global_position = Vector3(2.0, 0.3, 0.9)
-		var grade := QualityCheck.grade(c, s0.layers_done, s0.layers_total,
-			{"support_need": s0.support_need, "adhesion_risk": s0.adhesion_risk,
-			"stability_risk": s0.stability_risk})
+		var snap: Dictionary = main._machine(0).get("grade_snapshot", {})
+		var grade := QualityCheck.grade(c, int(snap.get("final_layer", 0)),
+			int(snap.get("total_layers", 0)), snap.get("risks", {}))
 		var eff: String = main._cap_grade_for_color(grade, c, main._machine(0))
 		var expected: int = roundi(roundi(roundi(c.payout_cents
 			* QualityCheck.quality_multiplier(eff)) * main.reputation_multiplier())

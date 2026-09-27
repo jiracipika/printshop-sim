@@ -20,6 +20,7 @@ extends RefCounted
 ##     "stats": Dictionary of non-negative int counters (optional),
 ##     "filament": Array[int] grams per machine (optional),
 ##     "spool_colors": Array[String] per machine (optional),
+##     "guide_done"/"guide_flags": onboarding progress (optional),
 ##   }
 ##
 ## Optional keys are additive: payloads without them stay valid (older saves
@@ -96,6 +97,8 @@ static func validate(payload: Variant) -> Dictionary:
 	if not _filament_valid(p):
 		return {}
 	if not _spool_colors_valid(p):
+		return {}
+	if not _guide_valid(p):
 		return {}
 
 	var out: Dictionary = p.duplicate(true)
@@ -177,6 +180,19 @@ static func _filament_valid(p: Dictionary) -> bool:
 	for g in p["filament"]:
 		if not _is_int(g) or int(g) < 0:
 			return false
+	return true
+
+
+## Optional guide keys: "guide_done" bool, "guide_flags" dict of bools.
+static func _guide_valid(p: Dictionary) -> bool:
+	if p.has("guide_done") and not (p["guide_done"] is bool):
+		return false
+	if p.has("guide_flags"):
+		if typeof(p["guide_flags"]) != TYPE_DICTIONARY:
+			return false
+		for v in p["guide_flags"].values():
+			if not (v is bool):
+				return false
 	return true
 
 
