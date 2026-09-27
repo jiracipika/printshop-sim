@@ -108,7 +108,8 @@ func _run() -> void:
 	var tilted_est: int = int(PrepSystem.evaluate(contract, "tilted").estimated_material_g)
 	_ok(int(main._machine(0).get("filament_g")) == 1500 - tilted_est,
 		"confirm consumes the prep estimate from the loaded spool (%d g)" % tilted_est)
-	_ok(ledger.balance() == 2500, "filament, not money, is the material cost")
+	_ok(ledger.balance() == 2500 - contract.material_cost_cents,
+		"confirm charges materials (%s) on top of the filament" % _fmt(contract.material_cost_cents))
 	main._update_hud()
 	_ok(contract.model_name in main._status.text
 		and Contract.state_name(contract.state) in main._status.text,
@@ -196,8 +197,8 @@ func _run() -> void:
 		_finish(1)
 		return
 	var bal2: int = ledger.balance()
-	_ok(bal2 == bal_before_payout + expected_payout,
-		"confirm spends filament, not money")
+	_ok(bal2 == bal_before_payout + expected_payout - contract2.material_cost_cents,
+		"second job charged its materials at confirm")
 	main.paused = true
 	_drive()
 	_ok(main.sim.state == PrintSim.State.DONE_FAIL, "seeded failure reaches DONE_FAIL")

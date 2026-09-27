@@ -36,6 +36,19 @@ https://printshop-sim.vercel.app/.
 
 ## State at this checkpoint
 
+v0.12.0 (balance pass) shipped on top of v0.11.0, driven by a read-only
+economy audit (background research agent; full findings were reported to the
+operator — week-1 gross ~$4,120 at >90% margins, upright unconditionally
+safe, deadlines never binding, material cost never charged). Changes:
+GEN_BASE_PAYOUT[4] 15500->9000, diff-4 11600->9800, payout cap 15000->9500,
+rush premium 1.4->1.2, PrintSim failure floor 0.4->0.3 (upright+overhangs
+now carries ~2.75% real risk), material_cost_cents charged at confirm again
+(can_afford gate, stays PREPARING when broke), rent = $9 + $2x(day-1) capped
+$25 (day/holiday/cold-snap aware), same-day tip 15%->10%, JobBoard capacity
+cached, crate rotation persisted ("crate_next" validated). See
+docs/ROADMAP.md Slice 1 for the checklist; slices renumbered v0.13-v0.20.
+All 26 suites green (1005 checks); prep_test replicates the new floor.
+
 v0.11.0 shipped on top of v0.10.0: weekly seasons (Events.season_for_week,
 week = (day-1)/7+1, week 1 calm; humid +0.05 adhesion in _prep_eval,
 cold_snap +$1 rent in _on_day_changed, boom payout x1.10) refreshed together

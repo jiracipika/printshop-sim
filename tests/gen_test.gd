@@ -51,7 +51,7 @@ func _test_generation() -> void:
 				return
 			if c.material_cost_cents > 2400:
 				affordable = false
-			if c.payout_cents < 3000 or c.payout_cents > 15000:
+			if c.payout_cents < 3000 or c.payout_cents > 9500:
 				_ok(false, "%s payout in range (%d)" % [c.id, c.payout_cents])
 			if c.layers < 60 or c.layers > 400:
 				_ok(false, "%s layers in range (%d)" % [c.id, c.layers])

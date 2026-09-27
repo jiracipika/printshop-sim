@@ -12,6 +12,7 @@ var _queue: Array[Contract] = []
 var _fixture_cycle := 0
 var generation_enabled := false
 var _gen_day := 1
+var _capacity := 0  # cached fixture-pool size (set on first fill)
 
 func _ready() -> void:
 	_fill_to_capacity()
@@ -60,9 +61,11 @@ func take_next() -> Contract:
 func _fill_to_capacity() -> void:
 	# Top the queue back up to board capacity (fixture pool size) so the count
 	# is invariant (existing suites rely on this) and the loop never drains;
-	# refill order cycles deterministically.
-	var capacity := Contract.make_fixture_jobs().size()
-	while _queue.size() < capacity:
+	# refill order cycles deterministically. Capacity is cached: building the
+	# fixture list on every refill was pure waste.
+	if _capacity == 0:
+		_capacity = Contract.make_fixture_jobs().size()
+	while _queue.size() < _capacity:
 		_refill()
 
 ## Return an unstarted job to the front (acceptance was refused, e.g. funds).

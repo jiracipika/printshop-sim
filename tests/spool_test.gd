@@ -123,7 +123,8 @@ func _test_consumption_and_persistence() -> void:
 	_ok(main._machine(0).get("sim").is_running(), "confirm proceeds once filament is loaded")
 	_ok(int(main._machine(0).get("filament_g")) == 5000 - est,
 		"print consumed exactly the estimate (%d g)" % est)
-	_ok(ledger.balance() == bal0, "printing itself costs no money")
+	_ok(ledger.balance() == bal0 - c.material_cost_cents,
+		"printing charges the contract's material fee on top of grams")
 	var s0: PrintSim = main._machine(0).get("sim")
 	while s0.is_running():
 		s0.tick(1.0)

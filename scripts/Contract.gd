@@ -255,7 +255,7 @@ const GEN_MODELS: Array[String] = [
 	"Aquarium tube clip", "Sheet music page clamps", "Espresso tamper collar",
 	"Helmet chin-bar clip", "Wind chime core",
 ]
-const GEN_BASE_PAYOUT: Array[int] = [4200, 6400, 8750, 11600, 15500]
+const GEN_BASE_PAYOUT: Array[int] = [4200, 6400, 8750, 9800, 9000]
 
 
 ## Deterministic contract for shop `day`, board slot `index`. Same inputs ->
@@ -293,9 +293,9 @@ static func generate(day: int, index: int) -> Contract:
 	c.rush = rng.randf() < 0.25
 	if c.rush:
 		c.deadline_days = rng.randi_range(1, 2)
-		c.payout_cents = mini((GEN_BASE_PAYOUT[c.difficulty - 1] + c.layers * 2) * 14 / 10, 15000)
+		c.payout_cents = mini((GEN_BASE_PAYOUT[c.difficulty - 1] + c.layers * 2) * 12 / 10, 9500)
 	else:
 		c.deadline_days = clampi(c.difficulty + rng.randi_range(-1, 1), 2, 6)
-		c.payout_cents = mini(GEN_BASE_PAYOUT[c.difficulty - 1] + c.layers * 2, 15000)
+		c.payout_cents = mini(GEN_BASE_PAYOUT[c.difficulty - 1] + c.layers * 2, 9500)
 	c.payout_cents = maxi(c.payout_cents, 3000)
 	return c

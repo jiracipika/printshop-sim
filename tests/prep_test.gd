@@ -142,7 +142,7 @@ static func _draw(job_id: String) -> float:
 
 
 func _expected_failure_tick(job_id: String, worst_risk: float, layers: int) -> int:
-	var chance := maxf(0.0, worst_risk - 0.4) * 0.55
+	var chance := maxf(0.0, worst_risk - 0.3) * 0.55
 	if chance <= 0.0:
 		return -1
 	var draw := _draw(job_id)
@@ -169,7 +169,7 @@ func _drive(sim: PrintSim, max_ticks := 2000) -> void:
 
 
 func _test_sim_seam_determinism() -> void:
-	# Find a job_id whose draw < (0.7-0.4)*0.55 = 0.165 so a worst-risk 0.7 print
+	# Find a job_id whose draw < (0.7-0.3)*0.55 = 0.22 so a worst-risk 0.7 print
 	# must fail, computed via the same hash logic the sim uses (RED-friendly).
 	# NOTE: Godot's String hash() is sequential for similar strings in this
 	# build (SEAM-0..N land in one contiguous band of the modulo space), so
@@ -209,8 +209,8 @@ func _test_sim_seam_determinism() -> void:
 
 
 func _test_sim_low_risk_never_fails() -> void:
-	# max risk 0.39 -> failure_chance = 0 (0.39 < 0.4 clamps to zero): always succeeds.
-	var sim := _mk_sim("P100", 40, 0.39, 0.2, 0.1)
+	# max risk 0.29 -> failure_chance = 0 (0.29 < the 0.3 floor, v0.12): always succeeds.
+	var sim := _mk_sim("P100", 40, 0.29, 0.2, 0.1)
 	_drive(sim)
 	_ok(sim.state == PrintSim.State.DONE_OK, "low-risk job completes DONE_OK over full run")
 

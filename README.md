@@ -13,7 +13,9 @@ The deployed version may lag local development. Check the in-game version/build 
 Complete playable contract loop with the shop day, true two-machine parallel
 printing, a procedural contract board, a reputation system, a physical spool
 economy with color demands, daily shop events, weekly seasons, guided
-objectives, same-day tips and a live chalkboard ledger (v0.11.0). Filament is real: printers hold grams from loaded
+objectives, same-day tips and a live chalkboard ledger — rebalanced after a
+full economy audit (v0.12.0): smaller top payouts, real failure risk on all
+preps, material fees back at confirm, and age-scaled rent. Filament is real: printers hold grams from loaded
 spools, every print consumes its estimate, failed prints salvage half the
 grams back, and new spools come from the crate ($12). Accept a job, pick an orientation, print it, carry
 the part to the packing table, deliver, get paid — against the clock: days

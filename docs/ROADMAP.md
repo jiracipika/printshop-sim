@@ -1,4 +1,4 @@
-# Print Shop Sim — roadmap for the next 8 slices (v0.12 → v0.19)
+# Print Shop Sim — roadmap (balance pass shipped; next: v0.13 → v0.20)
 
 Planning document. Every slice follows the same definition of done (see the
 bottom of this file) — the per-slice checklists below only list what is NEW.
@@ -7,9 +7,34 @@ Each slice ships as: features → tests (all suites green) → engine screenshot
 
 Baseline at planning time: v0.11.0 (27e2b38), 26 suites / 1005 checks green.
 
+A read-only balance audit (background research agent, 2026-09-27) found the
+economy too generous: week-1 gross ~$4,120 at >90% margins, upright prep
+unconditionally safe (bypassing the entire risk system), deadlines never
+binding, and material_cost_cents generated but never charged. Its three
+tuning recommendations shipped as Slice 0 below, BEFORE the print farm — at
+the old rates the farm kits would have landed on day ~3. Sequencing note:
+reputation tiers (Slice 8) gate nothing until competent play can lose stars,
+so it stays late in the queue.
+
 ---
 
-## Slice 1 — v0.12.0 "The print farm" (second room, printers 3 & 4)
+## Slice 1 — v0.12.0 "Balance pass" (SHIPPED 2026-09-27, from the audit)
+
+- [x] Payout top flattened: GEN_BASE_PAYOUT[4] 15500 -> 9000, diff-4
+      11600 -> 9800, payout cap 15000 -> 9500 (tier-5 jobs no longer a flat
+      $150 on ~23% of slots)
+- [x] Rush premium 1.4x -> 1.2x (it was unconditional free money)
+- [x] Prep risk floor 0.4 -> 0.3: upright-with-overhangs carries a small
+      real failure chance; risk-reduction upgrades matter again
+- [x] material_cost_cents is charged at confirm again (was generated but
+      never deducted)
+- [x] Rent curve: $9 on day 1, +$2/day, capped at $25 (was flat $4)
+- [x] Same-day tip 15% -> 10%
+- [x] JobBoard capacity cached; crate rotation counter persisted
+- [x] gen_test bounds updated (3000-9500, rush ratio 1.15-1.35); prep_test
+      replicates the new failure floor; all 26 suites green, 1005 checks
+
+## Slice 2 — v0.13.0 "The print farm" (second room, printers 3 & 4)
 
 Goal: give late-game money somewhere to go and make parallel printing scale.
 
@@ -41,7 +66,7 @@ Risk: medium — touches the machines array every loop depends on.
 
 ---
 
-## Slice 2 — v0.13.0 "First come, first served" (board pressure)
+## Slice 3 — v0.14.0 "First come, first served" (board pressure)
 
 Goal: make the job board competitive instead of an infinite shelf.
 
@@ -68,7 +93,7 @@ Risk: medium-low; touches JobBoard rotation and the rollover handler.
 
 ---
 
-## Slice 3 — v0.14.0 "The workshop log" (history & forensics)
+## Slice 4 — v0.15.0 "The workshop log" (history & forensics)
 
 Goal: players should be able to answer "what happened overnight?" and
 "why did that print fail?"
@@ -92,7 +117,7 @@ Risk: low.
 
 ---
 
-## Slice 4 — v0.15.0 "The radio" (ambient audio)
+## Slice 5 — v0.16.0 "The radio" (ambient audio)
 
 Goal: fill the silence with a toggleable procedural soundtrack.
 
@@ -115,7 +140,7 @@ loop extremely simple and quiet.
 
 ---
 
-## Slice 5 — v0.16.0 "Weather in the windows"
+## Slice 6 — v0.17.0 "Weather in the windows"
 
 Goal: make seasons visible, not just numeric.
 
@@ -140,7 +165,7 @@ Risk: medium — visual tuning is iterative; ship conservative.
 
 ---
 
-## Slice 6 — v0.17.0 "Multi-part orders" (contracts v2)
+## Slice 7 — v0.18.0 "Multi-part orders" (contracts v2)
 
 Goal: deepen the core job into a small production run.
 
@@ -169,7 +194,7 @@ changed lines.
 
 ---
 
-## Slice 7 — v0.18.0 "Reputation tiers" (progression gates)
+## Slice 8 — v0.19.0 "Reputation tiers" (progression gates)
 
 Goal: tie reputation to what the board offers.
 
@@ -193,7 +218,7 @@ Risk: low-medium.
 
 ---
 
-## Slice 8 — v0.19.0 "Hardening & release polish"
+## Slice 9 — v0.20.0 "Hardening & release polish"
 
 Goal: performance, mobile confidence, and a clean 1.0-rc.
 

@@ -74,8 +74,8 @@ func _test_reputation_and_stats() -> void:
 	_ok(int(main.stats.delivered) == 1, "delivered counter incremented")
 	_ok(int(main.stats.earned_cents) == expected,
 		"earned_cents includes the rep-scaled payout ($%s)" % main._cents_str(expected))
-	_ok(ledger.balance() == bal0 + expected,
-		"balance reflects the rep-scaled grade-A payout (filament was the material)")
+	_ok(ledger.balance() == bal0 - c.material_cost_cents + expected,
+		"balance reflects materials + rep-scaled grade-A payout")
 	main._update_hud()
 	_ok("Rep ★★★☆☆ 3.2" in main._status.text, "HUD rep text updates (still 3 stars)")
 

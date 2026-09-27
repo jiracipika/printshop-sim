@@ -67,7 +67,7 @@ func _test_rent_and_debt() -> void:
 	var txs0: int = ledger.transaction_count()
 	main.day_cycle.tick(main.day_cycle.day_length_s)  # -> day 2
 	_ok(main.day_cycle.day == 2, "day rolled to 2")
-	var rent2: int = 0 if bool(main.today_event.rent_free) else 400
+	var rent2: int = 0 if bool(main.today_event.rent_free) else main.rent_for_day(2)
 	_ok(ledger.balance() == bal0 - rent2,
 		"rent handled per the day's event (%s)" % main.today_event.id)
 	var rent_txs := 0
@@ -83,11 +83,11 @@ func _test_rent_and_debt() -> void:
 	ledger.charge(ledger.balance(), "test drain")
 	var debt0: int = main.rent_debt_cents
 	main.day_cycle.tick(main.day_cycle.day_length_s)  # -> day 3
-	var rent3: int = 0 if bool(main.today_event.rent_free) else 400
+	var rent3: int = 0 if bool(main.today_event.rent_free) else main.rent_for_day(3)
 	_ok(ledger.balance() == 0, "empty balance unchanged at rollover")
 	_ok(main.rent_debt_cents == debt0 + rent3, "unpaid rent accrues as debt per event")
 	main.day_cycle.tick(main.day_cycle.day_length_s)  # -> day 4
-	var rent4: int = 0 if bool(main.today_event.rent_free) else 400
+	var rent4: int = 0 if bool(main.today_event.rent_free) else main.rent_for_day(4)
 	_ok(main.rent_debt_cents == debt0 + rent3 + rent4, "debt accumulates per unpaid day")
 
 	# Payout repays debt first.
@@ -141,6 +141,7 @@ func _test_deadlines() -> void:
 
 	# Late (deadline exceeded by 1 day): half payout.
 	main._machine(0)["filament_g"] = 5000  # test setup: plenty of filament
+	ledger.credit(30000, "late-section funds")  # materials charge at confirm
 	main.sim.failure_seeded = false
 	main._try_interact()
 	var c2: Contract = main.active_contract

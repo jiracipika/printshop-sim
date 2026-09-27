@@ -78,7 +78,7 @@ func start_job(id: String, model: String, layers: int) -> void:
 ## session; no RandomNumberGenerator / global RNG state involved.
 func _roll_failure_tick() -> void:
 	var worst: float = maxf(maxf(support_need, adhesion_risk), stability_risk)
-	var chance: float = maxf(0.0, worst - 0.4) * failure_threshold
+	var chance: float = maxf(0.0, worst - 0.3) * failure_threshold
 	if chance <= 0.0:
 		_failure_tick = -1
 		return

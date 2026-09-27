@@ -16,6 +16,11 @@ const BASE_FAILURE_THRESHOLD := 0.55
 const RENT_CENTS := 400
 const LATE_PAYOUT_FACTOR := 0.5
 
+## Rent scales with the shop's age (v0.12 balance pass): $9 on day 1, +$2 per
+## day, capped at $25. Keeps early pressure honest without mid-game crush.
+static func rent_for_day(day: int) -> int:
+	return mini(900 + 200 * (maxi(day, 1) - 1), 2500)
+
 ## --- spool economy (v0.6.0) ---
 ## Filament is physical: printers hold grams from loaded spools, jobs consume
 ## the prep estimate, failed clears salvage half back. New spools come from
@@ -375,6 +380,8 @@ func _load_save() -> void:
 				guide_flags[key] = bool(payload.guide_flags[key])
 	if payload.has("guide_done"):
 		guide_done = bool(payload.guide_done)
+	if payload.has("crate_next"):
+		_crate_next = maxi(int(payload.crate_next), 0)
 
 func apply_setting(key: String, value, persist := true) -> void:
 	settings[key] = value
@@ -400,6 +407,7 @@ func _save_game() -> void:
 			"spool_colors": [str(_machine(0).get("color")), str(_machine(1).get("color"))],
 			"guide_flags": guide_flags.duplicate(),
 			"guide_done": guide_done,
+			"crate_next": _crate_next,
 		})
 	var ok: bool = load("res://scripts/BrowserSave.gd").save_payload(payload)
 	save_status_line = "%s at %s" % ["saved ok" if ok else "save FAILED",
@@ -2049,7 +2057,7 @@ func _try_pack_held() -> bool:
 		_guide("stars")
 	_save_game()
 	sfx.play("cash")
-	var tip: int = payout - roundi(float(payout) / 1.15)
+	var tip: int = payout - roundi(float(payout) / 1.10)
 	if late:
 		_set_prompt("Delivered LATE %s (%s) — $%s · rep down" % [c.model_name, result.grade,
 			_cents_str(payout)])
@@ -2186,7 +2194,14 @@ func _prep_on(idx: int) -> void:
 		_set_prompt("Printer %d needs %dg of filament — load a spool ($%s at the crate)" % [
 			idx + 1, est_g, _cents_str(SPOOL_PRICE_CENTS)])
 		return
+	if not ledger.can_afford(c.material_cost_cents):
+		m["orient_pending"] = true
+		_set_prompt("Not enough funds for materials ($%s) — deliver something first" % _cents_str(c.material_cost_cents))
+		return
+	if not ledger.charge(c.material_cost_cents, "materials %s" % c.id):
+		return
 	if not _advance(c, Contract.State.PRINTING):
+		ledger.credit(c.material_cost_cents, "refund materials %s" % c.id)
 		m["contract"] = null
 		return
 	m["filament_g"] = int(m.get("filament_g")) - est_g
@@ -2297,7 +2312,7 @@ func _on_day_changed(new_day: int) -> void:
 	if bool(today_event.rent_free):
 		_set_prompt("Day %d — %s" % [new_day, today_event.name])
 	else:
-		var rent_due := RENT_CENTS + int(season.extra_rent_cents)
+		var rent_due := rent_for_day(new_day) + int(season.extra_rent_cents)
 		if ledger.can_afford(rent_due):
 			ledger.charge(rent_due, "rent day %d" % new_day)
 			_set_prompt("Day %d — rent paid ($%s)" % [new_day, _cents_str(rent_due)])
@@ -2341,7 +2356,7 @@ func _finalize_payout(base: int, late: bool, m: Dictionary, rep := -1.0) -> int:
 	if late:
 		payout = roundi(float(payout) * LATE_PAYOUT_FACTOR)
 	if _days_taken_for(m) <= 0:
-		payout += roundi(float(payout) * 0.15)
+		payout += roundi(float(payout) * 0.10)
 	return payout
 
 func _rep_event(delta: float) -> void:
@@ -2533,7 +2548,8 @@ func _update_hud() -> void:
 	lines.append(version_label)
 	if ledger != null:
 		lines.append("Balance: $%s" % _cents_str(ledger.balance()))
-	lines.append("Day %d — rent $%s/day" % [day_cycle.day, _cents_str(RENT_CENTS)])
+	var today_rent := rent_for_day(day_cycle.day) + int(season.extra_rent_cents)
+	lines.append("Day %d — rent $%s/day" % [day_cycle.day, _cents_str(today_rent)])
 	lines.append("Today: %s" % today_event.name)
 	if str(season.name) != "":
 		lines.append("This week: %s" % season.name)

@@ -100,6 +100,8 @@ static func validate(payload: Variant) -> Dictionary:
 		return {}
 	if not _guide_valid(p):
 		return {}
+	if not _crate_next_valid(p):
+		return {}
 
 	var out: Dictionary = p.duplicate(true)
 	out["version"] = int(p["version"])
@@ -181,6 +183,13 @@ static func _filament_valid(p: Dictionary) -> bool:
 		if not _is_int(g) or int(g) < 0:
 			return false
 	return true
+
+
+## Optional "crate_next" key: non-negative int crate-rotation counter.
+static func _crate_next_valid(p: Dictionary) -> bool:
+	if not p.has("crate_next"):
+		return true
+	return _is_int(p["crate_next"]) and int(p["crate_next"]) >= 0
 
 
 ## Optional guide keys: "guide_done" bool, "guide_flags" dict of bools.
