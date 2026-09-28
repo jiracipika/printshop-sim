@@ -40,11 +40,11 @@ func _run() -> void:
 	# Printers exist
 	var printers := root.get_tree().get_nodes_in_group("printers")
 	checks += 1
-	if printers.size() != 2:
-		printerr("FAIL: expected 2 printers, got %d" % printers.size())
+	if printers.size() != 4:
+		printerr("FAIL: expected 4 printers, got %d" % printers.size())
 		failures += 1
 	else:
-		print("check %d: 2 printers OK" % checks)
+		print("check %d: 4 printers OK" % checks)
 
 	# Job queue
 	checks += 1

@@ -47,6 +47,8 @@ var season: Dictionary = Events.CALM_SEASON.duplicate(true)
 var _crate_label: Label3D
 var _chalk_label: Label3D
 var _chalk_cache := ""
+var _door_panel: Node3D
+var _door_body: StaticBody3D
 ## First-run objectives (v0.9.0): order-agnostic completion flags; the HUD
 ## shows the first unfinished step until everything is done (persisted).
 var guide_flags := {"accepted": false, "printed": false, "collected": false,
@@ -287,6 +289,11 @@ var world := {}
 const ROOM_W := 7.0
 const ROOM_D := 6.0
 const ROOM_H := 3.0
+## Rear extension (v0.13): the print farm lives beyond the original back
+## wall, behind a sealed door that opens with the farm kits.
+const EXT_D := 2.7
+const DOOR_X0 := 0.9
+const DOOR_X1 := 2.3
 
 func _ready() -> void:
 	add_to_group("main")
@@ -367,10 +374,10 @@ func _load_save() -> void:
 			if payload.stats.has(key):
 				stats[key] = maxi(int(payload.stats[key]), 0)
 	if payload.has("filament") and typeof(payload.filament) == TYPE_ARRAY:
-		for i in mini(2, payload.filament.size()):
+		for i in mini(machines.size(), payload.filament.size()):
 			machines[i]["filament_g"] = maxi(int(payload.filament[i]), 0)
 	if payload.has("spool_colors") and typeof(payload.spool_colors) == TYPE_ARRAY:
-		for i in mini(2, payload.spool_colors.size()):
+		for i in mini(machines.size(), payload.spool_colors.size()):
 			var col = payload.spool_colors[i]
 			if col is String and (col == "" or col in Contract.VALID_COLORS):
 				machines[i]["color"] = col
@@ -394,6 +401,18 @@ func apply_setting(key: String, value, persist := true) -> void:
 	if persist:
 		_save_game()
 
+func _machine_filament_list() -> Array:
+	var out: Array = []
+	for m in machines:
+		out.append(int(m.get("filament_g")))
+	return out
+
+func _machine_color_list() -> Array:
+	var out: Array = []
+	for m in machines:
+		out.append(str(m.get("color")))
+	return out
+
 func _save_game() -> void:
 	var snapshot: Dictionary = ledger.snapshot()
 	var payload: Dictionary = load("res://scripts/SaveSystem.gd").build_payload(
@@ -403,8 +422,8 @@ func _save_game() -> void:
 			"day": day_cycle.day,
 			"reputation": reputation,
 			"stats": stats,
-			"filament": [int(_machine(0).get("filament_g")), int(_machine(1).get("filament_g"))],
-			"spool_colors": [str(_machine(0).get("color")), str(_machine(1).get("color"))],
+			"filament": _machine_filament_list(),
+			"spool_colors": _machine_color_list(),
 			"guide_flags": guide_flags.duplicate(),
 			"guide_done": guide_done,
 			"crate_next": _crate_next,
@@ -467,10 +486,16 @@ func _build_world() -> void:
 	floor_body.position = Vector3(0, -0.1, 0)
 	add_child(floor_body)
 
-	# Four walls: sage, each with a matching StaticBody3D (meta "wall").
+	# Walls: sage, each with a matching StaticBody3D (meta "wall"). The back
+	# wall is three segments around the farm-room doorway (v0.13).
 	var wall_specs := [
 		# [size, position]
-		[Vector3(ROOM_W, ROOM_H, 0.2), Vector3(0, ROOM_H / 2.0, -ROOM_D / 2.0)],      # back
+		[Vector3(ROOM_W / 2.0 + DOOR_X0 + 0.1, ROOM_H, 0.2),
+			Vector3((-ROOM_W / 2.0 + DOOR_X0) / 2.0, ROOM_H / 2.0, -ROOM_D / 2.0)],   # back left
+		[Vector3(ROOM_W / 2.0 - DOOR_X1 + 0.1, ROOM_H, 0.2),
+			Vector3((ROOM_W / 2.0 + DOOR_X1) / 2.0, ROOM_H / 2.0, -ROOM_D / 2.0)],    # back right
+		[Vector3(DOOR_X1 - DOOR_X0, ROOM_H - 2.3, 0.2),
+			Vector3((DOOR_X0 + DOOR_X1) / 2.0, (ROOM_H + 2.3) / 2.0, -ROOM_D / 2.0)], # lintel
 		[Vector3(ROOM_W, ROOM_H, 0.2), Vector3(0, ROOM_H / 2.0, ROOM_D / 2.0)],       # front
 		[Vector3(0.2, ROOM_H, ROOM_D), Vector3(-ROOM_W / 2.0, ROOM_H / 2.0, 0)],      # left
 		[Vector3(0.2, ROOM_H, ROOM_D), Vector3(ROOM_W / 2.0, ROOM_H / 2.0, 0)],       # right
@@ -558,28 +583,31 @@ func _build_world() -> void:
 	add_child(lamp2)
 
 	_build_props()
+	_build_extension()
 	_build_design_computer()
 
-	# Two printers: one on the bench, one on a steel floor stand against the back wall.
-	# Printer 2 is the "Pro machine": locked until purchased, 25% faster.
-	var printer_a := _make_printer(0)
-	printer_a.position = Vector3(-1.8, 0.95, -2.0)
-	add_child(printer_a)
-	_printers.append(printer_a)
+	# Four printers: two with the shop, two more behind the farm door.
+	# Printer 2 is the "Pro machine" (25% faster); farm printers ship empty.
+	var printer_spots := [
+		Vector3(-1.8, 0.95, -2.0),   # bench
+		Vector3(1.8, 0.8, -2.4),     # floor stand
+		Vector3(-1.8, 0.8, -4.6),    # farm, back-left
+		Vector3(1.8, 0.8, -4.6),     # farm, back-right
+	]
+	for i in range(4):
+		var p := _make_printer(i)
+		p.position = printer_spots[i]
+		add_child(p)
+		_printers.append(p)
 
-	var printer_b := _make_printer(1)
-	printer_b.position = Vector3(1.8, 0.8, -2.4)
-	add_child(printer_b)
-	_printers.append(printer_b)
-	_refresh_printer_locks()
-
-	var stand := MeshInstance3D.new()
-	var stand_box := BoxMesh.new()
-	stand_box.size = Vector3(0.8, 0.8, 0.8)
-	stand.mesh = stand_box
-	stand.material_override = steel
-	stand.position = Vector3(1.8, 0.4, -2.4)
-	add_child(stand)
+	for stand_pos in [Vector3(1.8, 0.4, -2.4), Vector3(-1.8, 0.4, -4.6), Vector3(1.8, 0.4, -4.6)]:
+		var stand := MeshInstance3D.new()
+		var stand_box := BoxMesh.new()
+		stand_box.size = Vector3(0.8, 0.8, 0.8)
+		stand.mesh = stand_box
+		stand.material_override = steel
+		stand.position = stand_pos
+		add_child(stand)
 
 	# Packing station against the right wall (task 11).
 	packing_station = load("res://scripts/PackingStation.gd").new()
@@ -588,7 +616,7 @@ func _build_world() -> void:
 
 	# One machine per printer: own sim, contract, prep state and part.
 	machines.clear()
-	for i in range(2):
+	for i in range(4):
 		var s := PrintSim.new()
 		s.add_to_group("print_sim")
 		add_child(s)
@@ -606,6 +634,7 @@ func _build_world() -> void:
 	job_board.generation_enabled = true  # live shop: procedural board (v0.4.0)
 	job_board.add_to_group("job_board")
 	add_child(job_board)
+	_refresh_printer_locks()  # machines + printers all exist by now
 	_apply_daylight()
 
 ## Mark one onboarding objective done; guide_done flips when all are.
@@ -654,14 +683,22 @@ func _apply_daylight() -> void:
 	if _sky_mat != null:
 		_sky_mat.sky_energy_multiplier = 0.3 + 0.8 * daylight
 
-## Printer 2 display name + lock tag follow the pro-machine upgrade.
+## Per-printer display name + lock tag follow the unlock upgrades, and the
+## farm door opens once any farm kit is owned.
 func _refresh_printer_locks() -> void:
-	if _printers.size() < 2:
-		return
-	var pro := upgrades.pro_machine_unlocked()
-	if _printers[1].get("set_locked") != null:
-		_printers[1].set_locked(not pro)
-		_printers[1].set_display_name("Printer 2 — PRO" if pro else "Printer 2")
+	for i in range(mini(_printers.size(), machines.size())):
+		var unlocked := upgrades.machine_unlocked(i)
+		var printer = _printers[i]
+		if printer.get("set_locked") != null:
+			printer.set_locked(not unlocked)
+		var display := "Printer %d" % (i + 1)
+		if i == 1 and unlocked:
+			display = "Printer 2 — PRO"
+		elif i >= 2 and unlocked:
+			display = "Printer %d — FARM" % (i + 1)
+		if printer.get("set_display_name") != null:
+			printer.set_display_name(display)
+	_refresh_farm_door()
 
 ## Sky, ambient light, ceiling and window (task 12 art pass). Everything is
 ## procedural — ProceduralSkyMaterial for the soft daylight ambience.
@@ -749,6 +786,160 @@ func _build_environment() -> void:
 		rail_mesh.material_override = world.steel
 		rail_mesh.position = rail[1]
 		add_child(rail_mesh)
+
+## Rear extension: floor, side walls, back wall, ceiling and lights for the
+## print farm, plus the sealed door. Geometry exists from boot; the door
+## opens (mesh swings, collision off) when any farm kit is purchased.
+func _build_extension() -> void:
+	var z0 := -ROOM_D / 2.0            # doorway plane
+	var z1 := -ROOM_D / 2.0 - EXT_D    # new back wall plane
+	var mid := (z0 + z1) / 2.0
+	var depth := absf(z1 - z0)
+
+	var ext_floor := MeshInstance3D.new()
+	var ext_floor_box := BoxMesh.new()
+	ext_floor_box.size = Vector3(ROOM_W, 0.2, depth)
+	ext_floor.mesh = ext_floor_box
+	ext_floor.material_override = world.floor
+	ext_floor.position = Vector3(0, -0.1, mid)
+	add_child(ext_floor)
+	var ext_floor_body := StaticBody3D.new()
+	ext_floor_body.collision_layer = 1
+	var ext_floor_shape := CollisionShape3D.new()
+	var ext_floor_col := BoxShape3D.new()
+	ext_floor_col.size = Vector3(ROOM_W, 0.2, depth)
+	ext_floor_shape.shape = ext_floor_col
+	ext_floor_body.add_child(ext_floor_shape)
+	ext_floor_body.position = Vector3(0, -0.1, mid)
+	add_child(ext_floor_body)
+
+	for sx in [-1.0, 1.0]:
+		var side := MeshInstance3D.new()
+		var side_box := BoxMesh.new()
+		side_box.size = Vector3(0.2, ROOM_H, depth + 0.2)
+		side.mesh = side_box
+		side.material_override = world.sage
+		side.position = Vector3(sx * (ROOM_W / 2.0), ROOM_H / 2.0, mid)
+		add_child(side)
+		var side_body := StaticBody3D.new()
+		side_body.collision_layer = 1
+		var side_shape := CollisionShape3D.new()
+		var side_col := BoxShape3D.new()
+		side_col.size = Vector3(0.2, ROOM_H, depth + 0.2)
+		side_shape.shape = side_col
+		side_body.add_child(side_shape)
+		side_body.position = side.position
+		add_child(side_body)
+
+	var ext_back := MeshInstance3D.new()
+	var ext_back_box := BoxMesh.new()
+	ext_back_box.size = Vector3(ROOM_W, ROOM_H, 0.2)
+	ext_back.mesh = ext_back_box
+	ext_back.material_override = world.sage
+	ext_back.position = Vector3(0, ROOM_H / 2.0, z1)
+	add_child(ext_back)
+	var ext_back_body := StaticBody3D.new()
+	ext_back_body.collision_layer = 1
+	var ext_back_shape := CollisionShape3D.new()
+	var ext_back_col := BoxShape3D.new()
+	ext_back_col.size = Vector3(ROOM_W, ROOM_H, 0.2)
+	ext_back_shape.shape = ext_back_col
+	ext_back_body.add_child(ext_back_shape)
+	ext_back_body.position = ext_back.position
+	add_child(ext_back_body)
+
+	var ext_ceiling := MeshInstance3D.new()
+	var ext_ceiling_box := BoxMesh.new()
+	ext_ceiling_box.size = Vector3(ROOM_W, 0.2, depth)
+	ext_ceiling.mesh = ext_ceiling_box
+	var ext_ceil_mat := StandardMaterial3D.new()
+	ext_ceil_mat.albedo_color = Color("#E3DCCB")
+	ext_ceil_mat.roughness = 1.0
+	ext_ceiling.material_override = ext_ceil_mat
+	ext_ceiling.position = Vector3(0, ROOM_H + 0.1, mid)
+	add_child(ext_ceiling)
+
+	var ext_lamp := OmniLight3D.new()
+	ext_lamp.position = Vector3(0, 2.7, mid)
+	ext_lamp.omni_range = 12.0
+	ext_lamp.light_energy = 1.4
+	add_child(ext_lamp)
+	var ext_lamp2 := OmniLight3D.new()
+	ext_lamp2.position = Vector3(0, 2.6, z1 + 0.8)
+	ext_lamp2.omni_range = 10.0
+	ext_lamp2.light_energy = 1.0
+	add_child(ext_lamp2)
+	var ext_fixture := MeshInstance3D.new()
+	var ext_fixture_box := BoxMesh.new()
+	ext_fixture_box.size = Vector3(1.1, 0.06, 0.28)
+	ext_fixture.mesh = ext_fixture_box
+	var ext_fixture_mat := StandardMaterial3D.new()
+	ext_fixture_mat.albedo_color = Color("#FFF4DC")
+	ext_fixture_mat.emission_enabled = true
+	ext_fixture_mat.emission = Color("#FFE9C4")
+	ext_fixture_mat.emission_energy_multiplier = 1.6
+	ext_fixture.material_override = ext_fixture_mat
+	ext_fixture.position = Vector3(0, ROOM_H - 0.05, mid)
+	ext_fixture.add_to_group("props")
+	add_child(ext_fixture)
+
+	# Sealed door in the doorway: honey panel in a steel frame + collision.
+	var frame_mat := StandardMaterial3D.new()
+	frame_mat.albedo_color = Color("#3A4644")
+	frame_mat.roughness = 0.5
+	for side in [-1.0, 1.0]:
+		var jamb := MeshInstance3D.new()
+		var jamb_box := BoxMesh.new()
+		jamb_box.size = Vector3(0.1, 2.3, 0.26)
+		jamb.mesh = jamb_box
+		jamb.material_override = frame_mat
+		jamb.position = Vector3((DOOR_X0 + DOOR_X1) / 2.0 + side * (DOOR_X1 - DOOR_X0) / 2.0,
+			1.15, z0)
+		add_child(jamb)
+	_door_panel = Node3D.new()
+	_door_panel.name = "FarmDoor"
+	_door_panel.position = Vector3(DOOR_X0, 0, z0)
+	add_child(_door_panel)
+	var panel := MeshInstance3D.new()
+	var panel_box := BoxMesh.new()
+	panel_box.size = Vector3(DOOR_X1 - DOOR_X0, 2.3, 0.08)
+	panel.mesh = panel_box
+	var panel_mat := StandardMaterial3D.new()
+	panel_mat.albedo_color = Color.WHITE
+	panel_mat.albedo_texture = ShopArt.wood(Color("#C3A076"), 3)
+	panel_mat.roughness = 0.7
+	panel.material_override = panel_mat
+	panel.position = Vector3((DOOR_X1 - DOOR_X0) / 2.0, 1.15, 0)
+	_door_panel.add_child(panel)
+	_door_body = StaticBody3D.new()
+	_door_body.collision_layer = 1
+	var door_shape := CollisionShape3D.new()
+	var door_col := BoxShape3D.new()
+	door_col.size = Vector3(DOOR_X1 - DOOR_X0, 2.3, 0.16)
+	door_shape.shape = door_col
+	door_shape.position = Vector3((DOOR_X0 + DOOR_X1) / 2.0, 1.15, z0)
+	_door_body.add_child(door_shape)
+	add_child(_door_body)
+	var door_sign := Label3D.new()
+	door_sign.text = "PRINT FARM\n(closed)"
+	door_sign.font_size = 40
+	door_sign.pixel_size = 0.0028
+	door_sign.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	door_sign.modulate = Color("#EEE5D3")
+	door_sign.outline_modulate = Color("#202B2B")
+	door_sign.outline_size = 4
+	door_sign.position = Vector3((DOOR_X0 + DOOR_X1) / 2.0, 2.55, z0 + 0.05)
+	add_child(door_sign)
+
+## Door state follows the farm unlocks.
+func _refresh_farm_door() -> void:
+	var open := upgrades.machine_unlocked(2) or upgrades.machine_unlocked(3)
+	if _door_body != null:
+		for child in _door_body.get_children():
+			if child is CollisionShape3D:
+				child.set_deferred("disabled", open)
+	if _door_panel != null:
+		_door_panel.rotation_degrees.y = -100.0 if open else 0.0
 
 ## Decorative props: shelf with spare spools, rug, posters, wall clock,
 ## cardboard stack and a plant. Group "props" for tests; colliders only where
@@ -1796,8 +1987,8 @@ func _printer_index_near() -> int:
 ## Consume the held spool into machine `idx`'s filament supply.
 func _load_spool(idx: int) -> void:
 	var m := _machine(idx)
-	if idx == 1 and not upgrades.pro_machine_unlocked():
-		_set_prompt("Printer 2 is locked — buy the Pro machine upgrade (menu)")
+	if not upgrades.machine_unlocked(idx):
+		_set_prompt("Printer %d is locked — check the upgrades menu" % (idx + 1))
 		return
 	var loaded_color := str(held.get_meta("spool_color", "Clay"))
 	held.get_parent().remove_child(held)
@@ -2250,8 +2441,8 @@ func _accept_print() -> void:
 ## machine: locked until bought. OFFERED -> ACCEPTED -> PREPARING; the print
 ## only starts once the player confirms an orientation via _prep_on.
 func _accept_on(idx: int) -> void:
-	if idx == 1 and not upgrades.pro_machine_unlocked():
-		_set_prompt("Printer 2 is locked — buy the Pro machine upgrade (menu)")
+	if not upgrades.machine_unlocked(idx):
+		_set_prompt("Printer %d is locked — check the upgrades menu" % (idx + 1))
 		return
 	var m := _machine(idx)
 	if m.contract != null:
@@ -2500,7 +2691,7 @@ func _on_design_test_print(design: Dictionary) -> void:
 	var idx := -1
 	for i in machines.size():
 		var m: Dictionary = _machine(i)
-		if i == 1 and not upgrades.pro_machine_unlocked():
+		if not upgrades.machine_unlocked(i):
 			continue
 		var s: PrintSim = m.get("sim")
 		if m.get("contract") == null and s.state == PrintSim.State.IDLE \

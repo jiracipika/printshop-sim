@@ -39,6 +39,21 @@ const CATALOG: Array[Dictionary] = [
 		"desc": "Unlock printer 2 — jobs run there print 25% faster",
 		"cost_cents": 6000,
 		"machine_speed_multiplier": 1.25,
+		"machine_index": 1,
+	},
+	{
+		"id": "farm_kit_a",
+		"name": "Print farm kit A (printer 3)",
+		"desc": "Opens the back room — third printer, ships empty",
+		"cost_cents": 8000,
+		"machine_index": 2,
+	},
+	{
+		"id": "farm_kit_b",
+		"name": "Print farm kit B (printer 4)",
+		"desc": "Fourth printer for the back room, ships empty",
+		"cost_cents": 12000,
+		"machine_index": 3,
 	},
 	{
 		"id": "pei_plate",
@@ -130,6 +145,21 @@ func machine_speed_multiplier() -> float:
 ## Printer 2 stays locked until the pro machine is purchased.
 func pro_machine_unlocked() -> bool:
 	return is_owned("pro_machine")
+
+
+## Per-machine unlock gate (v0.13): machines 0-1 ship with the shop
+## (machine 1 still needs the pro machine), 2-3 open with the farm kits.
+func machine_unlocked(idx: int) -> bool:
+	match idx:
+		0:
+			return true
+		1:
+			return is_owned("pro_machine")
+		2:
+			return is_owned("farm_kit_a")
+		3:
+			return is_owned("farm_kit_b")
+	return false
 
 
 ## Delta applied to PrintSim.failure_threshold (0.0 when none owned).

@@ -32,7 +32,7 @@ func _run() -> void:
 	main.paused = false
 	main.captured = true
 
-	_ok(main.machines.size() == 2, "two machines exist")
+	_ok(main.machines.size() == 4, "four machines exist (two behind the farm door)")
 	_ok(main._machine(0).get("sim").state == PrintSim.State.IDLE
 		and main._machine(1).get("sim").state == PrintSim.State.IDLE,
 		"both machines idle at boot")

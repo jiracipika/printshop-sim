@@ -36,6 +36,19 @@ https://printshop-sim.vercel.app/.
 
 ## State at this checkpoint
 
+v0.13.0 (print farm) shipped on top of v0.12.0: the shop gained a rear
+extension (own floor/walls/ceiling/lights) behind a sealed honey door in the
+back wall (doorway x 0.9-2.3; door panel swings and its collision disables
+when either farm kit is owned). Machines grew to 4 — printers 3 and 4 sit
+on stands in the farm and unlock via new Upgrades "farm_kit_a" ($80) /
+"farm_kit_b" ($120) with per-machine machine_unlocked(idx); all four
+idx==1 special cases were generalised (accept/load/design-computer gates
+now use the helper). Farm printers ship EMPTY and have no speed bonus
+(Pro stays exclusive to printer 2). Save filament/color arrays now cover
+all machines. New suite tests/farm_test.gd (20 checks); all 27 suites
+green (1027 checks). Audit note: the extension lighting was tuned twice
+(omnis 1.4/1.0 energy) — still moodier than the main room by design.
+
 v0.12.0 (balance pass) shipped on top of v0.11.0, driven by a read-only
 economy audit (background research agent; full findings were reported to the
 operator — week-1 gross ~$4,120 at >90% margins, upright unconditionally
@@ -192,14 +205,14 @@ cardboard/posters/rug), procedural sky + fog, ceiling fixtures, window,
 props (spool shelf, crates, plant, ticking wall clock), center reticle,
 synthesized SFX + printer hum on an "SFX" bus.
 
-Verification evidence (local): 26 Godot headless suites green — contract 255,
-color 27, events 15, v011 16, guide 21, art_pass 16, spool 23, gen 24,
-features 31, upgrades 55, packing 58, touch 47, save 44, shop_art 51,
+Verification evidence (local): 27 Godot headless suites green — contract 255,
+color 27, events 15, v011 16, guide 21, art_pass 16, farm 20, spool 23,
+gen 24, features 31, upgrades 57, packing 58, touch 47, save 44, shop_art 51,
 economy 54, day 37, design_computer 21, parallel 23, prep 29,
 printer_visual 34, grab 26, input_pause 23, menu 25, debug_panel 32, room 9,
-smoke 9 (1005 checks, 0 failures, no SCRIPT ERROR); Python build pipeline 21
-pytest; engine screenshots confirm the chalkboard ledger and the boom-week
-HUD line.
+smoke 9 (1027 checks, 0 failures, no SCRIPT ERROR); Python build pipeline 21
+pytest; engine screenshots confirm the sealed door and both farm printers
+running in the extension.
 
 v0.1.0 RELEASED: commits 2f1f2af (loop/features) + ab05cc4 (shell help
 placement). Deployed to https://printshop-sim.vercel.app/ via vercel --prod;

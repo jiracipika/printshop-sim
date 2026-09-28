@@ -2,7 +2,7 @@ extends Node
 
 # Autoload: build/version identification so we always know what's deployed.
 
-const VERSION := "0.12.0"
+const VERSION := "0.13.0"
 const GIT_SHA := "9d42ef7"  # stamped by tools/build_web.sh at export time
 
 func label() -> String:
