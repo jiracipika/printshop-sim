@@ -343,6 +343,27 @@ Test checks:
 
 ---
 
+## Post-roadmap — v0.23.0 "Operations pass" — SHIPPED
+
+- [x] Photo mode: F2 hides the whole HUD layer for clean shots (prompt
+      names the key; second press restores)
+- [x] Two new milestones: "Full house" (all four printers running at once,
+      derived live from the machine sims) and "Perfectionist" (five A-grade
+      deliveries in a row; the last five order grades persist as save key
+      recent_grades, validator rejects non-letters)
+- [x] New daily event "Surplus stock" (spools $6, joins the deterministic
+      pool; the crate sign follows) — existing day pins unaffected
+      (events_test/day_test green untouched)
+- [x] Chalkboard names the week and season icon ("Week 2 ☃")
+
+Test checks:
+- [x] 18 new checks in v023_test (photo toggle, full-house lifecycle,
+      perfectionist streak + break, recent_grades persistence + validator,
+      surplus rotation + crate sign, chalkboard week line)
+- [x] all 37 suites + smoke green (1387 checks); pytest 21/21
+
+---
+
 ## Definition of done (every slice)
 
 - [ ] Feature checks above all ticked

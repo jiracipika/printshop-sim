@@ -159,6 +159,8 @@ var _step_alt := false
 var _steps_played := 0
 var _bells_played := 0
 var _stations_heard: Array[int] = []
+## Last five delivery grades, oldest first (v0.23.0) — feeds Perfectionist.
+var recent_grades: Array[String] = []
 ## False until _ready finishes: boot-time station marks happen before the
 ## save loads, and saving there would clobber the player's file.
 var _boot_ready := false
@@ -283,6 +285,16 @@ func _on_menu_log() -> void:
 		lines.append("Day %d · [%s] %s" % [int(e.day), str(e.kind), str(e.text)])
 	main_menu.show_log(lines)
 
+## Full house (v0.23.0): every machine on the floor is mid-print.
+func _full_house() -> bool:
+	if machines.size() < 4:
+		return false
+	for m in machines:
+		var sim: PrintSim = m.get("sim")
+		if sim == null or not sim.is_running():
+			return false
+	return true
+
 ## Computed milestones (v0.6.0) — derived from live state, nothing to persist.
 func _achievements() -> Array[Dictionary]:
 	return [
@@ -298,6 +310,12 @@ func _achievements() -> Array[Dictionary]:
 			"done": reputation >= 4.25},
 		{"name": "Radio star", "hint": "hear all 3 radio stations",
 			"done": _stations_heard.size() >= 3},
+		{"name": "Full house", "hint": "have all 4 printers running at once",
+			"done": _full_house()},
+		{"name": "Perfectionist", "hint": "deliver five A grades in a row",
+			"done": recent_grades.size() >= 5
+				and not recent_grades.has("B") and not recent_grades.has("C")
+				and not recent_grades.has("D") and not recent_grades.has("F")},
 		{"name": "Fully kitted", "hint": "own all 8 upgrades",
 			"done": upgrades.owned_count() == 8},
 		{"name": "Week one", "hint": "keep the shop open past day 7",
@@ -567,6 +585,11 @@ func _load_save() -> void:
 			var si := int(st)
 			if si >= 0 and si <= 2 and not _stations_heard.has(si):
 				_stations_heard.append(si)
+	if payload.has("recent_grades") and typeof(payload.recent_grades) == TYPE_ARRAY:
+		recent_grades.clear()
+		for g in payload.recent_grades:
+			if g is String and g in ["A", "B", "C", "D", "F"]:
+				recent_grades.append(g)
 	# Silently adopt anything already earned at load time (a persisted set
 	# can lag the save — the check only runs while the HUD renders): a boot
 	# must never toast old news.
@@ -626,6 +649,7 @@ func _save_game() -> void:
 			"tier_announced": announced_tier,
 			"achv_toasted": _achv_toasted,
 			"stations_heard": _stations_heard,
+			"recent_grades": recent_grades,
 		})
 	var ok: bool = load("res://scripts/BrowserSave.gd").save_payload(payload)
 	save_status_line = "%s at %s" % ["saved ok" if ok else "save FAILED",
@@ -2090,6 +2114,14 @@ func _on_touch_resume() -> void:
 	touch_controls.set_motion_enabled(true)
 	_prompt.text = "Left stick move   Right side look   Interact   Pause"
 
+## Photo mode (v0.23.0): F2 hides the HUD (and reticle) for clean shots.
+func _toggle_photo_mode() -> void:
+	if _hud == null:
+		return
+	_hud.visible = not _hud.visible
+	_set_prompt("Photo mode %s — F2 brings the HUD back" % "off"
+		if not _hud.visible else "Photo mode off — F2 brings the HUD back")
+
 ## Reticle shows only during active gameplay.
 func _set_reticle(on: bool) -> void:
 	if _reticle != null:
@@ -2128,6 +2160,8 @@ func _unhandled_input(event: InputEvent) -> void:
 			_route_escape()
 		elif event.physical_keycode == KEY_E:
 			_try_grab_or_place()
+		elif event.physical_keycode == KEY_F2:
+			_toggle_photo_mode()
 	# Deliberate (re)capture: allowed when paused, or when effectively
 	# unlocked (covers the browser case where pointer lock was denied or
 	# lost — raw mode fell back to VISIBLE while captured was still true —
@@ -2740,6 +2774,9 @@ func _try_pack_held() -> bool:
 	packing_station.set_stack_count(0)
 	m["contract"] = null
 	last_pack_grade = final_grade
+	recent_grades.append(final_grade)
+	if recent_grades.size() > 5:
+		recent_grades = recent_grades.slice(recent_grades.size() - 5)
 	_log_event("delivered", "%s%s — grade %s, $%s%s" % [c.model_name, multitag,
 		final_grade, _cents_str(payout), " (late)" if late else ""])
 	# Reputation and lifetime stats.
@@ -3473,8 +3510,11 @@ func _update_chalkboard() -> void:
 	var stars := ""
 	for i in range(5):
 		stars += "*" if i < roundi(reputation) else "."
-	var text := "SHOP LEDGER\nDay %d\nDelivered: %d\nMissed: %d\nEarned: $%s\nRep %s %.1f" % [
-		day_cycle.day, int(stats.delivered), int(stats.missed),
+	var week := int((day_cycle.day - 1) / 7.0) + 1
+	var week_line := "Week %d %s" % [week, _season_icon(str(season.get("id", "calm")))]
+	var text := "SHOP LEDGER\nDay %d · %s\nDelivered: %d\nMissed: %d\nEarned: $%s\nRep %s %.1f" % [
+		day_cycle.day, week_line,
+		int(stats.delivered), int(stats.missed),
 		_cents_str(int(stats.earned_cents)),
 		stars, reputation]
 	if text != _chalk_cache:

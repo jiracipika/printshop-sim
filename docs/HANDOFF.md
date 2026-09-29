@@ -1,4 +1,26 @@
-# Current handoff — presence pass (v0.22.0)
+# Current handoff — operations pass (v0.23.0)
+
+## Current active work
+
+Post-roadmap drop. F2 toggles photo mode (_toggle_photo_mode hides the
+whole _hud CanvasLayer — reticle, status, prompt, toast, everything). Two
+milestones: "Full house" derives live from the machine sims (_full_house:
+machines.size() == 4 and every sim is_running) and "Perfectionist" reads
+recent_grades (the last five FINAL order grades, appended in _try_pack_held
+after aggregation, capped via slice, persisted as save key "recent_grades"
+— validator accepts only A-F letters, <= 5 entries). New daily event
+"surplus_stock" (spools $6) joined Events.for_day's pool — adding to the
+pool shifts which day rolls which event, but no test pinned specific days
+beyond day 1 quiet, so events/day suites needed no edits. The chalkboard
+gains a "Week N <icon>" line (cached as usual).
+
+Local verification: all 37 suites + smoke pass (1387 checks, 18 new in
+tests/v023_test.gd), pytest 21/21. Screenshot confirmed photo mode's
+HUD-free shop view.
+
+---
+
+# Previous handoff — presence pass (v0.22.0)
 
 ## Current active work
 

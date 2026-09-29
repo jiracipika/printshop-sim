@@ -110,6 +110,8 @@ static func validate(payload: Variant) -> Dictionary:
 		return {}
 	if not _stations_heard_valid(p):
 		return {}
+	if not _recent_grades_valid(p):
+		return {}
 
 	var out: Dictionary = p.duplicate(true)
 	out["version"] = int(p["version"])
@@ -178,6 +180,21 @@ static func _settings_valid(p: Dictionary) -> bool:
 			return false
 		var rs := float(s["radio_station"])
 		if rs != floorf(rs) or rs < 0.0 or rs > 2.0:
+			return false
+	return true
+
+
+## Optional "recent_grades" key (v0.23.0): absent = fine; present must be an
+## array of at most 5 grade letters.
+static func _recent_grades_valid(p: Dictionary) -> bool:
+	if not p.has("recent_grades"):
+		return true
+	if typeof(p["recent_grades"]) != TYPE_ARRAY:
+		return false
+	if p["recent_grades"].size() > 5:
+		return false
+	for v in p["recent_grades"]:
+		if not (v is String) or not (v in ["A", "B", "C", "D", "F"]):
 			return false
 	return true
 
