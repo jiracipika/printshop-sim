@@ -1,4 +1,36 @@
-# Current handoff — multi-part orders (v0.18.0)
+# Current handoff — reputation tiers (v0.19.0)
+
+## Current active work
+
+v0.19.0 ties the board to standing. Events.gd gains the tier tables:
+tier_for_rep (1 below 3.0★, 2 below 3.5, 3 below 4.25, 4 at 4.25+ — exact
+thresholds count as the higher tier), tier_max_difficulty (tier+1, so
+2/3/4/5), tier_rush_mult (+10% per tier above the first), TIER_NAMES.
+Contract.generate gains a max_difficulty param (default 5 = every pinned
+(day, slot) value unchanged; the difficulty clamp is the ONLY change).
+JobBoard.deal_day(day, cap, rush_mult) clears and re-deals the boot board
+(RESETTING the deal cycle — the first cut continued it and handed the shop
+slots 08-15); rotate_day accepts optional tier terms that update the stored
+_deal_cap/_deal_rush_mult used by all refills. Rush payouts are scaled at
+DEAL time in _refill (capped at the $95 ceiling) so Contract.generate stays
+untouched. Main deals the boot board at its starting tier (fresh shops are
+tier 2 at 3.0★) and re-deals each morning at the current tier. Tier-ups
+announce once per threshold, ever: announced_tier is a persisted high-water
+mark (save key "tier_announced"; pre-v0.19 saves and fresh shops adopt the
+current tier silently). New achievements "Board regular" (3.5★) and "Top of
+the market" (4.25★); the Stats panel gains a BOARD TIER block naming the
+current terms and the next unlock.
+
+Local verification on Godot 4.7.1: all 33 suites + smoke pass (1304 checks,
+32 new in tests/v019_test.gd), `python3 -m pytest tests/test_build_web.py -q`
+passes (21 tests). Engine screenshot confirmed the Stats panel tier block.
+
+Next iteration: v0.20.0 "Hardening & release polish" per docs/ROADMAP.md
+slice 9 (quality presets, draw-call audit, portrait HUD, 1.0-rc docs).
+
+---
+
+# Previous handoff — multi-part orders (v0.18.0)
 
 ## Current active work
 

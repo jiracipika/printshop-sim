@@ -54,6 +54,9 @@ var packing_station: PackingStation
 ## Reputation (v0.5.0): 0..5 stars, start 3. Scales every payout by
 ## 0.8 + rep/5 * 0.4 (x0.8 at rock bottom, x1.2 at five stars).
 var reputation := 3.0
+## Reputation-tier high-water mark (v0.19.0): tier-up announcements and the
+## morning board terms fire once per threshold; persisted.
+var announced_tier := 1
 ## Lifetime counters (v0.5.0), persisted and shown in the menu Stats panel.
 ## "missed" (v0.14.0): board offers that expired overnight.
 var stats := {"delivered": 0, "late": 0, "scrapped": 0, "cancelled": 0, "earned_cents": 0, "missed": 0}
@@ -235,8 +238,22 @@ func _on_menu_stats() -> void:
 		"Lifetime earnings: $%s" % _cents_str(int(stats.earned_cents)),
 		"Reputation: %s %.1f / 5  (payout x%.2f)" % [stars, reputation, reputation_multiplier()],
 		"",
-		"MILESTONES",
+		"BOARD TIER (v0.19)",
 	]
+	# Reputation tiers (v0.19.0): current terms + what the next tier unlocks.
+	var tier := Events.tier_for_rep(reputation)
+	lines.append("%s — jobs up to difficulty %d, rush premium x%.1f" % [
+		Events.TIER_NAMES[tier], Events.tier_max_difficulty(tier),
+		Events.tier_rush_mult(tier)])
+	if tier < 4:
+		var nt := tier + 1
+		lines.append("Next: %s at %.2f stars — jobs up to difficulty %d, rush x%.1f" % [
+			Events.TIER_NAMES[nt], Events.TIER_THRESHOLDS[tier - 1],
+			Events.tier_max_difficulty(nt), Events.tier_rush_mult(nt)])
+	else:
+		lines.append("Top tier reached — the whole market shops here.")
+	lines.append("")
+	lines.append("MILESTONES")
 	for a in _achievements():
 		lines.append(("%s  %s" % ["✓", a.name]) if a.done else ("·  %s — %s" % [a.name, a.hint]))
 	main_menu.show_stats(lines)
@@ -259,6 +276,10 @@ func _achievements() -> Array[Dictionary]:
 			"done": int(stats.delivered) >= 10},
 		{"name": "Five stars", "hint": "reach a 4.5+ reputation",
 			"done": reputation >= 4.5},
+		{"name": "Board regular", "hint": "reach a 3.5+ reputation",
+			"done": reputation >= 3.5},
+		{"name": "Top of the market", "hint": "reach a 4.25+ reputation",
+			"done": reputation >= 4.25},
 		{"name": "Fully kitted", "hint": "own all 8 upgrades",
 			"done": upgrades.owned_count() == 8},
 		{"name": "Week one", "hint": "keep the shop open past day 7",
@@ -487,6 +508,15 @@ func _load_save() -> void:
 		_crate_next = maxi(int(payload.crate_next), 0)
 	if payload.has("log"):
 		workshop_log.restore(payload.log)
+	if payload.has("tier_announced"):
+		var t := int(payload.tier_announced)
+		if t >= 1 and t <= 4:
+			announced_tier = t
+		else:
+			announced_tier = Events.tier_for_rep(reputation)
+	else:
+		# Pre-v0.19 saves: adopt the current tier silently, never re-announce.
+		announced_tier = Events.tier_for_rep(reputation)
 
 func apply_setting(key: String, value, persist := true) -> void:
 	settings[key] = value
@@ -531,6 +561,7 @@ func _save_game() -> void:
 			"crate_next": _crate_next,
 			"board": job_board.snapshot_payload(),
 			"log": workshop_log.snapshot(),
+			"tier_announced": announced_tier,
 		})
 	var ok: bool = load("res://scripts/BrowserSave.gd").save_payload(payload)
 	save_status_line = "%s at %s" % ["saved ok" if ok else "save FAILED",
@@ -738,6 +769,13 @@ func _build_world() -> void:
 	job_board.generation_enabled = true  # live shop: procedural board (v0.4.0)
 	job_board.add_to_group("job_board")
 	add_child(job_board)
+	# Tier-capped boot deal (v0.19.0): the implicit _ready fill used no cap.
+	var boot_tier := Events.tier_for_rep(reputation)
+	job_board.deal_day(1, Events.tier_max_difficulty(boot_tier),
+		Events.tier_rush_mult(boot_tier))
+	# Fresh shops start AT their tier — it never announces. Saves override
+	# this in _load_save (persisted high-water or derived).
+	announced_tier = boot_tier
 	_refresh_printer_locks()  # machines + printers all exist by now
 	_apply_daylight()
 
@@ -2818,7 +2856,10 @@ func _is_cancelled() -> bool:
 ## Day rollover: first come, first served — overnight offers expire (rep hit),
 ## then rent comes due, then overdue contracts are cancelled.
 func _on_day_changed(new_day: int) -> void:
-	var expired: Array = job_board.rotate_day(new_day)  # rush/competing vanish; calm jobs carry over
+	# The morning board deals at the current reputation tier (v0.19.0).
+	var tier := Events.tier_for_rep(reputation)
+	var expired: Array = job_board.rotate_day(new_day, true,
+		Events.tier_max_difficulty(tier), Events.tier_rush_mult(tier))
 	_refresh_event()
 	var missed_note := ""
 	if not expired.is_empty():
@@ -2889,6 +2930,14 @@ func _finalize_payout(base: int, late: bool, m: Dictionary, rep := -1.0) -> int:
 
 func _rep_event(delta: float) -> void:
 	reputation = clampf(reputation + delta, 0.0, 5.0)
+	# Tier-up announcement (v0.19.0): exactly once per threshold, ever —
+	# the high-water mark survives rep drops and save/reload.
+	var tier := Events.tier_for_rep(reputation)
+	if tier > announced_tier:
+		announced_tier = tier
+		_log_event("tier", "The board is buzzing — bigger jobs available")
+		_set_prompt("The board is buzzing — bigger jobs available")
+		_save_game()
 
 ## Payouts repay rent debt before anything else can be done with the money.
 func _repay_rent_debt() -> void:

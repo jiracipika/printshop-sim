@@ -30,6 +30,24 @@ var generation_enabled := false:
 			_fixture_cycle = 0
 var _gen_day := 1
 var _capacity := 0  # cached fixture-pool size (set on first fill)
+## Reputation-tier deal terms (v0.19.0): generated refills cap at this
+## difficulty and scale rush payouts. Defaults reproduce the uncapped board.
+var _deal_cap := 5
+var _deal_rush_mult := 1.0
+
+
+## Fresh morning deal (v0.19.0, boot path): clear and deal a full board at
+## the given tier terms. Resets the deal cycle so a re-deal reproduces the
+## day's canonical slots (0..7), not a continuation.
+func deal_day(day: int, max_difficulty := 5, rush_mult := 1.0) -> void:
+	if not generation_enabled:
+		return
+	_queue.clear()
+	_fixture_cycle = 0
+	_gen_day = maxi(day, 1)
+	_deal_cap = clampi(max_difficulty, 1, 5)
+	_deal_rush_mult = maxf(rush_mult, 1.0)
+	_fill_to_capacity()
 
 func _ready() -> void:
 	_fill_to_capacity()
@@ -37,8 +55,10 @@ func _ready() -> void:
 ## Morning rollover. Expire overnight offers (rush/competing dealt before
 ## `day`), keep everything else, then top back up with fresh deals stamped
 ## for the new day. `apply_expiry = false` deals a fresh board without
-## penalties (save-load path). Returns the expired contracts, oldest first.
-func rotate_day(day: int, apply_expiry := true) -> Array:
+## penalties (save-load path). `max_difficulty`/`rush_mult` (v0.19.0) update
+## the reputation-tier deal terms when >= 0/-1; refills use them from here
+## on. Returns the expired contracts, oldest first.
+func rotate_day(day: int, apply_expiry := true, max_difficulty := -1, rush_mult := -1.0) -> Array:
 	if not generation_enabled:
 		return []
 	var expired: Array = []
@@ -48,6 +68,10 @@ func rotate_day(day: int, apply_expiry := true) -> Array:
 				expired.append(c)
 	for c in expired:
 		_queue.erase(c)
+	if max_difficulty > 0:
+		_deal_cap = clampi(max_difficulty, 1, 5)
+	if rush_mult > 0.0:
+		_deal_rush_mult = maxf(rush_mult, 1.0)
 	_gen_day = maxi(day, 1)
 	_fill_to_capacity()
 	return expired
@@ -58,8 +82,12 @@ func _refill() -> void:
 	# contract's state would otherwise be clobbered by a later refill —
 	# so they are duplicated. Generated contracts are fresh objects already.
 	if generation_enabled:
-		var g: Contract = Contract.generate(_gen_day, _fixture_cycle)
+		var g: Contract = Contract.generate(_gen_day, _fixture_cycle, _deal_cap)
 		g.state = Contract.State.OFFERED
+		# Tier rush premium (v0.19.0): scaled at deal time so pinned
+		# Contract.generate values stay untouched.
+		if g.rush and _deal_rush_mult > 1.0:
+			g.payout_cents = mini(roundi(float(g.payout_cents) * _deal_rush_mult), 9500)
 		_queue.append(g)
 		_fixture_cycle += 1
 		return

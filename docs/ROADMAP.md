@@ -225,27 +225,40 @@ regression surface (collect/pack/grade) is covered by the v018 e2e loop.
 
 ---
 
-## Slice 8 — v0.19.0 "Reputation tiers" (progression gates)
+## Slice 8 — v0.19.0 "Reputation tiers" (progression gates) — SHIPPED
 
 Goal: tie reputation to what the board offers.
 
 Feature checks:
-- [ ] Board tiers: generated contracts roll difficulty ≤ 2 below 3.0 rep,
-      ≤ 3 below 3.5, ≤ 4 below 4.25, anything at 4.25+
-- [ ] Tier-up moment announces itself ("The board is buzzing — bigger jobs
-      available") once per tier
-- [ ] Rush premiums scale with tier (+10% per tier above the first)
-- [ ] Two new achievements: "Board regular" (3.5★), "Top of the market"
+- [x] Board tiers: generated contracts cap difficulty at 2 below 3.0 rep,
+      3 below 3.5, 4 below 4.25, anything at 4.25+ (Events.tier_for_rep /
+      tier_max_difficulty; Contract.generate gains a max_difficulty param
+      whose default keeps every pinned value; the morning board deals at the
+      current tier via JobBoard.deal_day / rotate_day tier terms)
+- [x] Tier-up moment announces itself ("The board is buzzing — bigger jobs
+      available") once per tier, ever — high-water mark persisted in the
+      save (tier_announced); pre-v0.19 saves adopt their current tier
+      silently; fresh shops start AT tier 2 without announcing it
+- [x] Rush premiums scale with tier (+10% per tier above the first, applied
+      at deal time so Contract.generate stays pinned; calm payouts untouched)
+- [x] Two new achievements: "Board regular" (3.5★), "Top of the market"
       (4.25★)
-- [ ] Stats panel shows the current tier and what the next unlocks
+- [x] Stats panel shows the current tier (name + difficulty cap + rush
+      premium) and what the next tier unlocks (threshold + terms)
 
 Test checks:
-- [ ] generated pool difficulty distribution per rep band (sweep)
-- [ ] tier-up announcement fires exactly once per threshold
-- [ ] achievements integration
-- [ ] all suites green
+- [x] tier table boundaries (exactly 3.0/3.5/4.25 count as the higher tier)
+- [x] capped generation sweep respects every cap; default generate unchanged
+- [x] deal_day/rotate_day deal terms: queue capped, rush payouts scale by
+      exactly the tier multiplier (capped at the $95 payout ceiling)
+- [x] tier-up announcement fires exactly once per threshold (log + prompt +
+      save round-trip; re-crossing stays silent)
+- [x] achievements + stats panel integration
+- [x] all 33 suites + smoke green (32 new checks in v019_test); pytest 21/21
 
-Risk: low-medium.
+Risk: low-medium — the tier terms ride the existing deal pipeline; the one
+regression found in testing (boot re-deal continuing the cycle counter
+instead of restarting it) is fixed in deal_day and covered by day_test.
 
 ---
 

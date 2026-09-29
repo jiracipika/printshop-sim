@@ -116,3 +116,37 @@ static func _season_by_id(id: String) -> Dictionary:
 				"extra_rent_cents": 0,
 				"payout_mult": 1.10}
 	return CALM_SEASON.duplicate(true)
+
+
+## --- reputation tiers (v0.19.0) ----------------------------------------------
+##
+## The board reacts to standing: below 3.0 stars only easy jobs appear, and
+## every threshold up widens the pool and sweetens rush premiums. Pure data —
+## JobBoard/Main apply the terms when they deal the morning board.
+
+const TIER_NAMES: Array[String] = [
+	"", "Unknown shop", "Local regular", "Trusted studio", "Top of the market",
+]
+## Reputation where each tier-up lands (index i = tier i+1 -> i+2).
+const TIER_THRESHOLDS: Array[float] = [3.0, 3.5, 4.25]
+
+
+## Tier 1..4 for a reputation in 0..5. Exactly 3.0/3.5/4.25 already counts as
+## the higher tier.
+static func tier_for_rep(rep: float) -> int:
+	var r := clampf(rep, 0.0, 5.0)
+	var tier := 1
+	for i in range(TIER_THRESHOLDS.size()):
+		if r >= TIER_THRESHOLDS[i]:
+			tier = i + 2
+	return tier
+
+
+## Generated jobs cap at this difficulty for the tier (1->2, 2->3, 3->4, 4->5).
+static func tier_max_difficulty(tier: int) -> int:
+	return clampi(tier + 1, 2, 5)
+
+
+## Rush premium multiplier on the board: +10% per tier above the first.
+static func tier_rush_mult(tier: int) -> float:
+	return 1.0 + 0.1 * float(clampi(tier, 1, 4) - 1)

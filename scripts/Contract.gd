@@ -337,8 +337,10 @@ const GEN_BASE_PAYOUT: Array[int] = [4200, 6400, 8750, 9800, 9000]
 
 ## Deterministic contract for shop `day`, board slot `index`. Same inputs ->
 ## same contract, forever. `day >= 1` also bumps difficulty odds slightly so
-## later days lean toward meatier work.
-static func generate(day: int, index: int) -> Contract:
+## later days lean toward meatier work. `max_difficulty` (v0.19.0) caps the
+## difficulty roll for reputation tiers; the default keeps every pre-v0.19
+## pinned (day, slot) value identical.
+static func generate(day: int, index: int, max_difficulty := 5) -> Contract:
 	var rng := RandomNumberGenerator.new()
 	rng.seed = hash("printshop-gen-%d-%d" % [maxi(day, 1), index])
 
@@ -350,7 +352,8 @@ static func generate(day: int, index: int) -> Contract:
 	c.model_name = GEN_MODELS[rng.randi_range(0, GEN_MODELS.size() - 1)]
 
 	var day_bonus: int = clampi((maxi(day, 1) - 1) / 3, 0, 2)
-	c.difficulty = clampi(rng.randi_range(1, 5) + (1 if rng.randf() < 0.15 * day_bonus else 0), 1, 5)
+	c.difficulty = clampi(rng.randi_range(1, 5) + (1 if rng.randf() < 0.15 * day_bonus else 0),
+		1, clampi(max_difficulty, 1, 5))
 	c.layers = rng.randi_range(60, 400)
 
 	# Risk flags scale with difficulty (~15% per step above 1, per flag).
