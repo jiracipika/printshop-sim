@@ -1,4 +1,47 @@
-# Current handoff — weather in the windows (v0.17.0)
+# Current handoff — multi-part orders (v0.18.0)
+
+## Current active work
+
+v0.18.0 deepens the core job into a production run. Generated contracts can
+ask for 2-3 copies (~1 in 4 slots; the parts_total draw is the LAST in
+Contract.generate so every pinned (day, slot) value is untouched; fixtures
+stay single-part; payout_cents/material_cost_cents stay PER COPY and the
+card shows "[×N parts]"). Contract gains parts_total/parts_packed/
+copy_grades, helpers is_multi_part/needs_parts/order_payout_cents, and a
+new legal transition INSPECTION -> PREPARING used only by the reprint flow
+(E at the order's printer while copies are owed: back through prep, then
+"copy N of M" prints). Packing accepts partial deliveries: each copy is
+graded (color cap applies per copy), appended to copy_grades, and stacks on
+the table (PackingStation.set_stack_count, max 3) while the contract stays
+INSPECTION and pays nothing. The FINAL pack aggregates the order grade
+(Contract.aggregate_grades: averages floor, single F caps C, two F = F),
+pays order_payout_cents x multiplier exactly once via the usual
+_finalize_payout chain, and clears the stack. An F copy is refused,
+recorded, scrapped (-0.15 rep, order survives); the SECOND F copy fails the
+order on the spot (rep -0.4, stats.cancelled, no payout, stack cleared).
+Deadlines bite only at final completion (late half-pay + rep at the last
+copy); overnight cancel discards mid-orders + stack. HUD contract line
+gains "parts N/M", collect/reprint prompts name the copy, the delivery log
+says "×N", and the how-to explains the loop. Board summaries + save payload
+carry parts_total; pre-v0.18 payloads restore as single-part (tolerated
+missing key). In-progress orders still reset on reload (machines were never
+persisted) — unchanged behavior.
+
+Local verification on Godot 4.7.1: all 32 suites + smoke pass (1272 checks,
+55 new in tests/v018_test.gd), `python3 -m pytest tests/test_build_web.py -q`
+passes (21 tests). Engine screenshot confirmed the stacked copies + the
+"parts 2/3" HUD line.
+
+Key regression trap fixed during the slice: _collect_on used to treat ANY
+INSPECTION contract as collectable — a mid-order reprint press would spawn
+a phantom copy. It now defers to the reprint branch when the contract is
+multi-part, owes copies, and the sim isn't DONE_OK.
+
+Next iteration: v0.19.0 "Reputation tiers" per docs/ROADMAP.md slice 8.
+
+---
+
+# Previous handoff — weather in the windows (v0.17.0)
 
 ## Current active work
 

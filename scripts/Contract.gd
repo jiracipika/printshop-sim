@@ -22,7 +22,7 @@ extends Resource
 ##     ACCEPTED   -> PREPARING
 ##     PREPARING  -> PRINTING, FAILED
 ##     PRINTING   -> INSPECTION, FAILED
-##     INSPECTION -> PACKED, FAILED
+##     INSPECTION -> PACKED, FAILED, PREPARING (multi-part reprint, v0.18.0)
 ##     PACKED     -> DELIVERED
 ##     DELIVERED  -> (terminal)
 ##     FAILED     -> (terminal)
@@ -58,6 +58,15 @@ const VALID_COLORS: Array[String] = ["Clay", "Sage", "Honey"]
 ## Filament color the client expects ("" = any). A mismatch caps the delivery
 ## grade at B — the part still ships, just for less money.
 @export var color: String = ""
+## Multi-part orders (v0.18.0): generated contracts can ask for 2-3 copies.
+## payout_cents and material_cost_cents stay PER COPY; the whole order pays
+## out once, when the last copy is packed. Fixture jobs stay single-part.
+@export var parts_total: int = 1
+## Copies packed so far (packed parts stack on the packing table).
+@export var parts_packed: int = 0
+## Per-copy delivery grades recorded at pack time, in pack order. The order
+## grade aggregates from these at final completion (aggregate_grades).
+@export var copy_grades: Array[String] = []
 @export var state: State = State.OFFERED
 
 static var _RISK_FLAG_SET: Dictionary = {
@@ -91,12 +100,60 @@ func is_valid() -> bool:
 		return false
 	if deadline_days < 0:
 		return false
+	if parts_total < 1 or parts_total > 3:
+		return false
+	if parts_packed < 0 or parts_packed > parts_total:
+		return false
 	for flag in risk_flags:
 		if not _RISK_FLAG_SET.has(flag):
 			return false
 	if color != "" and not (color in VALID_COLORS):
 		return false
 	return true
+
+
+## --- multi-part orders (v0.18.0) ----------------------------------------------
+
+func is_multi_part() -> bool:
+	return parts_total > 1
+
+
+## True while more copies still need printing and packing.
+func needs_parts() -> bool:
+	return parts_packed < parts_total
+
+
+## The whole order's payout: the per-copy payout times the copy count.
+func order_payout_cents() -> int:
+	return payout_cents * parts_total
+
+
+## Order grade from the per-copy grades. Two F copies fail the whole order;
+## a single F caps the order at C; otherwise the average grades floor to a
+## letter (A=4 .. D=1, averages round down — conservative by design).
+static func aggregate_grades(grades: Array[String]) -> String:
+	var f_count := 0
+	var sum := 0.0
+	const VALUES := {"A": 4.0, "B": 3.0, "C": 2.0, "D": 1.0}
+	for g in grades:
+		if g == "F":
+			f_count += 1
+		else:
+			sum += float(VALUES.get(g, 1.0))
+	if f_count >= 2:
+		return "F"
+	if f_count == 1:
+		return "C"
+	if grades.is_empty():
+		return "D"
+	var avg := sum / float(grades.size())
+	if avg >= 3.5:
+		return "A"
+	if avg >= 2.5:
+		return "B"
+	if avg >= 1.5:
+		return "C"
+	return "D"
 
 
 ## Legal successor states for `from`, in table order. No duplicates.
@@ -106,7 +163,9 @@ static func legal_transitions(from: State) -> Array[State]:
 		State.ACCEPTED: [State.PREPARING],
 		State.PREPARING: [State.PRINTING, State.FAILED],
 		State.PRINTING: [State.INSPECTION, State.FAILED],
-		State.INSPECTION: [State.PACKED, State.FAILED],
+		# INSPECTION -> PREPARING: multi-part orders re-enter prep to print
+		# their next copy (v0.18.0). Single-part flow never uses it.
+		State.INSPECTION: [State.PACKED, State.FAILED, State.PREPARING],
 		State.PACKED: [State.DELIVERED],
 		State.DELIVERED: [],
 		State.FAILED: [],
@@ -322,4 +381,9 @@ static func generate(day: int, index: int) -> Contract:
 	# pinned client/model/payout — only the new flag consumes fresh rng state.
 	c.competing = rng.randf() < 0.3
 	c.offered_day = maxi(day, 1)
+	# Multi-part orders (v0.18.0): ~1 in 4 generated jobs asks for 2-3 copies
+	# of the model. Last draw in the chain — pinned (day, slot) values above
+	# never move. payout_cents stays per copy; the order pays parts_total x.
+	if rng.randf() < 0.25:
+		c.parts_total = 3 if rng.randf() < 0.4 else 2
 	return c

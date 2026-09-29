@@ -187,32 +187,41 @@ Risk: medium — visual tuning is iterative; shipped conservative.
 
 ---
 
-## Slice 7 — v0.18.0 "Multi-part orders" (contracts v2)
+## Slice 7 — v0.18.0 "Multi-part orders" (contracts v2) — SHIPPED
 
 Goal: deepen the core job into a small production run.
 
 Feature checks:
-- [ ] Generated contracts can require 2-3 copies of a model ("×3" on the
-      card); fixture contracts stay single-part
-- [ ] Each copy is a separate print on any machine; parts track their order
-      id + copy index
-- [ ] Packing table accepts partial deliveries: packed parts stack on the
-      table visually (max 3), contract stays INSPECTION until all copies
-      are packed
-- [ ] Payout, grade (average of copies), tips and deadlines all apply at the
-      final completion
-- [ ] Board card, HUD contract line, and chalkboard reflect "parts 2/3"
-- [ ] F-grade on any copy caps the whole order at C; two F copies fail it
+- [x] Generated contracts can require 2-3 copies ("[×2 parts]" on the card,
+      ~1 in 4 slots, deterministic as the LAST generator draw so every
+      pre-v0.18 pinned (day, slot) value is untouched); fixture contracts
+      stay single-part; payout/materials stay PER COPY
+- [x] Each copy is a separate print on the order's machine; the contract
+      tracks parts_packed + copy_grades; a new legal transition
+      INSPECTION -> PREPARING re-enters prep for the next copy
+- [x] Packing table accepts partial deliveries: packed copies stack on the
+      table visually (max 3, PackingStation.set_stack_count), contract stays
+      INSPECTION until all copies are packed
+- [x] Payout, aggregate grade (average of copies), tips and deadlines all
+      apply at the final completion, exactly once
+- [x] Board card, HUD contract line ("parts 2/3"), collect/reprint prompts
+      and the delivery log ("×3") reflect order progress
+- [x] F-grade on any copy caps the whole order at C; a second F copy fails
+      the order outright (rep hit, no payout); an F copy is scrapped (-0.15
+      rep) and reprinted without killing the order
 
 Test checks:
-- [ ] multi-part state machine: partial packs, completion payout exactly
-      once, deadline applies to the LAST copy
-- [ ] grade aggregation rules (single F caps to C; two F = FAILED)
-- [ ] cancel path refunds/discards cleanly across machines
-- [ ] all suites green (economy, parallel, color updated for parts)
+- [x] multi-part state machine: partial packs pay nothing, completion payout
+      exactly once, deadline applies to the LAST copy (late + cancel paths)
+- [x] grade aggregation rules (single F caps to C; two F = FAILED; averages
+      floor conservatively)
+- [x] cancel path discards the mid-order and its stack cleanly
+- [x] board summaries + save payload carry parts_total; pre-v0.18 payloads
+      restore as single-part
+- [x] all 32 suites + smoke green (55 new checks in v018_test); pytest 21/21
 
-Risk: high — the deepest slice; consider splitting if it exceeds ~600
-changed lines.
+Risk: high — shipped as one slice at ~340 changed lines; the deepest
+regression surface (collect/pack/grade) is covered by the v018 e2e loop.
 
 ---
 

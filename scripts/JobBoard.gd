@@ -136,6 +136,7 @@ func available_summaries() -> Array[Dictionary]:
 			"deadline_days": c.deadline_days,
 			"color": c.color,
 			"competing": c.competing,
+			"parts_total": c.parts_total,
 		})
 	return out
 
@@ -162,6 +163,7 @@ func snapshot_payload() -> Dictionary:
 			"competing": c.competing,
 			"offered_day": c.offered_day,
 			"color": c.color,
+			"parts_total": c.parts_total,
 		})
 	return {"day": _gen_day, "cycle": _fixture_cycle, "jobs": jobs}
 
@@ -224,6 +226,15 @@ static func _contract_from(j: Variant) -> Contract:
 		return null
 	if typeof(d["risk_flags"]) != TYPE_ARRAY:
 		return null
+	# parts_total arrived with v0.18.0 — older saves omit it and restore as
+	# single-part. When present it must be a whole int in 1..3.
+	var parts := 1
+	if d.has("parts_total"):
+		if not _whole_int(d["parts_total"]):
+			return null
+		parts = int(d["parts_total"])
+		if parts < 1 or parts > 3:
+			return null
 	var flags: Array[String] = []
 	for f in d["risk_flags"]:
 		if not (f is String) or not (f as String in Contract.VALID_RISK_FLAGS):
@@ -243,6 +254,7 @@ static func _contract_from(j: Variant) -> Contract:
 	c.competing = d["competing"]
 	c.offered_day = int(d["offered_day"])
 	c.color = d["color"]
+	c.parts_total = parts
 	c.state = Contract.State.OFFERED
 	return c
 

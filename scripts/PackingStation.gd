@@ -17,6 +17,23 @@ signal packed(contract_id: String, grade: String, payout_cents: int)
 ##   { id: String, grade: String, payout_cents: int, packed: bool, reason: String }
 var last_result: Dictionary = {}
 
+## Packed-part stack pieces (v0.18.0), hidden until a copy is packed.
+var _stack: Array[MeshInstance3D] = []
+
+
+## Show `count` packed copies on the table (0..3; clamped).
+func set_stack_count(count: int) -> void:
+	for i in range(_stack.size()):
+		_stack[i].visible = i < clampi(count, 0, _stack.size())
+
+
+func stack_count() -> int:
+	var n := 0
+	for piece in _stack:
+		if piece.visible:
+			n += 1
+	return n
+
 
 func _ready() -> void:
 	add_to_group("stations")
@@ -91,6 +108,22 @@ func _build_visuals() -> void:
 	sign.outline_size = 5
 	sign.position = Vector3(0, 1.45, 0)
 	add_child(sign)
+
+	# Packed-part stack (v0.18.0): up to 3 terracotta copies pile up next to
+	# the shipping box while a multi-part order is mid-completion.
+	var stack_mat := StandardMaterial3D.new()
+	stack_mat.albedo_color = Color("#DA623A")
+	stack_mat.roughness = 0.55
+	for i in range(3):
+		var piece := MeshInstance3D.new()
+		var pb := BoxMesh.new()
+		pb.size = Vector3(0.12, 0.1, 0.12)
+		piece.mesh = pb
+		piece.material_override = stack_mat
+		piece.position = Vector3(-0.15 + 0.14 * i, 0.95, -0.25)
+		piece.visible = false
+		add_child(piece)
+		_stack.append(piece)
 
 
 func _build_collision() -> void:

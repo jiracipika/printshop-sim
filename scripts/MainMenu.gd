@@ -677,6 +677,7 @@ func _build_howto_panel() -> void:
 		+ "3.  Risky orientations can fail mid-print — clear the bed with E and try a calmer angle.\n" \
 		+ "4.  When the print finishes, E collects the part.\n" \
 		+ "5.  Carry it to the PACKING table and press E to deliver. Grade A pays best; F pays nothing.\n" \
+		+ "×2/×3 orders: the payout is per copy — pack each part, then E at the printer prints the next.\n" \
 		+ "\nWATCH THE CLOCK\n" \
 		+ "Days pass (~90 s each). Rent is due every morning — unpaid rent becomes debt.\n" \
 		+ "Deliver late and the client pays half. Two days too late, the job is cancelled.\n" \
@@ -955,6 +956,14 @@ func _make_card(s: Dictionary) -> PanelContainer:
 		comp_tag.add_theme_color_override("font_color", COLOR_TERRA)
 		comp_tag.add_theme_font_size_override("font_size", 12)
 		meta.add_child(comp_tag)
+	# Multi-part orders (v0.18.0): the payout shown is per copy.
+	if int(s.get("parts_total", 1)) > 1:
+		var parts_tag := Label.new()
+		parts_tag.name = "PartsTag"
+		parts_tag.text = "  [×%d parts]" % int(s.get("parts_total", 1))
+		parts_tag.add_theme_color_override("font_color", COLOR_HONEY)
+		parts_tag.add_theme_font_size_override("font_size", 12)
+		meta.add_child(parts_tag)
 	var color_tag := Label.new()
 	color_tag.name = "ColorTag"
 	var wanted := str(s.get("color", ""))

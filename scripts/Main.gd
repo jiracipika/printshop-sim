@@ -2356,6 +2356,10 @@ func _collect_on(idx: int) -> bool:
 		return true
 	if c == null or c.state != Contract.State.INSPECTION:
 		return false
+	# Multi-part mid-order (v0.18.0): nothing finished on the bed, so there is
+	# nothing to collect — the reprint branch in _try_interact takes over.
+	if c.is_multi_part() and c.needs_parts() and sim.state != PrintSim.State.DONE_OK:
+		return false
 	if is_instance_valid(m.get("part")):
 		_set_prompt("Grab the printed part and take it to the packing table")
 		return true
@@ -2386,7 +2390,11 @@ func _collect_on(idx: int) -> bool:
 		sim.reset()
 	_guide("collected")
 	sfx.play("grab")
-	_set_prompt("%s printed — take it to the packing table" % c.model_name)
+	if c.is_multi_part():
+		_set_prompt("Copy %d of %d printed — take it to the packing table" % [
+			c.parts_packed + 1, c.parts_total])
+	else:
+		_set_prompt("%s printed — take it to the packing table" % c.model_name)
 	return true
 
 func _collect_print() -> bool:
@@ -2469,30 +2477,67 @@ func _try_pack_held() -> bool:
 	})
 	if not result.get("packed", false):
 		if result.get("grade", "") == "F":
+			# F copy (v0.18.0): recorded against the order. The first F caps
+			# the eventual order grade at C and the copy gets scrapped +
+			# reprinted; the second F kills the whole order.
+			c.copy_grades.append("F")
+			var f_count := 0
+			for g in c.copy_grades:
+				if g == "F":
+					f_count += 1
+			if f_count >= 2 and _advance(c, Contract.State.FAILED):
+				packing_station.set_stack_count(0)
+				_discard_part_for(m)
+				m["contract"] = null
+				_rep_event(-0.4)
+				stats.cancelled += 1
+				_log_event("scrap", "second F — %s order failed" % c.model_name)
+				_save_game()
+				sfx.play("buzz")
+				_set_prompt("Second F — the %s order is dead. No payout, rep hit." % c.model_name)
+				return true
 			m["scrap"] = true
-			_set_prompt("Quality F — %s not deliverable. [E] scrap it" % c.model_name)
+			_set_prompt("F on a copy (%d total) — [E] scrap it, then reprint it [E] at its printer" % f_count)
 		else:
 			_set_prompt("Pack refused: %s" % result.get("reason", "?"))
 		return true
+	# Non-F copy: record the (color-capped) grade and stack the part.
 	var eff_grade: String = _cap_grade_for_color(result.grade, c, m)
-	var eff_payout: int = roundi(c.payout_cents * QualityCheck.quality_multiplier(eff_grade))
+	c.copy_grades.append(eff_grade)
+	c.parts_packed += 1
+	_discard_part_for(m)
+	if c.needs_parts():
+		# Partial pack (v0.18.0): the copy joins the stack on the table; the
+		# order stays open until every copy is packed. No payout yet.
+		packing_station.set_stack_count(c.parts_packed)
+		_log_event("packed", "%s part %d/%d packed (grade %s)" % [
+			c.model_name, c.parts_packed, c.parts_total, eff_grade])
+		_save_game()
+		sfx.play("grab")
+		_set_prompt("Part %d/%d packed (%s) — [E] at Printer %d prints the next copy" % [
+			c.parts_packed, c.parts_total, eff_grade, mi + 1])
+		return true
+	# Final copy: aggregate the order grade and pay out exactly once.
+	var final_grade: String = Contract.aggregate_grades(c.copy_grades)
+	var multitag := " ×%d" % c.parts_total if c.is_multi_part() else ""
+	var eff_payout: int = roundi(c.order_payout_cents() * QualityCheck.quality_multiplier(final_grade))
 	if not _advance(c, Contract.State.PACKED):
 		return true
 	if not _advance(c, Contract.State.DELIVERED):
 		return true
 	# Final payout: effective grade x reputation x season x event; late halves
-	# last; same-day delivery earns a 15% tip on top.
+	# last; same-day delivery earns a 10% tip on top.
 	var late := _is_late_for(m)
 	var payout := _finalize_payout(eff_payout, late, m)
 	var same_day := _days_taken_for(m) <= 0
 	if not ledger.pay_once(c.id, payout, "payout %s" % c.id):
 		return true
 	_repay_rent_debt()
-	_discard_part_for(m)
+	packing_station.set_stack_count(0)
 	m["contract"] = null
-	last_pack_grade = eff_grade
-	_log_event("delivered", "%s — grade %s, $%s%s" % [c.model_name, result.grade,
-		_cents_str(payout), " (late)" if late else ""])
+	last_pack_grade = final_grade
+	_log_event("delivered", "%s%s — grade %s, $%s%s" % [c.model_name, multitag,
+		final_grade, _cents_str(payout), " (late)" if late else ""])
 	# Reputation and lifetime stats.
 	if late:
 		_rep_event(-0.2)
@@ -2508,14 +2553,14 @@ func _try_pack_held() -> bool:
 	sfx.play("cash")
 	var tip: int = payout - roundi(float(payout) / 1.10)
 	if late:
-		_set_prompt("Delivered LATE %s (%s) — $%s · rep down" % [c.model_name, result.grade,
-			_cents_str(payout)])
+		_set_prompt("Delivered LATE %s%s (%s) — $%s · rep down" % [c.model_name,
+			multitag, final_grade, _cents_str(payout)])
 	elif same_day:
-		_set_prompt("Same-day tip! Delivered %s (%s) — $%s incl. $%s tip" % [c.model_name,
-			result.grade, _cents_str(payout), _cents_str(tip)])
+		_set_prompt("Same-day tip! Delivered %s%s (%s) — $%s incl. $%s tip" % [c.model_name,
+			multitag, final_grade, _cents_str(payout), _cents_str(tip)])
 	else:
-		_set_prompt("Delivered %s (%s) — $%s · rep up" % [c.model_name, result.grade,
-			_cents_str(payout)])
+		_set_prompt("Delivered %s%s (%s) — $%s · rep up" % [c.model_name,
+			multitag, final_grade, _cents_str(payout)])
 	return true
 
 ## A wrong spool color caps the grade at B (the part still ships).
@@ -2536,6 +2581,18 @@ func _scrap_held() -> bool:
 	var c: Contract = m.get("contract")
 	if c == null or c.state != Contract.State.INSPECTION:
 		return false
+	if c.is_multi_part():
+		# Scrap an F copy (v0.18.0): the order survives — one F caps the final
+		# grade at C; the player reprints the copy on the same printer.
+		_discard_part_for(m)
+		m["scrap"] = false
+		_rep_event(-0.15)
+		stats.scrapped += 1
+		_log_event("scrap", "scrapped an F copy of %s — reprint it" % c.model_name)
+		_save_game()
+		sfx.play("buzz")
+		_set_prompt("Scrapped the F copy. Reprint it: [E] at Printer %d." % (mi + 1))
+		return true
 	_advance(c, Contract.State.FAILED)
 	_discard_part_for(m)
 	m["contract"] = null
@@ -2718,11 +2775,15 @@ func _accept_on(idx: int) -> void:
 		return
 	m["contract"] = job
 	m["day"] = day_cycle.day
+	job.parts_packed = 0
+	job.copy_grades = []
+	packing_station.set_stack_count(0)
 	_guide("accepted")
 	m["orient"] = 0
 	m["orient_pending"] = false
 	sfx.play("click")
-	_set_prompt("Accepted %s — [E] to preview orientation" % job.model_name)
+	_set_prompt("Accepted %s%s — [E] to preview orientation" % [
+		job.model_name, " (%d-part order)" % job.parts_total if job.is_multi_part() else ""])
 
 ## --- deadlines (v0.2.0) -------------------------------------------------------
 
@@ -2800,6 +2861,7 @@ func _on_day_changed(new_day: int) -> void:
 				_printers[vi].set_failed(false)
 		_discard_part_for(m)
 		m["contract"] = null
+		packing_station.set_stack_count(0)
 		_rep_event(-0.6)
 		stats.cancelled += 1
 		_log_event("cancel", "client cancelled %s — far too late" % c.model_name)
@@ -2903,6 +2965,17 @@ func _try_interact() -> void:
 	if c != null:
 		if c.state == Contract.State.PREPARING:
 			_prep_on(_focus)
+		elif c.state == Contract.State.INSPECTION and c.needs_parts() \
+				and s.state == PrintSim.State.IDLE:
+			# Multi-part reprint (v0.18.0): more copies are owed; the printer
+			# goes back through prep exactly like a fresh accept.
+			if not _advance(c, Contract.State.PREPARING):
+				return
+			m["orient"] = 0
+			m["orient_pending"] = false
+			sfx.play("click")
+			_set_prompt("%s copy %d of %d — [E] to preview orientation" % [
+				c.model_name, c.parts_packed + 1, c.parts_total])
 		return  # this machine is busy
 	if not job_board.has_available():
 		return
@@ -3058,9 +3131,12 @@ func _update_hud() -> void:
 		var due := _days_remaining_for(m)
 		var due_text := "due in %dd" % due if due >= 0 else "LATE — half pay"
 		var want: String = c.color
-		lines.append("Contract %s — %s [%s] pays $%s · %s%s%s" % [
+		var parts_txt := " · parts %d/%d" % [c.parts_packed, c.parts_total] \
+			if c.is_multi_part() else ""
+		lines.append("Contract %s — %s [%s] pays $%s · %s%s%s%s" % [
 			c.id, c.model_name, Contract.state_name(c.state),
 			_cents_str(c.payout_cents), due_text, tag,
+			parts_txt,
 			"" if want == "" else " · wants %s" % want,
 		])
 		if c.state == Contract.State.PREPARING:
