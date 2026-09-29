@@ -296,6 +296,33 @@ Risk: closed — this was the last roadmap slice.
 
 ---
 
+## Post-roadmap — v0.21.0 "Flavor & feel" — SHIPPED
+
+With the 9-slice roadmap closed, these are incremental polish drops on top
+of the 1.0-rc.
+
+- [x] Three radio stations (Sfx.STATIONS: Lo-fi 72 BPM / Synthwave 100 BPM
+      / Ambient 56 BPM) share one parameterized renderer with per-station
+      partials, voice amps, hiss and swell; streams are cached per station
+      and E at the radio cycles station -> station -> off -> back on.
+      settings.radio_station persists; ducking + the Music bus apply to all
+- [x] Milestone toasts: a gold top-center HUD toast announces a milestone
+      the first frame it is true, logs "milestone" in the workshop log, and
+      persists the toasted set (achv_toasted); boot silently adopts anything
+      already earned so reloads never toast old news
+- [x] Shop dressing: doormat under the door, coffee mug on the design
+      bench, cardboard stack by the packing table; draw-call budget still
+      holds (140 visible / 346 total vs 180/400)
+
+Test checks:
+- [x] 23 new checks in v021_test (station streams, cycling, persistence,
+      toast lifecycle incl. the adopt-at-load rule, props, budget)
+- [x] v016 updated to the station API; v015 freezes the shop before its
+      save snapshot (async milestone saves shifted the expected log count)
+- [x] all 35 suites + smoke green (1348 checks); pytest 21/21
+
+---
+
 ## Definition of done (every slice)
 
 - [ ] Feature checks above all ticked

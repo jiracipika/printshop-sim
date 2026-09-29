@@ -46,9 +46,10 @@ func _test_music_stream() -> void:
 		and music.loop_begin == 0 and music.loop_end == music.data.size() / 2,
 		"music loops across the full buffer")
 	var seconds := music.data.size() / 2.0 / Sfx.RATE
-	var expect := 4.0 * 60.0 / Sfx.MUSIC_BPM * Sfx.MUSIC_BARS
+	var bpm := float(Sfx.STATIONS[0].bpm)
+	var expect := 4.0 * 60.0 / bpm * Sfx.MUSIC_BARS
 	_ok(absf(seconds - expect) < 0.1,
-		"music is 4 bars at ~%d BPM (%.1fs)" % [Sfx.MUSIC_BPM, seconds])
+		"music is 4 bars at ~%d BPM (%.1fs)" % [int(bpm), seconds])
 	# Quiet by design: peak amplitude stays well under the SFX norm.
 	var peak := 0.0
 	for i in range(0, music.data.size(), 512):
@@ -102,18 +103,26 @@ func _test_main_radio() -> void:
 	main.paused = false
 	main.captured = true
 	main._player.global_position = Vector3(-3.0, 0.3, -1.0)
+	# v0.21.0: E cycles stations Lo-fi -> Synthwave -> Ambient -> off -> on.
+	main._try_interact()
+	_ok(main._music.playing and int(main.settings.radio_station) == 1,
+		"E at the radio moves to station 2, still playing")
+	main._try_interact()
+	_ok(main._music.playing and int(main.settings.radio_station) == 2,
+		"E again moves to station 3")
 	main._try_interact()
 	_ok(not main._music.playing and not bool(main.settings.music_enabled),
-		"E at the radio turns the music off")
+		"E past the last station turns the music off")
 	main._try_interact()
-	_ok(main._music.playing and bool(main.settings.music_enabled),
-		"E again turns the music back on")
+	_ok(main._music.playing and bool(main.settings.music_enabled)
+		and int(main.settings.radio_station) == 2,
+		"E again turns the music back on the same station")
 	var radio_log: Array[String] = []
 	for e in main.workshop_log.entries():
 		if str(e["kind"]) == "radio":
 			radio_log.append(str(e["text"]))
-	_ok(radio_log.size() == 2 and "off" in radio_log[0] and "on" in radio_log[1],
-		"radio toggles land in the workshop log")
+	_ok(radio_log.size() == 4 and "off" in radio_log[2],
+		"radio station changes land in the workshop log")
 
 	# Slider writes through apply_setting; disabled stops the player.
 	main.apply_setting("music_volume", 0.6, false)

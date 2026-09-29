@@ -240,7 +240,11 @@ func _test_main_hooks() -> void:
 	_ok(kinds.find("expired") < kinds.find("rent"),
 		"entries stay in append order (expiry logged before rent)")
 
-	# Persist: save carries the log; a fresh Main restores it.
+	# Persist: save carries the log; a fresh Main restores it. Freeze the
+	# shop first: milestone toasts (v0.21) save on their own while the
+	# physics loop is still running, which would mutate the file after the
+	# snapshot and shift the expected count.
+	main.paused = true
 	main._save_game()
 	var payload: Dictionary = load("res://scripts/BrowserSave.gd").load_payload()
 	_ok(payload.has("log") and payload["log"].size() >= 4,

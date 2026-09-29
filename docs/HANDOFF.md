@@ -1,4 +1,35 @@
-# Current handoff — 1.0-rc (v0.20.0) — ROADMAP COMPLETE
+# Current handoff — flavor & feel (v0.21.0)
+
+## Current active work
+
+Post-roadmap polish drop on the 1.0-rc. The radio now has THREE stations:
+Sfx.STATIONS carries per-station specs (Lo-fi 72 BPM sine / Synthwave 100
+BPM with 2nd+3rd partials / Ambient 56 BPM pad) rendered by one shared
+music_station_stream() (cached per station — Main swaps by reference).
+E at the radio cycles Lo-fi -> Synthwave -> Ambient -> off -> back on at
+the last station; settings.radio_station persists (validator 0..2) and
+ducking/volume apply to every station. Milestone toasts: a gold top-center
+label flashes "Milestone: <name>" the first _update_hud frame a milestone
+is newly true (Main._check_milestone_toasts), logs "milestone" in the
+workshop log and persists the toasted set as save key "achv_toasted"
+(validator: <= 40 strings). Boot ADOPTS any milestone already true at load
+into the toasted set — a persisted set can lag the save (the check only
+runs while the HUD renders), so a reload never toasts old news. Dressing:
+doormat under the door, coffee mug on the design bench, cardboard stack by
+the packing table (all group "props"; budget audit still green at 140
+visible / 346 total).
+
+Test-side notes for future slices: v016_test now drives the station cycle;
+v015_test freezes the shop (paused = true) BEFORE snapshotting the save —
+async milestone saves fire while the physics loop runs and would otherwise
+shift the expected log count between snapshot and reload.
+
+Local verification: all 35 suites + smoke pass (1348 checks, 23 new in
+tests/v021_test.gd), pytest 21/21. Screenshot confirmed the toast + radio.
+
+---
+
+# Previous handoff — 1.0-rc (v0.20.0) — ROADMAP COMPLETE
 
 ## Current active work
 

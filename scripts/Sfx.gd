@@ -103,7 +103,7 @@ static func stream(sound: String) -> AudioStreamWAV:
 			# and rate-limited by Main while a print runs.
 			s = _wav(_tone(2350.0, 0.035, 0.001, 7.0))
 		"music":
-			s = _music_loop()
+			s = music_station_stream(0)
 		"hum":
 			# Looping printer ambience: mains-frequency drone + soft hiss.
 			var n := int(0.5 * RATE)
@@ -135,50 +135,109 @@ static func stream_lengths() -> Dictionary:
 	return out
 
 
-## --- music (v0.16.0) ------------------------------------------------------------
+## --- music (v0.16.0, stations v0.21.0) ------------------------------------------
 ##
-## Runtime-synthesized lo-fi loop: one soft chord per bar over a vinyl hiss
-## floor, ~72 BPM, 4 bars, seamless loop. Deliberately simple and QUIET —
-## background texture, not a production.
+## Runtime-synthesized music: one soft chord per bar over a hiss floor, 4
+## bars, seamless loop. Deliberately simple and QUIET — background texture,
+## not a production. v0.21.0 added stations: the radio cycles three loops.
 
-const MUSIC_BPM := 72.0
 const MUSIC_BARS := 4
-## Dm7 -> G7 -> Cmaj7 -> Am7 (ii-V-I-vi): each bar's [bass root + chord tones]
-## in Hz. Register kept low for warmth.
-const MUSIC_CHORDS: Array[Array] = [
-	[146.83, 220.0, 261.63, 329.63],
-	[98.0, 196.0, 246.94, 293.66],
-	[130.81, 196.0, 261.63, 329.63],
-	[110.0, 220.0, 261.63, 329.63],
+
+## Per-station synth specs: name, tempo, hiss floor, per-bar swell shape
+## (exponent + level), partials as [frequency-multiplier, amplitude] pairs
+## layered on every chord voice, per-voice amps (bass first), and the chord
+## chart ([bass root + chord tones] in Hz).
+const STATIONS: Array[Dictionary] = [
+	{
+		"name": "Lo-fi", "bpm": 72.0, "hiss": 0.012, "env_pow": 1.5, "level": 0.05,
+		"partials": [[1.0, 1.0]],
+		"voices": [1.0, 0.8, 0.8, 0.8],
+		"chords": [
+			[146.83, 220.0, 261.63, 329.63],
+			[98.0, 196.0, 246.94, 293.66],
+			[130.81, 196.0, 261.63, 329.63],
+			[110.0, 220.0, 261.63, 329.63],
+		],
+	},
+	{
+		"name": "Synthwave", "bpm": 100.0, "hiss": 0.006, "env_pow": 1.2, "level": 0.045,
+		"partials": [[1.0, 1.0], [2.0, 0.4], [3.0, 0.22]],
+		"voices": [0.75, 0.75, 0.75, 0.75],
+		"chords": [
+			[110.0, 220.0, 261.63, 329.63],
+			[87.31, 174.61, 220.0, 261.63],
+			[130.81, 196.0, 261.63, 329.63],
+			[98.0, 196.0, 246.94, 293.66],
+		],
+	},
+	{
+		"name": "Ambient", "bpm": 56.0, "hiss": 0.008, "env_pow": 0.8, "level": 0.055,
+		"partials": [[1.0, 1.0], [2.0, 0.18]],
+		"voices": [1.0, 0.7, 0.7, 0.9],
+		"chords": [
+			[65.41, 130.81, 196.0, 246.94],
+			[87.31, 174.61, 220.0, 261.63],
+			[65.41, 130.81, 196.0, 246.94],
+			[87.31, 174.61, 220.0, 261.63],
+		],
+	},
 ]
 
-static func _music_loop() -> AudioStreamWAV:
-	var bar := 4.0 * 60.0 / MUSIC_BPM
+static func station_names() -> Array[String]:
+	var out: Array[String] = []
+	for s in STATIONS:
+		out.append(str(s.name))
+	return out
+
+
+## The synthesized loop for radio `station` (clamped). One shared renderer;
+## station 0 reproduces the v0.16 lo-fi loop exactly (same bpm/chords and a
+## single 1.0 partial). Cached per station — Main compares streams by
+## reference to decide whether to swap.
+static var _station_cache: Dictionary = {}
+
+static func music_station_stream(station: int) -> AudioStreamWAV:
+	var idx := clampi(station, 0, STATIONS.size() - 1)
+	if _station_cache.has(idx):
+		return _station_cache[idx]
+	var spec: Dictionary = STATIONS[idx]
+	var bpm := float(spec.bpm)
+	var chords: Array = spec.chords
+	var partials: Array = spec.partials
+	var voices: Array = spec.voices
+	var env_pow := float(spec.env_pow)
+	var level := float(spec.level)
+	var bar := 4.0 * 60.0 / bpm
 	var total := int(bar * MUSIC_BARS * RATE)
 	var out := PackedFloat32Array()
 	out.resize(total)
 	var prev := 0.0
 	for i in total:
 		prev += 0.02 * ((randf() * 2.0 - 1.0) - prev)
-		out[i] = 0.012 * prev  # vinyl hiss floor
+		out[i] = float(spec.hiss) * prev  # hiss floor
 	for b in MUSIC_BARS:
-		var chord: Array = MUSIC_CHORDS[b]
+		var chord: Array = chords[b]
 		var start := int(b * bar * RATE)
 		var n := int(bar * RATE)
 		for i in n:
 			var t := float(i) / RATE
-			# Half-sine swell per bar: silent seams, no clicks between chords.
-			var env := pow(sin(PI * float(i) / float(n)), 1.5) * 0.05
+			# Swell per bar: silent seams, no clicks between chords.
+			var env := pow(sin(PI * float(i) / float(n)), env_pow) * level
 			var sample := 0.0
 			for f in chord.size():
-				sample += sin(TAU * float(chord[f]) * t) * (1.0 if f == 0 else 0.8)
+				var va := float(voices[f]) if f < voices.size() else 0.8
+				for p in partials:
+					sample += sin(TAU * float(chord[f]) * float(p[0]) * t) \
+						* float(p[1]) * va
 			out[start + i] += env * sample / float(chord.size())
 	# Crossfade the tail into the head so the loop seam is inaudible.
 	var fade := int(0.05 * RATE)
 	for i in fade:
 		var k := float(i) / float(fade)
 		out[total - fade + i] = lerpf(out[total - fade + i], out[i], k)
-	return _wav(out, true)
+	var wav := _wav(out, true)
+	_station_cache[idx] = wav
+	return wav
 
 ## Create (once) and return the name of the shared Music bus.
 static func music_bus_name() -> String:

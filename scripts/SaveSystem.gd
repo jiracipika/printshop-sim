@@ -106,6 +106,8 @@ static func validate(payload: Variant) -> Dictionary:
 		return {}
 	if not _log_valid(p):
 		return {}
+	if not _achv_toasted_valid(p):
+		return {}
 
 	var out: Dictionary = p.duplicate(true)
 	out["version"] = int(p["version"])
@@ -168,6 +170,28 @@ static func _settings_valid(p: Dictionary) -> bool:
 		return false
 	if s.has("quality_preset") and not (s["quality_preset"] in ["Low", "Standard", "High"]):
 		return false
+	if s.has("radio_station"):
+		var t2 := typeof(s["radio_station"])
+		if t2 != TYPE_INT and t2 != TYPE_FLOAT:
+			return false
+		var rs := float(s["radio_station"])
+		if rs != floorf(rs) or rs < 0.0 or rs > 2.0:
+			return false
+	return true
+
+
+## Optional "achv_toasted" key (v0.21.0): absent = fine; present must be an
+## array of up to 40 milestone name strings.
+static func _achv_toasted_valid(p: Dictionary) -> bool:
+	if not p.has("achv_toasted"):
+		return true
+	if typeof(p["achv_toasted"]) != TYPE_ARRAY:
+		return false
+	if p["achv_toasted"].size() > 40:
+		return false
+	for v in p["achv_toasted"]:
+		if not (v is String):
+			return false
 	return true
 
 

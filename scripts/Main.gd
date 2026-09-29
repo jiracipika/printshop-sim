@@ -137,7 +137,8 @@ var active_part: Grabbable:
 	get: return _machine(_focus).get("part")
 
 var settings := {"mouse_sens_scale": 1.0, "sfx_volume": 0.8, "invert_y": false, "shadows": true,
-	"music_enabled": true, "music_volume": 0.35, "quality_preset": "Standard"}
+	"music_enabled": true, "music_volume": 0.35, "quality_preset": "Standard",
+	"radio_station": 0}
 var _settings_dirty := false
 var sfx: Sfx
 var _hum: AudioStreamPlayer3D
@@ -146,6 +147,11 @@ var _music: AudioStreamPlayer
 var _music_ducked := false
 ## Per-machine servo-blip countdowns (rate-limited while printing).
 var _servo_timers: Array[float] = []
+## Milestone toasts (v0.21.0): top-center fade label + the set of milestone
+## names already toasted (persisted so nothing re-announces after a reload).
+var _toast: Label
+var _toast_t := 0.0
+var _achv_toasted: Array[String] = []
 var _reticle: ColorRect
 var pitch := 0.0
 var yaw := 0.0
@@ -462,6 +468,14 @@ func _update_music_state() -> void:
 		vol = 0.0  # disabled mutes the bus outright (0 volume == muted)
 	Sfx.set_music_volume(vol)
 	if bool(settings.get("music_enabled", true)):
+		# Station swap (v0.21.0): only restart if the stream actually changed.
+		var station := clampi(int(settings.get("radio_station", 0)), 0, Sfx.STATIONS.size() - 1)
+		var wanted: AudioStreamWAV = Sfx.music_station_stream(station)
+		if _music.stream != wanted:
+			var was_playing := _music.playing
+			_music.stream = wanted
+			if was_playing:
+				_music.play()
 		if not _music.playing:
 			_music.play()
 	elif _music.playing:
@@ -480,7 +494,7 @@ func _load_save() -> void:
 	if payload.has("settings"):
 		var s: Dictionary = payload.settings
 		for key in ["mouse_sens_scale", "sfx_volume", "invert_y", "shadows",
-				"music_enabled", "music_volume", "quality_preset"]:
+				"music_enabled", "music_volume", "quality_preset", "radio_station"]:
 			if s.has(key):
 				apply_setting(key, s[key], false)
 	_update_music_state()
@@ -527,6 +541,17 @@ func _load_save() -> void:
 	else:
 		# Pre-v0.19 saves: adopt the current tier silently, never re-announce.
 		announced_tier = Events.tier_for_rep(reputation)
+	if payload.has("achv_toasted") and typeof(payload.achv_toasted) == TYPE_ARRAY:
+		_achv_toasted.clear()
+		for name in payload.achv_toasted:
+			if name is String:
+				_achv_toasted.append(name)
+	# Silently adopt anything already earned at load time (a persisted set
+	# can lag the save — the check only runs while the HUD renders): a boot
+	# must never toast old news.
+	for a in _achievements():
+		if bool(a.done) and not _achv_toasted.has(str(a.name)):
+			_achv_toasted.append(str(a.name))
 
 func apply_setting(key: String, value, persist := true) -> void:
 	settings[key] = value
@@ -543,6 +568,8 @@ func apply_setting(key: String, value, persist := true) -> void:
 			_apply_quality()
 		"quality_preset":
 			_apply_quality()
+		"radio_station":
+			_update_music_state()
 		# mouse_sens_scale / invert_y are read live by the look paths.
 	if persist:
 		_save_game()
@@ -576,6 +603,7 @@ func _save_game() -> void:
 			"board": job_board.snapshot_payload(),
 			"log": workshop_log.snapshot(),
 			"tier_announced": announced_tier,
+			"achv_toasted": _achv_toasted,
 		})
 	var ok: bool = load("res://scripts/BrowserSave.gd").save_payload(payload)
 	save_status_line = "%s at %s" % ["saved ok" if ok else "save FAILED",
@@ -1590,6 +1618,48 @@ func _build_props() -> void:
 	pot_body.position = Vector3(-2.9, 0.3, 2.25)
 	add_child(pot_body)
 
+	# Dressing (v0.21.0): doormat under the shop door, a coffee mug on the
+	# design bench, and a cardboard stack by the packing table.
+	var mat_mesh := MeshInstance3D.new()
+	var mat_box := BoxMesh.new()
+	mat_box.size = Vector3(1.3, 0.022, 0.7)
+	mat_mesh.mesh = mat_box
+	var mat_mat := StandardMaterial3D.new()
+	mat_mat.albedo_color = Color("#8A5A3B")
+	mat_mat.roughness = 0.95
+	mat_mesh.material_override = mat_mat
+	mat_mesh.position = Vector3((DOOR_X0 + DOOR_X1) / 2.0, 0.011, ROOM_D / 2.0 - 0.45)
+	mat_mesh.add_to_group("props")
+	add_child(mat_mesh)
+
+	var mug_mesh := MeshInstance3D.new()
+	var mug := CylinderMesh.new()
+	mug.top_radius = 0.035
+	mug.bottom_radius = 0.03
+	mug.height = 0.09
+	mug_mesh.mesh = mug
+	var mug_mat := StandardMaterial3D.new()
+	mug_mat.albedo_color = Color("#C96F42")
+	mug_mat.roughness = 0.4
+	mug_mesh.material_override = mug_mat
+	mug_mesh.position = Vector3(-2.15, 0.945, -2.35)
+	mug_mesh.add_to_group("props")
+	add_child(mug_mesh)
+
+	var cardboard := StandardMaterial3D.new()
+	cardboard.albedo_color = Color("#B08D57")
+	cardboard.roughness = 0.85
+	for b in [[Vector3(3.02, 0.21, 1.85), 0.42], [Vector3(3.02, 0.57, 1.85), 0.3],
+			[Vector3(2.98, 0.16, 1.15), 0.32]]:
+		var box_mesh := MeshInstance3D.new()
+		var box := BoxMesh.new()
+		box.size = Vector3.ONE * float(b[1])
+		box_mesh.mesh = box
+		box_mesh.material_override = cardboard
+		box_mesh.position = b[0]
+		box_mesh.add_to_group("props")
+		add_child(box_mesh)
+
 ## World-space control target on the workbench; the monitor is immediately
 ## readable as a usable tool and the body sits above the bench ray occluder.
 func _build_design_computer() -> void:
@@ -1905,6 +1975,22 @@ func _build_hud() -> void:
 	_prompt.add_theme_font_size_override("font_size", 18)
 	_prompt.text = "Click to play"
 	_hud.add_child(_prompt)
+	# Milestone toast (v0.21.0): top-center, fades after a few seconds.
+	_toast = Label.new()
+	_toast.anchor_left = 0.0
+	_toast.anchor_right = 1.0
+	_toast.anchor_top = 0.0
+	_toast.offset_top = 14
+	_toast.offset_bottom = 44
+	_toast.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_toast.add_theme_font_size_override("font_size", 19)
+	_toast.add_theme_color_override("font_color", Color("#E8B24A"))
+	_toast.add_theme_color_override("font_outline_color", Color(0.1, 0.12, 0.12, 0.9))
+	_toast.add_theme_constant_override("outline_size", 6)
+	_toast.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_toast.modulate.a = 0.0
+	_hud.add_child(_toast)
+
 	# Narrow/portrait windows (v0.20.0): reflow the status card on resize.
 	get_viewport().size_changed.connect(_apply_hud_layout)
 	_apply_hud_layout()
@@ -2085,6 +2171,12 @@ func get_touch_look_sens() -> float:
 	return MOUSE_SENS * float(settings.get("mouse_sens_scale", 1.0)) * 3.0 * (720.0 / maxf(vs.y, 1.0))
 
 func _physics_process(delta: float) -> void:
+	if _toast_t > 0.0:
+		_toast_t = maxf(_toast_t - delta, 0.0)
+		if _toast != null:
+			_toast.modulate.a = clampf(_toast_t / 0.8, 0.0, 1.0)
+			if _toast_t <= 0.0:
+				_toast.visible = false
 	if _player == null:
 		return
 	var touch_active := touch_controls != null and touch_controls.effective_enabled() and touch_controls.is_motion_enabled()
@@ -2267,11 +2359,24 @@ func _near_radio() -> bool:
 			Vector2(RADIO_POS.x, RADIO_POS.z)) <= 1.0
 
 func _toggle_radio() -> void:
-	var on := not bool(settings.get("music_enabled", true))
-	apply_setting("music_enabled", on)  # persists through _save_game
+	var names := Sfx.station_names()
+	var station := clampi(int(settings.get("radio_station", 0)), 0, names.size() - 1)
+	if not bool(settings.get("music_enabled", true)):
+		# Off -> back on at the last station.
+		apply_setting("radio_station", station)
+		apply_setting("music_enabled", true)  # persists through _save_game
+		_log_event("radio", "%s radio on" % str(names[station]).to_lower())
+		_set_prompt("Radio: %s — E again changes station" % names[station])
+		return
+	if station + 1 < names.size():
+		apply_setting("radio_station", station + 1)
+		_log_event("radio", "station: %s" % str(names[station + 1]).to_lower())
+		_set_prompt("Radio: %s — E again cycles or switches off" % names[station + 1])
+	else:
+		apply_setting("music_enabled", false)
+		_log_event("radio", "radio off")
+		_set_prompt("Radio off — E turns it back on")
 	sfx.play("click")
-	_log_event("radio", "lo-fi radio %s" % ("on" if on else "off"))
-	_set_prompt("Radio %s — volume lives in Settings" % ("on" if on else "off"))
 
 ## Printer stepper blips (v0.16.0): quiet, rate-limited ticks while a machine
 ## prints — organic spacing so four machines never sync into a drone.
@@ -3189,6 +3294,25 @@ func _apply_hud_layout() -> void:
 		card.offset_top = 10.0
 		card.reset_size()
 
+## Flash a top-center toast; the fade lives in _physics_process.
+func _show_toast(text: String) -> void:
+	if _toast == null:
+		return
+	_toast.text = text
+	_toast_t = 3.2
+	_toast.modulate.a = 1.0
+	_toast.visible = true
+
+## Announce milestones the moment they are first earned (v0.21.0). Runs in
+## _update_hud; the toasted set persists so reloads never re-announce.
+func _check_milestone_toasts() -> void:
+	for a in _achievements():
+		if bool(a.done) and not _achv_toasted.has(str(a.name)):
+			_achv_toasted.append(str(a.name))
+			_show_toast("Milestone: %s" % str(a.name))
+			_log_event("milestone", "%s unlocked" % str(a.name))
+			_save_game()
+
 func _update_hud() -> void:
 	_set_reticle(paused == false)
 	var lines: Array[String] = []
@@ -3286,6 +3410,7 @@ func _update_hud() -> void:
 	if grab_line != "":
 		lines.append(grab_line)
 	_status.text = "\n".join(lines)
+	_check_milestone_toasts()
 	_update_chalkboard()
 
 func _update_chalkboard() -> void:
