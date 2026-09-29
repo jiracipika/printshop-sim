@@ -159,6 +159,8 @@ var _step_alt := false
 var _steps_played := 0
 var _bells_played := 0
 var _stations_heard: Array[int] = []
+## The left wall poster's caption label (rotates weekly, v0.24.0).
+var _poster_label: Label3D
 ## Last five delivery grades, oldest first (v0.23.0) — feeds Perfectionist.
 var recent_grades: Array[String] = []
 ## False until _ready finishes: boot-time station marks happen before the
@@ -894,6 +896,7 @@ func _refresh_event() -> void:
 	today_event = Events.for_day(day_cycle.day)
 	season = Events.season_for_week(int((day_cycle.day - 1) / 7.0) + 1)
 	_refresh_crate_label()
+	_refresh_poster()
 	_apply_season_visuals()
 
 ## Paint this week's season onto the window pane and fog, and show/hide the
@@ -1318,8 +1321,10 @@ func _build_props() -> void:
 	rug.add_to_group("props")
 	add_child(rug)
 
-	# Posters with captions.
-	_add_poster(ShopArt.poster(Color("#EEE5D3"), Color("#DA623A"), [[0.08, 0.08, 0.92, 0.22]]),
+	# Posters with captions. The left one rotates its slogan per week
+	# (v0.24.0); the back one stays the shop's standing sign.
+	_poster_label = _add_poster(
+		ShopArt.poster(Color("#EEE5D3"), Color("#DA623A"), [[0.08, 0.08, 0.92, 0.22]]),
 		Vector3(-ROOM_W / 2.0 + 0.11, 1.7, -0.4), Vector3(0, 90, 0), "MAKE / REPAIR")
 	_add_poster(ShopArt.poster(Color("#EEE5D3"), Color("#738771"), [[0.3, 0.35, 0.7, 0.75]]),
 		Vector3(-0.6, 1.8, -ROOM_D / 2.0 + 0.11), Vector3(0, 0, 0), "PRINT SHOP")
@@ -1771,7 +1776,19 @@ func _build_design_computer() -> void:
 	prompt.position = Vector3(0, 0.48, -0.04)
 	pc.add_child(prompt)
 
-func _add_poster(tex: ImageTexture, pos: Vector3, rot_deg: Vector3, caption: String) -> void:
+## Weekly poster slogans (v0.24.0) — deterministic per shop week.
+const POSTER_LINES: Array[String] = [
+	"MAKE / REPAIR", "PRINT LOCALLY", "WASTE NOT",
+	"SHIPPED IS SHIPPED", "STAY SHARP", "FILAMENT FIRST",
+]
+
+func _refresh_poster() -> void:
+	if _poster_label == null:
+		return
+	var week := int((day_cycle.day - 1) / 7.0) + 1
+	_poster_label.text = POSTER_LINES[absi(hash("printshop-poster-%d" % week)) % POSTER_LINES.size()]
+
+func _add_poster(tex: ImageTexture, pos: Vector3, rot_deg: Vector3, caption: String) -> Label3D:
 	var poster := MeshInstance3D.new()
 	var quad := QuadMesh.new()
 	quad.size = Vector2(0.9, 0.6)
@@ -1794,6 +1811,7 @@ func _add_poster(tex: ImageTexture, pos: Vector3, rot_deg: Vector3, caption: Str
 	label.rotation_degrees = rot_deg
 	label.add_to_group("props")
 	add_child(label)
+	return label
 
 func _add_spool(pos: Vector3) -> void:
 	var spool := Grabbable.new()

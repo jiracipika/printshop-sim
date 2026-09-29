@@ -12,7 +12,8 @@ const MUTED := Color("#C2CCBA")
 const MINT := Color("#A8C8AC")
 const CLAY := Color("#DA623A")
 const FILAMENTS := {"Clay": "#DA623A", "Sage": "#738771", "Honey": "#C3A076"}
-const SHAPES := ["Desk planter", "Cable ring", "Storage block"]
+const SHAPES := ["Desk planter", "Cable ring", "Storage block",
+	"Phone stand", "Plant marker", "Drawer knob"]
 
 var _design := defaults()
 var _preview_root: Node3D
@@ -56,6 +57,9 @@ static func _shape_for_name(n: String) -> String:
 	match n:
 		"Cable ring": return "ring"
 		"Storage block": return "box"
+		"Phone stand": return "stand"
+		"Plant marker": return "stake"
+		"Drawer knob": return "dome"
 	return "cylinder"
 
 static func estimate_grams(source: Dictionary) -> int:
@@ -70,6 +74,12 @@ static func estimate_grams(source: Dictionary) -> int:
 		body_mm3 *= 0.72
 	elif d.shape == "ring":
 		body_mm3 *= 0.29
+	elif d.shape == "stand":
+		body_mm3 *= 0.55
+	elif d.shape == "stake":
+		body_mm3 *= 0.3
+	elif d.shape == "dome":
+		body_mm3 *= 0.45
 	return maxi(1, roundi(body_mm3 * 0.00124))
 
 static func estimate_seconds(source: Dictionary) -> int:
@@ -92,6 +102,21 @@ static func create_mesh(source: Dictionary) -> Mesh:
 			ring.rings = 32
 			ring.ring_segments = 12
 			return ring
+		"stand":
+			# Leaning wedge: prism leaning back by the depth.
+			var stand := PrismMesh.new()
+			stand.size = Vector3(w, h, dep)
+			return stand
+		"stake":
+			# Flat marker stake: full width, tall, paper-thin.
+			var stake := BoxMesh.new()
+			stake.size = Vector3(w, h, maxf(dep * 0.16, 0.002))
+			return stake
+		"dome":
+			var dome := SphereMesh.new()
+			dome.radius = minf(w, dep) * 0.5
+			dome.height = minf(h, dome.radius * 2.0)
+			return dome
 	var block := BoxMesh.new()
 	block.size = Vector3(w, h, dep)
 	return block
@@ -343,6 +368,18 @@ func _select_template(name: String) -> void:
 			_design.width_mm = 88.0
 			_design.depth_mm = 62.0
 			_design.height_mm = 42.0
+		"Phone stand":
+			_design.width_mm = 70.0
+			_design.depth_mm = 46.0
+			_design.height_mm = 64.0
+		"Plant marker":
+			_design.width_mm = 14.0
+			_design.depth_mm = 60.0
+			_design.height_mm = 120.0
+		"Drawer knob":
+			_design.width_mm = 32.0
+			_design.depth_mm = 32.0
+			_design.height_mm = 24.0
 		_:
 			_design.width_mm = 54.0
 			_design.depth_mm = 54.0

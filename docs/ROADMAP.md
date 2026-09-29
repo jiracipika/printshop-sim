@@ -364,6 +364,25 @@ Test checks:
 
 ---
 
+## Post-roadmap — v0.24.0 "Studio & street pass" — SHIPPED
+
+- [x] Design catalog grows to six shapes: Phone stand (prism wedge),
+      Plant marker (paper-thin stake) and Drawer knob (dome) each with
+      starter dims, mesh builders and material multipliers (stake < knob
+      < stand at equal size); the prototype pipeline accepts them end to
+      end
+- [x] Weekly poster rotation: the left-wall poster's slogan cycles
+      deterministically per shop week (POSTER_LINES, hash-pinned per week);
+      the back-wall PRINT SHOP sign stays constant
+
+Test checks:
+- [x] 14 new checks in v024_test (normalization, mesh classes, gram
+      ordering, template dims, prototype part, poster determinism +
+      rotation across weeks)
+- [x] all 38 suites + smoke green (1401 checks); pytest 21/21
+
+---
+
 ## Definition of done (every slice)
 
 - [ ] Feature checks above all ticked

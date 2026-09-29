@@ -1,4 +1,26 @@
-# Current handoff — operations pass (v0.23.0)
+# Current handoff — studio & street pass (v0.24.0)
+
+## Current active work
+
+Post-roadmap drop. The design studio catalog is six shapes: the three new
+ones (Phone stand -> PrismMesh, Plant marker -> paper-thin BoxMesh stake,
+Drawer knob -> SphereMesh dome) have _select_template starter dims,
+create_mesh arms and estimate_grams multipliers (stand 0.55, stake 0.30,
+dome 0.45 — so stake < knob < stand at equal dims). SHAPES drives the
+template buttons, so the panel UI picks them up automatically; the
+prototype pipeline (Main._make_prototype_part) needs no changes. The
+left-wall poster rotates its slogan per shop week: POSTER_LINES in Main.gd,
+_refresh_poster picks POSTER_LINES[hash("printshop-poster-%d" % week) %
+size] and runs from _refresh_event (boot/save/rollover); _add_poster now
+returns its caption Label3D and the first call is stored in _poster_label.
+The back-wall PRINT SHOP poster stays constant.
+
+Local verification: all 38 suites + smoke pass (1401 checks, 14 new in
+tests/v024_test.gd), pytest 21/21. Screenshot confirmed the week-2 slogan.
+
+---
+
+# Previous handoff — operations pass (v0.23.0)
 
 ## Current active work
 
