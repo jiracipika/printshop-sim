@@ -5,27 +5,52 @@ extends Node
 ##   fixture mode (default): the fixed 8-job pool rotates deterministically.
 ##   generation mode (v0.4.0, `generation_enabled = true`): procedurally
 ##     generated contracts, deterministic per shop day; `rotate_day(day)`
-##     deals a fresh board each morning. Main enables this for the live shop;
+##     deals fresh work each morning. Main enables this for the live shop;
 ##     suites that build a JobBoard directly keep fixture behavior.
+##
+## Board pressure (v0.14.0): the board is first come, first served. Calm jobs
+## CARRY OVER across mornings instead of being wiped; rush/competing offers
+## expire overnight (Contract.has_expired_for) and are replaced by fresh
+## deals. rotate_day returns the expired contracts so Main can charge the
+## reputation cost. The full queue state persists via snapshot_payload()/
+## restore_payload() so a save/reload mid-day reproduces the exact board.
 
 var _queue: Array[Contract] = []
 var _fixture_cycle := 0
-var generation_enabled := false
+## Enabling generation mid-flight (suites do this after _ready) drops any
+## fixture-mode offers — they are not generated-board deals and would
+## otherwise clog the queue past every rollover.
+var generation_enabled := false:
+	set(value):
+		if generation_enabled == value:
+			return
+		generation_enabled = value
+		if value:
+			_queue.clear()
+			_fixture_cycle = 0
 var _gen_day := 1
 var _capacity := 0  # cached fixture-pool size (set on first fill)
 
 func _ready() -> void:
 	_fill_to_capacity()
 
-## Point the board at a new shop day: clears the queue and refills from that
-## day's deterministic generation. No-op in fixture mode.
-func rotate_day(day: int) -> void:
+## Morning rollover. Expire overnight offers (rush/competing dealt before
+## `day`), keep everything else, then top back up with fresh deals stamped
+## for the new day. `apply_expiry = false` deals a fresh board without
+## penalties (save-load path). Returns the expired contracts, oldest first.
+func rotate_day(day: int, apply_expiry := true) -> Array:
 	if not generation_enabled:
-		return
+		return []
+	var expired: Array = []
+	if apply_expiry:
+		for c in _queue:
+			if c.has_expired_for(maxi(day, 1)):
+				expired.append(c)
+	for c in expired:
+		_queue.erase(c)
 	_gen_day = maxi(day, 1)
-	_queue.clear()
-	_fixture_cycle = 0
 	_fill_to_capacity()
+	return expired
 
 func _refill() -> void:
 	# Append ONE next job (rotated deterministic order). In fixture mode the
@@ -51,6 +76,14 @@ func has_available() -> bool:
 func get_available_count() -> int:
 	return _queue.size()
 
+## How many queued jobs would expire rolling into `day` (HUD "expire tonight").
+func expiring_count(day: int) -> int:
+	var n := 0
+	for c in _queue:
+		if c.has_expired_for(maxi(day, 1)):
+			n += 1
+	return n
+
 func take_next() -> Contract:
 	if _queue.is_empty():
 		_fill_to_capacity()
@@ -73,15 +106,22 @@ func put_back(c: Contract) -> void:
 	_queue.push_front(c)
 
 ## Move an already-queued contract to the front in place (no take/refill).
+## This is "Reserve" from the contracts menu: the next printer accept takes it.
 func rotate_to_front(c: Contract) -> bool:
 	var idx := _queue.find(c)
 	if idx < 0:
 		return false
-	_queue.remove_at(idx)
-	_queue.push_front(c)
+	if idx > 0:
+		_queue.remove_at(idx)
+		_queue.push_front(c)
 	return true
 
-## HUD summaries: {id, client, model_name, payout_cents, difficulty, risk_flags, rush, deadline_days, color}.
+## Id of the job currently at the front of the queue ("" when empty).
+func front_id() -> String:
+	return _queue[0].id if not _queue.is_empty() else ""
+
+## HUD summaries: {id, client, model_name, payout_cents, difficulty, risk_flags,
+## rush, deadline_days, color, competing}.
 func available_summaries() -> Array[Dictionary]:
 	var out: Array[Dictionary] = []
 	for c in _queue:
@@ -95,5 +135,121 @@ func available_summaries() -> Array[Dictionary]:
 			"rush": c.rush,
 			"deadline_days": c.deadline_days,
 			"color": c.color,
+			"competing": c.competing,
 		})
 	return out
+
+## --- persistence (v0.14.0) ----------------------------------------------------
+##
+## The queue is NOT re-derivable from (day, slot) once jobs have been taken or
+## have rolled over, so the board serializes itself for the save payload.
+## Plain dictionaries of Contract fields; restore rebuilds OFFERED contracts.
+
+func snapshot_payload() -> Dictionary:
+	var jobs: Array = []
+	for c in _queue:
+		jobs.append({
+			"id": c.id,
+			"client": c.client,
+			"model_name": c.model_name,
+			"payout_cents": c.payout_cents,
+			"material_cost_cents": c.material_cost_cents,
+			"difficulty": c.difficulty,
+			"risk_flags": c.risk_flags.duplicate(),
+			"layers": c.layers,
+			"deadline_days": c.deadline_days,
+			"rush": c.rush,
+			"competing": c.competing,
+			"offered_day": c.offered_day,
+			"color": c.color,
+		})
+	return {"day": _gen_day, "cycle": _fixture_cycle, "jobs": jobs}
+
+## Rebuild the board from snapshot_payload() data. Whole-float coercion for
+## JSON round-trips. Returns false WITHOUT touching the board on any
+## malformed input; unknown ids in the cycle counter are tolerated (the
+## generator is total over (day, slot)).
+func restore_payload(data: Variant) -> bool:
+	if not (data is Dictionary):
+		return false
+	var d: Dictionary = data
+	if not d.has_all(["day", "cycle", "jobs"]):
+		return false
+	if not _whole_int(d["day"]) or int(d["day"]) < 1:
+		return false
+	if not _whole_int(d["cycle"]) or int(d["cycle"]) < 0:
+		return false
+	if typeof(d["jobs"]) != TYPE_ARRAY:
+		return false
+	var parsed: Array[Contract] = []
+	for j in d["jobs"]:
+		var c := _contract_from(j)
+		if c == null:
+			return false
+		parsed.append(c)
+	_queue.clear()
+	for c in parsed:
+		_queue.append(c)
+	_gen_day = int(d["day"])
+	_fixture_cycle = int(d["cycle"])
+	_fill_to_capacity()
+	return true
+
+## Strict-ish shape check for one serialized job; null = reject.
+static func _contract_from(j: Variant) -> Contract:
+	if not (j is Dictionary):
+		return null
+	var d: Dictionary = j
+	for key in ["id", "client", "model_name", "payout_cents", "material_cost_cents",
+			"difficulty", "risk_flags", "layers", "deadline_days", "rush",
+			"competing", "offered_day", "color"]:
+		if not d.has(key):
+			return null
+	for key in ["id", "client", "model_name"]:
+		if not (d[key] is String) or (d[key] as String).is_empty():
+			return null
+	for key in ["payout_cents", "material_cost_cents", "layers", "deadline_days", "offered_day"]:
+		if not _whole_int(d[key]) or int(d[key]) < 0:
+			return null
+	if not _whole_int(d["difficulty"]) or int(d["difficulty"]) < 1 or int(d["difficulty"]) > 5:
+		return null
+	if int(d["payout_cents"]) <= 0 or int(d["layers"]) <= 0:
+		return null
+	if not (d["rush"] is bool) or not (d["competing"] is bool):
+		return null
+	if int(d["offered_day"]) < 1:
+		return null
+	if not (d["color"] is String) or ((d["color"] as String) != "" \
+			and not ((d["color"] as String) in Contract.VALID_COLORS)):
+		return null
+	if typeof(d["risk_flags"]) != TYPE_ARRAY:
+		return null
+	var flags: Array[String] = []
+	for f in d["risk_flags"]:
+		if not (f is String) or not (f as String in Contract.VALID_RISK_FLAGS):
+			return null
+		flags.append(f)
+	var c := Contract.new()
+	c.id = d["id"]
+	c.client = d["client"]
+	c.model_name = d["model_name"]
+	c.payout_cents = int(d["payout_cents"])
+	c.material_cost_cents = int(d["material_cost_cents"])
+	c.difficulty = int(d["difficulty"])
+	c.risk_flags = flags
+	c.layers = int(d["layers"])
+	c.deadline_days = int(d["deadline_days"])
+	c.rush = d["rush"]
+	c.competing = d["competing"]
+	c.offered_day = int(d["offered_day"])
+	c.color = d["color"]
+	c.state = Contract.State.OFFERED
+	return c
+
+static func _whole_int(v: Variant) -> bool:
+	if typeof(v) == TYPE_INT:
+		return true
+	if typeof(v) == TYPE_FLOAT:
+		var f: float = v
+		return is_equal_approx(f, floorf(f)) and is_finite(f)
+	return false

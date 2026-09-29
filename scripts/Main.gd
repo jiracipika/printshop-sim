@@ -39,7 +39,8 @@ var packing_station: PackingStation
 ## 0.8 + rep/5 * 0.4 (x0.8 at rock bottom, x1.2 at five stars).
 var reputation := 3.0
 ## Lifetime counters (v0.5.0), persisted and shown in the menu Stats panel.
-var stats := {"delivered": 0, "late": 0, "scrapped": 0, "cancelled": 0, "earned_cents": 0}
+## "missed" (v0.14.0): board offers that expired overnight.
+var stats := {"delivered": 0, "late": 0, "scrapped": 0, "cancelled": 0, "earned_cents": 0, "missed": 0}
 ## Today's shop event (v0.7.0) — deterministic per day, refreshed on rollover.
 var today_event: Dictionary = Events.QUIET.duplicate(true)
 ## This week's season (v0.11.0) — deterministic per week number.
@@ -141,7 +142,24 @@ func _on_menu_play() -> void:
 	_prompt.text = _boot_prompt
 
 func _on_menu_contracts() -> void:
-	main_menu.show_contracts(job_board.available_summaries())
+	var front: String = job_board.front_id()
+	var cards: Array[Dictionary] = []
+	for s in job_board.available_summaries():
+		s["reserved"] = s["id"] == front
+		cards.append(s)
+	main_menu.show_contracts(cards)
+
+## "Reserve" on a contracts card pins that job to the front of the queue —
+## the next printer accept takes it (v0.14.0 job selection).
+func _on_menu_reserve(job_id: String) -> void:
+	for c in job_board._queue:
+		if c.id == job_id:
+			if job_board.rotate_to_front(c):
+				sfx.play("click")
+				_set_prompt("Reserved %s — the next printer accept takes it" % c.model_name)
+			_on_menu_contracts()  # re-render so the reserve order is visible
+			return
+	_set_prompt("That job is no longer on the board")
 
 func _on_menu_upgrades() -> void:
 	main_menu.show_upgrades(upgrade_cards(),
@@ -177,6 +195,7 @@ func _on_menu_stats() -> void:
 		"Days in business: %d" % maxi(day_cycle.day - 1, 0),
 		"Parts delivered: %d  (%d late, %d scrapped, %d cancelled)" % [
 			int(stats.delivered), int(stats.late), int(stats.scrapped), int(stats.cancelled)],
+		"Board offers missed: %d" % int(stats.missed),
 		"Lifetime earnings: $%s" % _cents_str(int(stats.earned_cents)),
 		"Reputation: %s %.1f / 5  (payout x%.2f)" % [stars, reputation, reputation_multiplier()],
 		"",
@@ -365,12 +384,18 @@ func _load_save() -> void:
 				apply_setting(key, s[key], false)
 	if payload.has("day"):
 		day_cycle.restore(int(payload.day), 0.0)
-		job_board.rotate_day(day_cycle.day)
+	if payload.has("board") and job_board.restore_payload(payload.board):
+		pass  # exact board reproduced — keep the dealt cycle counter
+	elif payload.has("day"):
+		# Older saves (or a rejected board): deal the day fresh, no expiry
+		# penalties — these jobs were never actually offered to the player.
+		job_board.rotate_day(day_cycle.day, false)
+	if payload.has("day"):
 		_refresh_event()  # also refreshes the season
 	if payload.has("reputation"):
 		reputation = clampf(float(payload.reputation), 0.0, 5.0)
 	if payload.has("stats"):
-		for key in ["delivered", "late", "scrapped", "cancelled", "earned_cents"]:
+		for key in ["delivered", "late", "scrapped", "cancelled", "earned_cents", "missed"]:
 			if payload.stats.has(key):
 				stats[key] = maxi(int(payload.stats[key]), 0)
 	if payload.has("filament") and typeof(payload.filament) == TYPE_ARRAY:
@@ -427,6 +452,7 @@ func _save_game() -> void:
 			"guide_flags": guide_flags.duplicate(),
 			"guide_done": guide_done,
 			"crate_next": _crate_next,
+			"board": job_board.snapshot_payload(),
 		})
 	var ok: bool = load("res://scripts/BrowserSave.gd").save_payload(payload)
 	save_status_line = "%s at %s" % ["saved ok" if ok else "save FAILED",
@@ -1675,6 +1701,7 @@ func _build_hud() -> void:
 	add_child(main_menu)
 	main_menu.play_pressed.connect(_on_menu_play)
 	main_menu.contracts_pressed.connect(_on_menu_contracts)
+	main_menu.reserve_pressed.connect(_on_menu_reserve)
 	main_menu.upgrades_pressed.connect(_on_menu_upgrades)
 	main_menu.upgrade_buy_pressed.connect(_on_menu_upgrade_buy)
 	main_menu.settings_pressed.connect(func() -> void:
@@ -2495,21 +2522,32 @@ func _is_late() -> bool:
 func _is_cancelled() -> bool:
 	return _is_cancelled_for(_machine(_focus))
 
-## Day rollover: rent comes due first, then overdue contracts are cancelled.
+## Day rollover: first come, first served — overnight offers expire (rep hit),
+## then rent comes due, then overdue contracts are cancelled.
 func _on_day_changed(new_day: int) -> void:
-	job_board.rotate_day(new_day)  # fresh deterministic offerings each morning
+	var expired: Array = job_board.rotate_day(new_day)  # rush/competing vanish; calm jobs carry over
 	_refresh_event()
+	var missed_note := ""
+	if not expired.is_empty():
+		stats.missed += expired.size()
+		_rep_event(-0.1 * float(expired.size()))
+		var names: Array[String] = []
+		for c in expired:
+			names.append(c.model_name)
+		missed_note = ". Missed %d board job%s (%s) — reputation hit." % [
+			expired.size(), "" if expired.size() == 1 else "s", ", ".join(names)]
+		sfx.play("buzz")
 	# A rent holiday skips only the charge — the rest of the day still runs.
 	if bool(today_event.rent_free):
-		_set_prompt("Day %d — %s" % [new_day, today_event.name])
+		_set_prompt("Day %d — %s%s" % [new_day, today_event.name, missed_note])
 	else:
 		var rent_due := rent_for_day(new_day) + int(season.extra_rent_cents)
 		if ledger.can_afford(rent_due):
 			ledger.charge(rent_due, "rent day %d" % new_day)
-			_set_prompt("Day %d — rent paid ($%s)" % [new_day, _cents_str(rent_due)])
+			_set_prompt("Day %d — rent paid ($%s)%s" % [new_day, _cents_str(rent_due), missed_note])
 		else:
 			rent_debt_cents += rent_due
-			_set_prompt("Day %d — rent UNPAID (now owe $%s)" % [new_day, _cents_str(rent_debt_cents)])
+			_set_prompt("Day %d — rent UNPAID (now owe $%s)%s" % [new_day, _cents_str(rent_debt_cents), missed_note])
 	for m in machines:
 		if not _is_cancelled_for(m):
 			continue
@@ -2781,7 +2819,9 @@ func _update_hud() -> void:
 					lines.append("[E] cycle")
 			else:
 				lines.append("Prep: [E] preview orientation")
-	lines.append("Jobs waiting: %d" % job_board.get_available_count())
+	var expiring: int = job_board.expiring_count(day_cycle.day + 1)
+	lines.append("Jobs waiting: %d%s" % [job_board.get_available_count(),
+		"" if expiring == 0 else "  · %d expire overnight" % expiring])
 	var fil_bits: Array[String] = []
 	for m in machines:
 		var fg := int(m.get("filament_g"))
@@ -2830,8 +2870,9 @@ func _update_chalkboard() -> void:
 	var stars := ""
 	for i in range(5):
 		stars += "*" if i < roundi(reputation) else "."
-	var text := "SHOP LEDGER\nDay %d\nDelivered: %d\nEarned: $%s\nRep %s %.1f" % [
-		day_cycle.day, int(stats.delivered), _cents_str(int(stats.earned_cents)),
+	var text := "SHOP LEDGER\nDay %d\nDelivered: %d\nMissed: %d\nEarned: $%s\nRep %s %.1f" % [
+		day_cycle.day, int(stats.delivered), int(stats.missed),
+		_cents_str(int(stats.earned_cents)),
 		stars, reputation]
 	if text != _chalk_cache:
 		_chalk_cache = text

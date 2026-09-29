@@ -15,6 +15,7 @@ class_name MainMenu
 
 signal play_pressed
 signal contracts_pressed
+signal reserve_pressed(job_id: String)
 signal upgrades_pressed
 signal upgrade_buy_pressed(id: String)
 signal settings_pressed
@@ -286,7 +287,7 @@ func _build_contracts_panel() -> void:
 	h1.add_theme_font_size_override("font_size", 28)
 	head.add_child(h1)
 	var sub := Label.new()
-	sub.text = "  read-only — accept at the printer"
+	sub.text = "  first come, first served — Reserve pins a job for your next printer accept"
 	sub.add_theme_color_override("font_color", COLOR_MINT)
 	sub.add_theme_font_size_override("font_size", 12)
 	head.add_child(sub)
@@ -649,6 +650,8 @@ func _build_howto_panel() -> void:
 		+ "Days pass (~90 s each). Rent is due every morning — unpaid rent becomes debt.\n" \
 		+ "Deliver late and the client pays half. Two days too late, the job is cancelled.\n" \
 		+ "RUSH jobs pay a premium if you can make a 1-2 day deadline.\n" \
+		+ "First come, first served: RUSH and [2 waiting] jobs leave the board overnight —\n" \
+		+ "each one you miss costs reputation. Reserve from the Contracts menu to pin a job.\n" \
 		+ "\nTHE SHOP\n" \
 		+ "Printer 2 stays locked until you buy the Pro machine upgrade (menu > Upgrades).\n" \
 		+ "Both printers can run separate jobs at once. Upgrades cut risks and speed up prints.\n" \
@@ -765,6 +768,8 @@ func _show_panel(panel: Control) -> void:
 func _make_card(s: Dictionary) -> PanelContainer:
 	var card := PanelContainer.new()
 	card.set_meta("contract_summary", true)
+	card.set_meta("job_id", str(s.get("id", "")))
+	card.set_meta("reserved", bool(s.get("reserved", false)))
 	var sb := StyleBoxFlat.new()
 	sb.bg_color = Color("#364137")
 	sb.border_color = Color("#627265")
@@ -795,6 +800,24 @@ func _make_card(s: Dictionary) -> PanelContainer:
 	row.add_child(payout)
 	card.set_meta("payout_text", payout.text)
 
+	# Reserve (v0.14.0): pin this job to the front of the queue; the next
+	# printer accept takes it. Reserved cards show the state instead.
+	var reserved := bool(s.get("reserved", false))
+	var btn := Button.new()
+	btn.name = "Reserve"
+	btn.custom_minimum_size = Vector2(128, 36)
+	btn.add_theme_font_size_override("font_size", 14)
+	btn.focus_mode = Control.FOCUS_ALL
+	if reserved:
+		btn.text = "Reserved ✓"
+		btn.disabled = true
+		btn.add_theme_color_override("font_color", COLOR_MINT)
+	else:
+		btn.text = "Reserve"
+		btn.add_theme_color_override("font_color", COLOR_HONEY)
+		btn.pressed.connect(func() -> void: reserve_pressed.emit(str(s.get("id", ""))))
+	row.add_child(btn)
+
 	var meta := HBoxContainer.new()
 	v.add_child(meta)
 	var dots := Label.new()
@@ -813,6 +836,13 @@ func _make_card(s: Dictionary) -> PanelContainer:
 		rush_tag.add_theme_color_override("font_color", COLOR_TERRA)
 		rush_tag.add_theme_font_size_override("font_size", 12)
 		meta.add_child(rush_tag)
+	if bool(s.get("competing", false)):
+		var comp_tag := Label.new()
+		comp_tag.name = "CompetingTag"
+		comp_tag.text = "  [2 waiting]"
+		comp_tag.add_theme_color_override("font_color", COLOR_TERRA)
+		comp_tag.add_theme_font_size_override("font_size", 12)
+		meta.add_child(comp_tag)
 	var color_tag := Label.new()
 	color_tag.name = "ColorTag"
 	var wanted := str(s.get("color", ""))

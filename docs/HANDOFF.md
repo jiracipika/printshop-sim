@@ -1,6 +1,35 @@
-# Current handoff — blueprint-shaped print visuals (v0.5.0, pending merge)
+# Current handoff — board pressure (v0.14.0)
 
 ## Current active work
+
+v0.14.0 makes the job board first come, first served. Calm generated jobs now
+CARRY OVER across mornings instead of being wiped; rush jobs and competing
+jobs (~30% of slots, card tag "[2 waiting]") expire at the next rollover and
+each one missed costs 0.1 reputation plus a spot in the new "missed" stat.
+The morning prompt names what was missed; the HUD board line counts offers
+that "expire overnight"; the chalkboard and Stats panel track Missed: N.
+The Contracts menu gained Reserve buttons (job selection per the economy
+audit): reserving pins a job to the front of the queue so the next printer
+accept takes it; the reserved card shows "Reserved ✓". The full board queue
+now persists in the save payload ("board": {day, cycle, jobs}) so a
+save/reload mid-day reproduces the exact board and continues the deal cycle
+without duplicate offers — closing the audit's "queue is not persisted" risk.
+Older saves without the board key still load (they deal the fresh day with
+expiry suppressed).
+
+Local verification on Godot 4.7.1: all 28 Godot suites pass (1089 checks,
+62 new in tests/v014_test.gd), and `python3 -m pytest tests/test_build_web.py -q`
+passes (21 tests). Import prints an existing export-preset warning for
+missing `preset.1/exclude_filter`, but exits 0.
+
+Next iteration: v0.15.0 "The workshop log" per docs/ROADMAP.md slice 4
+(event ring buffer, failure cause strings).
+
+---
+
+# Previous handoff — blueprint-shaped print visuals (v0.5.0, pending merge)
+
+## Previous active work
 
 The merged design-computer slice adds a world-space workstation target on
 the back bench. E opens an offline-safe Form Lab with three editable starting

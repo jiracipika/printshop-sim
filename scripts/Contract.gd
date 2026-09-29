@@ -8,6 +8,13 @@ extends Resource
 ## only — fixture rush jobs carry deadline_days <= 2 and a payout roughly 1.3-1.6x
 ## the non-rush norm for their difficulty; Main applies any gameplay effects.
 ##
+## Board pressure (v0.14.0): rush and competing jobs leave the job board at the
+## next morning rollover — first come, first served. competing=true means
+## another buyer is circling the same part ("2 waiting" on the card); rush is
+## the deadline-pressure flavor. offered_day records the shop day the job was
+## dealt so the board can expire it exactly one morning later. Data-level only;
+## JobBoard/Main apply the expiry and the reputation cost.
+##
 ## State transition table (documented; FAILED reachable exactly from PREPARING / PRINTING /
 ## INSPECTION; DELIVERED only from PACKED):
 ##
@@ -44,6 +51,10 @@ const VALID_COLORS: Array[String] = ["Clay", "Sage", "Honey"]
 @export var layers: int = 0
 @export var deadline_days: int = 0
 @export var rush: bool = false
+## Another buyer is waiting: this offer leaves the board overnight (v0.14.0).
+@export var competing: bool = false
+## Shop day this contract was dealt onto the board (expiry anchor).
+@export var offered_day: int = 1
 ## Filament color the client expects ("" = any). A mismatch caps the delivery
 ## grade at B — the part still ships, just for less money.
 @export var color: String = ""
@@ -58,6 +69,13 @@ static var _RISK_FLAG_SET: Dictionary = {
 
 func is_terminal() -> bool:
 	return state == State.DELIVERED or state == State.FAILED
+
+
+## Board-pressure expiry (v0.14.0): rush/competing offers leave the board
+## overnight. `today` is the day being rolled into; a job dealt today (or a
+## carried-over calm job) never expires against its own offer day.
+func has_expired_for(today: int) -> bool:
+	return (rush or competing) and offered_day < today
 
 
 func is_valid() -> bool:
@@ -298,4 +316,10 @@ static func generate(day: int, index: int) -> Contract:
 		c.deadline_days = clampi(c.difficulty + rng.randi_range(-1, 1), 2, 6)
 		c.payout_cents = mini(GEN_BASE_PAYOUT[c.difficulty - 1] + c.layers * 2, 9500)
 	c.payout_cents = maxi(c.payout_cents, 3000)
+
+	# Board pressure (v0.14.0): competing buyers circle ~30% of jobs. This draw
+	# sits AFTER every value above so existing (day, slot) contracts keep their
+	# pinned client/model/payout — only the new flag consumes fresh rng state.
+	c.competing = rng.randf() < 0.3
+	c.offered_day = maxi(day, 1)
 	return c

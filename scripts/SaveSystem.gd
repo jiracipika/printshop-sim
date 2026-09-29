@@ -102,6 +102,8 @@ static func validate(payload: Variant) -> Dictionary:
 		return {}
 	if not _crate_next_valid(p):
 		return {}
+	if not _board_valid(p):
+		return {}
 
 	var out: Dictionary = p.duplicate(true)
 	out["version"] = int(p["version"])
@@ -217,8 +219,62 @@ static func _spool_colors_valid(p: Dictionary) -> bool:
 	return true
 
 
+## Optional "board" key (v0.14.0): job-board persistence —
+## {day: int>=1, cycle: int>=0, jobs: Array[job-dict]}. Job dicts carry the
+## Contract fields (see JobBoard.snapshot_payload); each must type-check and
+## satisfy Contract.is_valid's ranges or the whole payload is rejected.
+static func _board_valid(p: Dictionary) -> bool:
+	if not p.has("board"):
+		return true
+	var b: Dictionary = p["board"]
+	if typeof(b) != TYPE_DICTIONARY:
+		return false
+	if not b.has_all(["day", "cycle", "jobs"]):
+		return false
+	if not _is_int(b["day"]) or int(b["day"]) < 1:
+		return false
+	if not _is_int(b["cycle"]) or int(b["cycle"]) < 0:
+		return false
+	if typeof(b["jobs"]) != TYPE_ARRAY:
+		return false
+	for j in b["jobs"]:
+		if typeof(j) != TYPE_DICTIONARY:
+			return false
+		var job: Dictionary = j
+		for key in ["id", "client", "model_name", "payout_cents", "material_cost_cents",
+				"difficulty", "risk_flags", "layers", "deadline_days", "rush",
+				"competing", "offered_day", "color"]:
+			if not job.has(key):
+				return false
+		for key in ["id", "client", "model_name", "color"]:
+			if not (job[key] is String):
+				return false
+		for key in ["id", "client", "model_name"]:
+			if (job[key] as String).is_empty():
+				return false
+		for key in ["payout_cents", "material_cost_cents", "layers", "deadline_days", "offered_day"]:
+			if not _is_int(job[key]) or int(job[key]) < 0:
+				return false
+		if not _is_int(job["difficulty"]) or int(job["difficulty"]) < 1 or int(job["difficulty"]) > 5:
+			return false
+		if int(job["payout_cents"]) <= 0 or int(job["layers"]) <= 0:
+			return false
+		if int(job["offered_day"]) < 1:
+			return false
+		if not (job["rush"] is bool) or not (job["competing"] is bool):
+			return false
+		if (job["color"] as String) != "" and not ((job["color"] as String) in Contract.VALID_COLORS):
+			return false
+		if typeof(job["risk_flags"]) != TYPE_ARRAY:
+			return false
+		for f in job["risk_flags"]:
+			if not (f is String) or not (f as String in Contract.VALID_RISK_FLAGS):
+				return false
+	return true
+
+
 ## Optional "stats" key: dict of known non-negative int counters.
-const STAT_KEYS: Array[String] = ["delivered", "late", "scrapped", "cancelled", "earned_cents"]
+const STAT_KEYS: Array[String] = ["delivered", "late", "scrapped", "cancelled", "earned_cents", "missed"]
 
 static func _stats_valid(p: Dictionary) -> bool:
 	if not p.has("stats"):

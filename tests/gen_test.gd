@@ -118,9 +118,26 @@ func _test_board_generation() -> void:
 	_ok(str(day2) != str(snapshot_ids), "a new day deals a new board")
 	_ok(board.get_available_count() == 8, "capacity invariant after rotation")
 
-	# Taking jobs keeps capacity and serves generated contracts.
+	# v0.14.0 board pressure: calm jobs carry over; rush/competing expire.
+	# Expectation is computed from the generator rather than hardcoded.
+	var survivors: Array[String] = []
+	for slot in range(8):
+		var gc: Contract = Contract.generate(1, slot)
+		if not gc.has_expired_for(2):
+			survivors.append(gc.id)
+	if survivors.is_empty():
+		_ok(str(day2[0]).begins_with("G-2-"), "all-expired day-1 board deals day 2 first")
+	else:
+		_ok(day2[0] == survivors[0], "oldest surviving calm job sits at the front")
+		_ok(day2.has(survivors[survivors.size() - 1]), "calm day-1 jobs carry over to day 2")
+
+	# Taking jobs keeps capacity and serves the front of the queue
+	# (first come, first served).
+	var ids_now: Array[String] = []
+	for s in board.available_summaries():
+		ids_now.append(s["id"])
 	var taken: Contract = board.take_next()
-	_ok(str(taken.id).begins_with("G-2-"), "take_next serves the current day's board")
+	_ok(taken.id == ids_now[0], "take_next serves the front (first come, first served)")
 	_ok(board.get_available_count() == 8, "board tops back up after a take")
 
 	board.queue_free()

@@ -66,28 +66,33 @@ Risk: medium — touches the machines array every loop depends on.
 
 ---
 
-## Slice 3 — v0.14.0 "First come, first served" (board pressure)
+## Slice 3 — v0.14.0 "First come, first served" (board pressure) — SHIPPED
 
 Goal: make the job board competitive instead of an infinite shelf.
 
 Feature checks:
-- [ ] Rush contracts expire: unaccepted rush jobs leave the board at the next
-      day rollover (replaced by a fresh generated job)
-- [ ] Expired jobs cost nothing but reduce reputation by 0.1 ("missed
-      opportunity")
-- [ ] Some contracts show a competing-buyer marker ("2 waiting") — if not
-      accepted within the same day, they expire like rush jobs
-- [ ] Expiry is deterministic per (day, slot) — same save replays the same
-      outcomes
-- [ ] HUD board line notes expiring jobs ("2 expire tonight")
-- [ ] Chalkboard tracks "Missed: N"
+- [x] Rush contracts expire: unaccepted rush jobs leave the board at the next
+      day rollover (replaced by a fresh generated job); calm jobs now CARRY
+      OVER instead of being wiped
+- [x] Expired jobs cost nothing but reduce reputation by 0.1 ("missed
+      opportunity"); the morning prompt names what was missed
+- [x] Some contracts show a competing-buyer marker ("2 waiting", ~30% of
+      generated slots) — they expire overnight like rush jobs
+- [x] Expiry is deterministic per (day, slot); the full board queue now
+      persists in the save (board: day/cycle/jobs) so a reload reproduces it
+      exactly, deal-cycle counter included
+- [x] HUD board line notes expiring jobs ("2 expire overnight")
+- [x] Chalkboard tracks "Missed: N" (also in the Stats panel)
+- [x] Contracts menu Reserve buttons pin a job to the front of the queue —
+      the next printer accept takes it (job selection per the audit)
 
 Test checks:
-- [ ] rush expiry at rollover: queue shrinks and refills correctly
-- [ ] no expiry for non-rush, non-competing contracts
-- [ ] reputation penalty applied exactly once per expired job
-- [ ] save/reload across a rollover night replays identically
-- [ ] all suites green
+- [x] rush/competing expiry at rollover: queue shrinks and refills correctly
+- [x] no expiry for non-rush, non-competing contracts
+- [x] reputation penalty applied exactly once per expired job
+- [x] save/reload across a rollover night replays identically (board
+      snapshot/restore, JSON round-trip, cycle continuation)
+- [x] all 28 suites green (62 new checks in v014_test)
 
 Risk: medium-low; touches JobBoard rotation and the rollover handler.
 
