@@ -908,6 +908,8 @@ func _refresh_event() -> void:
 	season = Events.season_for_week(int((day_cycle.day - 1) / 7.0) + 1)
 	_refresh_crate_label()
 	_refresh_poster()
+	if _night_mat != null and int(Time.get_date_dict_from_system().month) != _current_sky_month:
+		_night_mat.albedo_texture = _sky_texture_for_month()
 	_apply_season_visuals()
 
 ## Paint this week's season onto the window pane and fog, and show/hide the
@@ -939,8 +941,7 @@ func _refresh_crate_label() -> void:
 ## The night pane's texture: one per real month, built lazily and cached.
 func _sky_texture_for_month() -> ImageTexture:
 	var month: int = Time.get_date_dict_from_system().month
-	if month != _current_sky_month:
-		_current_sky_month = month
+	_current_sky_month = month
 	return ShopArt.window_night(month)
 
 func _apply_daylight() -> void:
@@ -2203,8 +2204,8 @@ func _toggle_photo_mode() -> void:
 	if _hud == null:
 		return
 	_hud.visible = not _hud.visible
-	_set_prompt("Photo mode %s — F2 brings the HUD back" % "off"
-		if not _hud.visible else "Photo mode off — F2 brings the HUD back")
+	_set_prompt("Photo mode ON — F2 hides the HUD again" if _hud.visible
+		else "Photo mode: HUD hidden — F2 brings it back")
 
 ## Reticle shows only during active gameplay.
 func _set_reticle(on: bool) -> void:

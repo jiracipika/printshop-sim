@@ -125,5 +125,13 @@ func _test_window() -> void:
 	_ok(main._night_mat.albedo_texture == ShopArt.window_night(real_month),
 		"the window shows this real month's sky")
 
+	# A calendar-month rollover mid-session rebinds on the next refresh
+	# (regression: the sky used to keep its boot month until reload).
+	main._current_sky_month = (1 if real_month == 12 else real_month + 1)
+	main._refresh_event()
+	_ok(main._night_mat.albedo_texture == ShopArt.window_night(real_month)
+		and main._current_sky_month == real_month,
+		"refresh rebinds the sky when the month counter drifts")
+
 	main.queue_free()
 	await physics_frame

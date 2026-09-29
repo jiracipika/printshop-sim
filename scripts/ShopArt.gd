@@ -384,12 +384,14 @@ static func window_night(month: int) -> ImageTexture:
 		_draw_constellation(img, featured,
 			Rect2(0.30 * SKY_W, 0.10 * SKY_H, 0.46 * SKY_W, 0.62 * SKY_H),
 			2.4, Color(0.98, 0.97, 0.88), Color(0.55, 0.68, 0.85, 0.85))
-		_draw_constellation(img, "ursa_major",
-			Rect2(0.02 * SKY_W, 0.30 * SKY_H, 0.22 * SKY_W, 0.28 * SKY_H),
-			1.4, Color(0.85, 0.90, 1.0, 0.8), Color(0.45, 0.55, 0.72, 0.5))
-		_draw_constellation(img, "pegasus" if featured != "pegasus" else "cygnus",
-			Rect2(0.66 * SKY_W, 0.06 * SKY_H, 0.30 * SKY_W, 0.30 * SKY_H),
-			1.3, Color(0.85, 0.90, 1.0, 0.75), Color(0.45, 0.55, 0.72, 0.45))
+		if featured != "ursa_major":
+			_draw_constellation(img, "ursa_major",
+				Rect2(0.02 * SKY_W, 0.30 * SKY_H, 0.22 * SKY_W, 0.28 * SKY_H),
+				1.4, Color(0.85, 0.90, 1.0, 0.8), Color(0.45, 0.55, 0.72, 0.5))
+		if featured != "ursa_major" and featured != "pegasus":
+			_draw_constellation(img, "cygnus" if featured == "pegasus" else "pegasus",
+				Rect2(0.66 * SKY_W, 0.06 * SKY_H, 0.30 * SKY_W, 0.30 * SKY_H),
+				1.3, Color(0.85, 0.90, 1.0, 0.75), Color(0.45, 0.55, 0.72, 0.45))
 		# Moon with its real phase: per-pixel terminator — the shadow circle
 		# slides across the disc (left while waxing, right while waning) and
 		# the lit fraction lands on the real phase at every step.

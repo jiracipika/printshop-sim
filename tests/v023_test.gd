@@ -44,6 +44,11 @@ func _test_operations() -> void:
 		"photo mode hides the HUD and names the key")
 	main._toggle_photo_mode()
 	_ok(main._hud.visible, "photo mode toggles back")
+	_ok(main._prompt.text.contains("ON"), "restoring the HUD says ON")
+	main._toggle_photo_mode()
+	_ok(not main._hud.visible and main._prompt.text.contains("hidden"),
+		"hiding the HUD says so")
+	main._toggle_photo_mode()
 
 	# Full house: all four sims running at once.
 	_ok(not main._full_house(), "an idle shop is not a full house")

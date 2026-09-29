@@ -96,7 +96,6 @@ func _test_presence() -> void:
 	main._save_game()
 	var saved: Dictionary = load("res://scripts/BrowserSave.gd").load_payload()
 	var heard_saved = saved.get("stations_heard", "MISSING")
-	print("PROBE stations_heard in payload: ", heard_saved)
 	_ok(heard_saved is Array and heard_saved.size() == 3
 		and int(heard_saved[0]) == 0 and int(heard_saved[1]) == 1
 		and int(heard_saved[2]) == 2,
@@ -109,7 +108,6 @@ func _test_presence() -> void:
 	root.add_child(main2)
 	await physics_frame
 	await physics_frame
-	print("PROBE main2 heard: ", main2._stations_heard)
 	_ok(main2._stations_heard.size() == 3, "stations_heard survives the reload")
 	# The restored log legitimately carries main1's Radio star entry; what
 	# must NOT happen is a second one after the reload's first HUD render.

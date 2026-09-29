@@ -373,7 +373,7 @@ func _select_template(name: String) -> void:
 			_design.depth_mm = 46.0
 			_design.height_mm = 64.0
 		"Plant marker":
-			_design.width_mm = 14.0
+			_design.width_mm = 24.0
 			_design.depth_mm = 60.0
 			_design.height_mm = 120.0
 		"Drawer knob":

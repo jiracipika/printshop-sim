@@ -62,6 +62,17 @@ func _test_catalog() -> void:
 	_ok(str(studio._design.name) == "Phone stand"
 		and absf(float(studio._design.width_mm) - 70.0) < 0.01,
 		"Phone stand template fills its starter dims")
+	# Every template's dims must survive normalize (regression: Plant marker
+	# shipped width 14, below the 24 mm floor, and renders/printing silently
+	# clamped it).
+	var template_ok := true
+	for name in DesignStudio.SHAPES:
+		studio._select_template(name)
+		var d := DesignStudio.normalize(studio._design)
+		if absf(float(d.width_mm) - float(studio._design.width_mm)) > 0.01 \
+				or absf(float(d.depth_mm) - float(studio._design.depth_mm)) > 0.01:
+			template_ok = false
+	_ok(template_ok, "every template's dims survive the normalize clamps")
 	studio.free()
 	# The prototype pipeline accepts a new design end to end.
 	var packed: PackedScene = load("res://scenes/Main.tscn")
