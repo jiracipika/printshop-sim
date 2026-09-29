@@ -1,4 +1,32 @@
-# Current handoff — outside the window (v0.25.0)
+# Current handoff — the playtest bot (v0.26.0)
+
+## Current active work
+
+tests/sim_playtest.gd is an automated player: a policy bot that runs the
+real game loop (physics on, Engine.time_scale 8x) for 8 in-game days on
+printer 1 — picks the best board job (difficulty <= 3, no sub-2-day rush),
+confirms the safest printable orientation via _prep_eval, buys + loads a
+spool at the crate when the material estimate would not fit, collects,
+packs at the table, handles DONE_FAIL clears, multi-part reprints and
+partial packs, and survives rent. The whole loop is deterministic (PrintSim
+has no RNG; board/events/seasons are hash-pinned), so the reference curve —
+18 deliveries, $1,923, rep 4.7, zero debt by day 8 — replays exactly.
+Survival asserts (>= 8 deliveries, >= $500 by day 8, rep floor 2.0) turn
+any future starvation regression into a red harness.
+
+BOT-AUTHORING NOTES: prep lives on the CONTRACT state machine — PrintSim
+idles during PREPARING, so a bot must confirm on
+contract.state == PREPARING and sim.state == IDLE, not a sim-state match.
+Engine.time_scale 8 makes a day ~11 s wall; the harness is named
+sim_playtest.gd (outside the tests/*_test.gd glob) because it simulates
+~12 minutes of shop time — run it manually before any balance change.
+
+Local verification: harness green 8/8 twice (deterministic). All 39 unit
+suites + smoke + pytest unaffected.
+
+---
+
+# Previous handoff — outside the window (v0.25.0)
 
 ## Current active work
 

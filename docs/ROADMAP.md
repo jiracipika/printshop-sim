@@ -410,6 +410,31 @@ Test checks:
 
 ---
 
+## Post-roadmap — v0.26.0 "The playtest bot" — SHIPPED
+
+The machine-side of the human-only queue: an automated player.
+
+- [x] tests/sim_playtest.gd plays the shop for 8 in-game days with a
+      simple policy — accepts the best affordable board job (difficulty <=
+      3, no suicide rush), confirms the safest printable orientation,
+      refills filament at the crate when the estimate would not fit,
+      collects, packs, delivers, and reprints owed multi-part copies
+- [x] Deterministic end to end (PrintSim has no RNG; board/events/seasons
+      are hash-pinned) — the run replays exactly: 18 deliveries, $1,923
+      balance, rep 4.7 by day 8, zero rent debt
+- [x] Economy verdict: HEALTHY. A competent single-printer player earns
+      from day 2 ($247 by day-2 end), never approaches a debt spiral, and
+      reaches the top reputation tier in week one — no balance changes
+      needed
+- [x] Survival assertions: 8 deliveries minimum, day-8 balance >= $500,
+      rep floor 2.0, debt < $60, never chronically late — starvation
+      regressions fail the harness
+- [x] Named OUTSIDE the tests/*_test.gd glob on purpose: the run
+      simulates ~12 minutes of shop time (~15 s wall at 8x) and is a
+      harness, not a unit suite; run it before balance-touching changes
+
+---
+
 ## Definition of done (every slice)
 
 - [ ] Feature checks above all ticked
