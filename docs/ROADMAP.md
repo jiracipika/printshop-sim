@@ -126,25 +126,31 @@ Risk: low.
 
 ---
 
-## Slice 5 — v0.16.0 "The radio" (ambient audio)
+## Slice 5 — v0.16.0 "The radio" (ambient audio) — SHIPPED
 
 Goal: fill the silence with a toggleable procedural soundtrack.
 
 Feature checks:
-- [ ] Runtime-generated lo-fi loop (soft chord pad, 4-8 bars, ~60-80 BPM
-      feel) built as an AudioStreamWAV at load — no external assets
-- [ ] Separate "Music" bus + Music volume slider in Settings (persisted)
-- [ ] Music ducks automatically while the design computer is open
-- [ ] Printer servo blips while printing (subtle, rate-limited)
-- [ ] Settings: "Music" checkbox + volume slider; default on at low volume
+- [x] Runtime-generated lo-fi loop (72 BPM, 4 bars, Dm7→G7→Cmaj7→Am7 chord
+      swells over a vinyl-hiss floor, tail crossfade) built as an
+      AudioStreamWAV at load — no external assets (Sfx._music_loop)
+- [x] Separate "Music" bus + Music volume slider in Settings (persisted)
+- [x] Music ducks to 30% automatically while the design computer is open
+- [x] Printer servo blips while printing (subtle, rate-limited 0.7–1.4s per
+      running machine, audible only near the farm)
+- [x] Settings: "Music" checkbox + volume slider; default on at 0.35
+- [x] Radio prop on the left-wall spool shelf (honey box, steel face, whip
+      antenna); E within 1.0 m toggles playback — radius stays tight so it
+      never collides with printer A's accept prompt
 
 Test checks:
-- [ ] music stream builds (non-empty, loops) headless
-- [ ] music bus exists and the slider changes its volume
-- [ ] duck on design-studio open/close
-- [ ] all suites green
+- [x] music stream builds (non-empty, loops, ~13 s at 72 BPM) headless
+- [x] music bus exists and the slider changes its volume (incl. mute-at-zero)
+- [x] duck on design-studio open/close; disabled checkbox stops the player
+- [x] servo blips only while a machine is running; timer never re-arms idle
+- [x] all 29 suites green (33 new checks in v016_test)
 
-Risk: medium — subjective audio quality is unverifiable headless; keep the
+Risk: medium — subjective audio quality is unverifiable headless; kept the
 loop extremely simple and quiet.
 
 ---

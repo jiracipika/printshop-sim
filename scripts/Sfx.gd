@@ -98,6 +98,12 @@ static func stream(sound: String) -> AudioStreamWAV:
 			s = _wav(_tone(1900.0, 0.03, 0.001, 6.0))
 		"upgrade":
 			s = _wav(_mix(_tone(440.0, 0.08), _tone(880.0, 0.14, 0.005, 3.0), 0.07))
+		"servo":
+			# Printer stepper blip (v0.16.0): tiny high tick, played quietly
+			# and rate-limited by Main while a print runs.
+			s = _wav(_tone(2350.0, 0.035, 0.001, 7.0))
+		"music":
+			s = _music_loop()
 		"hum":
 			# Looping printer ambience: mains-frequency drone + soft hiss.
 			var n := int(0.5 * RATE)
@@ -122,11 +128,71 @@ static func stream(sound: String) -> AudioStreamWAV:
 
 static func stream_lengths() -> Dictionary:
 	var out: Dictionary = {}
-	for key in ["grab", "place", "beep", "chime", "buzz", "cash", "click", "upgrade", "hum"]:
+	for key in ["grab", "place", "beep", "chime", "buzz", "cash", "click", "upgrade", "hum", "servo", "music"]:
 		var s := stream(key)
 		if s != null:
 			out[key] = s.data.size() / 2.0 / RATE
 	return out
+
+
+## --- music (v0.16.0) ------------------------------------------------------------
+##
+## Runtime-synthesized lo-fi loop: one soft chord per bar over a vinyl hiss
+## floor, ~72 BPM, 4 bars, seamless loop. Deliberately simple and QUIET —
+## background texture, not a production.
+
+const MUSIC_BPM := 72.0
+const MUSIC_BARS := 4
+## Dm7 -> G7 -> Cmaj7 -> Am7 (ii-V-I-vi): each bar's [bass root + chord tones]
+## in Hz. Register kept low for warmth.
+const MUSIC_CHORDS: Array[Array] = [
+	[146.83, 220.0, 261.63, 329.63],
+	[98.0, 196.0, 246.94, 293.66],
+	[130.81, 196.0, 261.63, 329.63],
+	[110.0, 220.0, 261.63, 329.63],
+]
+
+static func _music_loop() -> AudioStreamWAV:
+	var bar := 4.0 * 60.0 / MUSIC_BPM
+	var total := int(bar * MUSIC_BARS * RATE)
+	var out := PackedFloat32Array()
+	out.resize(total)
+	var prev := 0.0
+	for i in total:
+		prev += 0.02 * ((randf() * 2.0 - 1.0) - prev)
+		out[i] = 0.012 * prev  # vinyl hiss floor
+	for b in MUSIC_BARS:
+		var chord: Array = MUSIC_CHORDS[b]
+		var start := int(b * bar * RATE)
+		var n := int(bar * RATE)
+		for i in n:
+			var t := float(i) / RATE
+			# Half-sine swell per bar: silent seams, no clicks between chords.
+			var env := pow(sin(PI * float(i) / float(n)), 1.5) * 0.05
+			var sample := 0.0
+			for f in chord.size():
+				sample += sin(TAU * float(chord[f]) * t) * (1.0 if f == 0 else 0.8)
+			out[start + i] += env * sample / float(chord.size())
+	# Crossfade the tail into the head so the loop seam is inaudible.
+	var fade := int(0.05 * RATE)
+	for i in fade:
+		var k := float(i) / float(fade)
+		out[total - fade + i] = lerpf(out[total - fade + i], out[i], k)
+	return _wav(out, true)
+
+## Create (once) and return the name of the shared Music bus.
+static func music_bus_name() -> String:
+	if AudioServer.get_bus_index("Music") == -1:
+		AudioServer.add_bus()
+		var idx := AudioServer.bus_count - 1
+		AudioServer.set_bus_name(idx, "Music")
+		AudioServer.set_bus_send(idx, "Master")
+	return "Music"
+
+static func set_music_volume(linear: float) -> void:
+	var idx := AudioServer.get_bus_index(music_bus_name())
+	AudioServer.set_bus_volume_db(idx, linear_to_db(clampf(linear, 0.0001, 1.0)))
+	AudioServer.set_bus_mute(idx, linear <= 0.001)
 
 
 ## --- playback node ----------------------------------------------------------

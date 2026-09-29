@@ -522,6 +522,17 @@ func _build_settings_panel() -> void:
 
 	sv.add_child(_labeled_slider("Mouse look speed", "SensSlider", 0.3, 2.5, 0.05))
 	sv.add_child(_labeled_slider("Sound volume", "VolSlider", 0.0, 1.0, 0.05))
+	sv.add_child(_labeled_slider("Music volume", "MusicSlider", 0.0, 1.0, 0.05))
+
+	var music := CheckBox.new()
+	music.name = "MusicCheck"
+	music.text = "Shop radio (lo-fi loop)"
+	music.add_theme_color_override("font_color", COLOR_PAPER)
+	music.add_theme_font_size_override("font_size", 16)
+	music.toggled.connect(func(on: bool) -> void:
+		if not _settings_applying:
+			settings_changed.emit("music_enabled", on))
+	sv.add_child(music)
 
 	var invert := CheckBox.new()
 	invert.name = "InvertCheck"
@@ -580,7 +591,13 @@ func _labeled_slider(label_text: String, slider_name: String, min_v: float, max_
 	return row
 
 static func slider_name_to_key(slider_name: String) -> String:
-	return "mouse_sens_scale" if slider_name == "SensSlider" else "sfx_volume"
+	match slider_name:
+		"SensSlider":
+			return "mouse_sens_scale"
+		"MusicSlider":
+			return "music_volume"
+		_:
+			return "sfx_volume"
 
 ## Second-press confirm state for the reset button.
 func arm_reset_button() -> void:
@@ -599,12 +616,16 @@ func show_settings(current: Dictionary) -> void:
 	_settings_applying = true
 	var sens: HSlider = _settings_panel.get_node("Sheet/SheetBox/SensSliderRow/SensSlider")
 	var vol: HSlider = _settings_panel.get_node("Sheet/SheetBox/VolSliderRow/VolSlider")
+	var music_vol: HSlider = _settings_panel.get_node("Sheet/SheetBox/MusicSliderRow/MusicSlider")
 	var invert: CheckBox = _settings_panel.get_node("Sheet/SheetBox/InvertCheck")
 	var shadows: CheckBox = _settings_panel.get_node("Sheet/SheetBox/ShadowsCheck")
+	var music: CheckBox = _settings_panel.get_node("Sheet/SheetBox/MusicCheck")
 	sens.set_value_no_signal(float(current.get("mouse_sens_scale", 1.0)))
 	vol.set_value_no_signal(float(current.get("sfx_volume", 0.8)))
+	music_vol.set_value_no_signal(float(current.get("music_volume", 0.35)))
 	invert.set_pressed_no_signal(bool(current.get("invert_y", false)))
 	shadows.set_pressed_no_signal(bool(current.get("shadows", true)))
+	music.set_pressed_no_signal(bool(current.get("music_enabled", true)))
 	_settings_applying = false
 	_show_panel(_settings_panel)
 	_settings_open = true

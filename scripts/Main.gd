@@ -28,6 +28,9 @@ static func rent_for_day(day: int) -> int:
 const SPOOL_G := 1500
 const SPOOL_PRICE_CENTS := 1200
 const CRATE_POS := Vector3(-3.0, 0.0, 1.4)  # supplies corner, clear of the printers
+## The shop radio sits on the lower spool shelf (v0.16.0). Hardcoded
+## (-ROOM_W / 2 + 0.2) because consts can't forward-reference ROOM_W here.
+const RADIO_POS := Vector3(-3.3, 1.58, -1.0)
 
 var job_board: Node
 var ledger: Ledger
@@ -110,10 +113,16 @@ var orientation_pending: bool:
 var active_part: Grabbable:
 	get: return _machine(_focus).get("part")
 
-var settings := {"mouse_sens_scale": 1.0, "sfx_volume": 0.8, "invert_y": false, "shadows": true}
+var settings := {"mouse_sens_scale": 1.0, "sfx_volume": 0.8, "invert_y": false, "shadows": true,
+	"music_enabled": true, "music_volume": 0.35}
 var _settings_dirty := false
 var sfx: Sfx
 var _hum: AudioStreamPlayer3D
+## Shop radio (v0.16.0): lo-fi loop player + duck state (design studio).
+var _music: AudioStreamPlayer
+var _music_ducked := false
+## Per-machine servo-blip countdowns (rate-limited while printing).
+var _servo_timers: Array[float] = []
 var _reticle: ColorRect
 var pitch := 0.0
 var yaw := 0.0
@@ -382,6 +391,29 @@ func _build_audio() -> void:
 	_hum.volume_db = -6.0
 	_hum.unit_size = 4.0
 	add_child(_hum)
+	# Shop radio (v0.16.0): the lo-fi loop lives on its own Music bus so the
+	# settings slider controls it independently of SFX.
+	_music = AudioStreamPlayer.new()
+	_music.stream = Sfx.stream("music")
+	_music.bus = Sfx.music_bus_name()
+	add_child(_music)
+	_update_music_state()
+
+## One place that reconciles the Music bus/player with settings + duck state.
+func _update_music_state() -> void:
+	if _music == null:
+		return
+	var vol := float(settings.get("music_volume", 0.35))
+	if _music_ducked:
+		vol *= 0.3
+	if not bool(settings.get("music_enabled", true)):
+		vol = 0.0  # disabled mutes the bus outright (0 volume == muted)
+	Sfx.set_music_volume(vol)
+	if bool(settings.get("music_enabled", true)):
+		if not _music.playing:
+			_music.play()
+	elif _music.playing:
+		_music.stop()
 
 ## --- persistence (task 12) ---
 
@@ -395,9 +427,11 @@ func _load_save() -> void:
 		_apply_upgrade_effects()
 	if payload.has("settings"):
 		var s: Dictionary = payload.settings
-		for key in ["mouse_sens_scale", "sfx_volume", "invert_y", "shadows"]:
+		for key in ["mouse_sens_scale", "sfx_volume", "invert_y", "shadows",
+				"music_enabled", "music_volume"]:
 			if s.has(key):
 				apply_setting(key, s[key], false)
+	_update_music_state()
 	if payload.has("day"):
 		day_cycle.restore(int(payload.day), 0.0)
 	if payload.has("board") and job_board.restore_payload(payload.board):
@@ -438,6 +472,10 @@ func apply_setting(key: String, value, persist := true) -> void:
 	match key:
 		"sfx_volume":
 			Sfx.set_volume(float(value))
+		"music_volume":
+			_update_music_state()
+		"music_enabled":
+			_update_music_state()
 		"shadows":
 			_apply_quality()
 		# mouse_sens_scale / invert_y are read live by the look paths.
@@ -990,6 +1028,38 @@ func _refresh_farm_door() -> void:
 ## cardboard stack and a plant. Group "props" for tests; colliders only where
 ## the player can reasonably walk into something solid.
 func _build_props() -> void:
+	# The shop radio (v0.16.0): small wooden box, speaker face, whip antenna.
+	# E nearby toggles the lo-fi loop.
+	var radio := MeshInstance3D.new()
+	radio.name = "Radio"
+	var rbox := BoxMesh.new()
+	rbox.size = Vector3(0.34, 0.2, 0.16)
+	radio.mesh = rbox
+	radio.material_override = world.honey
+	radio.position = RADIO_POS
+	radio.set_meta("radio", true)
+	radio.add_to_group("props")
+	add_child(radio)
+	var face := MeshInstance3D.new()
+	var fbox := BoxMesh.new()
+	fbox.size = Vector3(0.02, 0.14, 0.1)
+	face.mesh = fbox
+	face.material_override = world.steel
+	face.position = RADIO_POS + Vector3(0.17, 0.0, 0.0)
+	face.add_to_group("props")
+	add_child(face)
+	var antenna := MeshInstance3D.new()
+	var ant := CylinderMesh.new()
+	ant.top_radius = 0.004
+	ant.bottom_radius = 0.004
+	ant.height = 0.28
+	antenna.mesh = ant
+	antenna.rotation.z = deg_to_rad(-25.0)
+	antenna.material_override = world.steel
+	antenna.position = RADIO_POS + Vector3(-0.1, 0.2, -0.03)
+	antenna.add_to_group("props")
+	add_child(antenna)
+
 	# Spool shelf on the left wall.
 	for y in [1.5, 1.92]:
 		var board := MeshInstance3D.new()
@@ -1877,6 +1947,7 @@ func _physics_process(delta: float) -> void:
 		# movement, no simulation, and latched inputs are dropped.
 		drop_motion_inputs()
 		return
+	_servo_blips(delta)
 	apply_touch_look()
 	_player.rotation.y = yaw
 	_camera.rotation.x = pitch
@@ -2026,6 +2097,37 @@ func _near_crate() -> bool:
 
 func _is_held_spool() -> bool:
 	return held != null and bool(held.get_meta("spool", false))
+
+## Horizontal distance to the shelf radio (it sits above head height, so the
+## vertical axis must not count against reach). Deliberately TIGHT: the
+## printer A stand point is 1.5 m away and E there must accept jobs, not
+## flip the radio.
+func _near_radio() -> bool:
+	return _player != null \
+		and Vector2(_player.global_position.x, _player.global_position.z).distance_to(
+			Vector2(RADIO_POS.x, RADIO_POS.z)) <= 1.0
+
+func _toggle_radio() -> void:
+	var on := not bool(settings.get("music_enabled", true))
+	apply_setting("music_enabled", on)  # persists through _save_game
+	sfx.play("click")
+	_log_event("radio", "lo-fi radio %s" % ("on" if on else "off"))
+	_set_prompt("Radio %s — volume lives in Settings" % ("on" if on else "off"))
+
+## Printer stepper blips (v0.16.0): quiet, rate-limited ticks while a machine
+## prints — organic spacing so four machines never sync into a drone.
+func _servo_blips(delta: float) -> void:
+	if machines.is_empty():
+		return
+	while _servo_timers.size() < machines.size():
+		_servo_timers.append(0.0)
+	for m in machines:
+		var i := int(m.get("idx"))
+		_servo_timers[i] -= delta
+		var s: PrintSim = m.get("sim")
+		if s.is_running() and _servo_timers[i] <= 0.0:
+			_servo_timers[i] = randf_range(0.7, 1.4)
+			sfx.play("servo", 0.22, randf_range(0.92, 1.1))
 
 ## Nearest printer within interact range, as a machine index (-1 if none).
 func _printer_index_near() -> int:
@@ -2662,6 +2764,10 @@ func _try_interact() -> void:
 		if held == null:
 			_buy_spool()
 			return
+	# Empty-handed near the shelf radio toggles the music (v0.16.0).
+	if held == null and _near_radio():
+		_toggle_radio()
+		return
 	# Holding an object: E means place, not start a print.
 	if held != null:
 		_try_place()
@@ -2740,6 +2846,8 @@ func _open_design_studio() -> void:
 	if touch_controls != null:
 		touch_controls.set_motion_enabled(false)
 	_set_reticle(false)
+	_music_ducked = true  # the radio steps back while you design
+	_update_music_state()
 	design_studio.open()
 
 func _close_design_studio() -> void:
@@ -2753,6 +2861,8 @@ func _close_design_studio() -> void:
 	if touch_controls != null:
 		touch_controls.set_motion_enabled(false)
 	_set_reticle(false)
+	_music_ducked = false  # radio comes back up
+	_update_music_state()
 	_prompt.text = ""
 
 func _on_design_test_print(design: Dictionary) -> void:

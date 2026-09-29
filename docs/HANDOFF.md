@@ -1,6 +1,41 @@
-# Current handoff — the workshop log (v0.15.0)
+# Current handoff — the radio (v0.16.0)
 
 ## Current active work
+
+v0.16.0 fills the shop's silence. Sfx._music_loop() synthesizes a lo-fi loop
+entirely at load — 72 BPM, 4 bars, Dm7→G7→Cmaj7→Am7 half-sine chord swells
+over a vinyl-hiss floor, with a tail crossfade so LOOP_FORWARD is seamless
+(~13 s stream, no external assets). It plays through a dedicated "Music" bus
+(created on demand, separate from SFX), routed to a radio prop on the
+left-wall spool shelf (honey box, steel speaker face, whip antenna). E within
+1.0 m toggles playback — the radius is deliberately tight because printer A's
+stand point is 1.5 m away and a wider radius stole the accept-job prompt.
+Settings gains "Music" (checkbox + volume slider, default on at 0.35,
+persisted via settings music_enabled/music_volume); the volume slider drives
+the Music bus, zero mutes it. Opening the design computer ducks music to 30%,
+closing restores it. While any printer is running, Main._servo_blips fires
+tiny 2350 Hz blips per machine on a random 0.7–1.4 s re-arm — mechanical
+texture without a drone.
+
+Local verification on Godot 4.7.1: all 29 suites + smoke pass (1172 checks,
+33 new in tests/v016_test.gd; three consecutive clean v016 runs),
+`python3 -m pytest tests/test_build_web.py -q` passes (21 tests). Engine
+screenshot confirmed the radio prop on the spool shelf.
+
+TEST-SUITE HAZARD (applies to every future `-s` test script): never reference
+MainMenu/Main as a CLASS (static call) from a test — that makes the script a
+compile-time dependency of the script under test, and its `Version` autoload
+reference cannot resolve before autoloads register in --script mode
+("Identifier not found: Version" kills the whole suite with cascading nil
+nodes). Call statics through an INSTANCE instead.
+
+Next iteration: v0.17.0 "Weather in the windows" per docs/ROADMAP.md slice 6.
+
+---
+
+# Previous handoff — the workshop log (v0.15.0)
+
+## Previous active work
 
 v0.15.0 adds history and forensics. WorkshopLog.gd (pure RefCounted logic,
 Ledger-style) keeps a 30-entry ring buffer of shop events — deliveries with

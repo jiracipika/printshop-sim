@@ -157,6 +157,13 @@ static func _settings_valid(p: Dictionary) -> bool:
 		return false
 	if s.has("shadows") and not (s["shadows"] is bool):
 		return false
+	if s.has("music_volume") and not (_is_int(s["music_volume"]) \
+			or s["music_volume"] is float):
+		return false
+	if s.has("music_volume") and (float(s["music_volume"]) < 0.0 or float(s["music_volume"]) > 1.0):
+		return false
+	if s.has("music_enabled") and not (s["music_enabled"] is bool):
+		return false
 	return true
 
 

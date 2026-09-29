@@ -53,13 +53,16 @@ func _test_textures() -> void:
 	_ok(ShopArt.plaster(Color("#738771")) == ShopArt.plaster(Color("#738771")),
 		"texture cache returns the same instance")
 
-	# SFX: every sound builds a stream; the printer hum loops.
+	# SFX: every sound builds a stream; the printer hum and music loop.
 	var lengths: Dictionary = Sfx.stream_lengths()
-	_ok(lengths.size() == 9, "all nine sfx streams build")
+	_ok(lengths.size() == 11, "all eleven sfx streams build")
 	for key in lengths:
 		_ok(float(lengths[key]) > 0.0, "sfx %s has positive length" % key)
 	var hum: AudioStreamWAV = Sfx.stream("hum")
 	_ok(hum.loop_mode == AudioStreamWAV.LOOP_FORWARD, "printer hum loops")
+	var music: AudioStreamWAV = Sfx.stream("music")
+	_ok(music != null and music.loop_mode == AudioStreamWAV.LOOP_FORWARD,
+		"music stream loops")
 
 
 func _test_scene() -> void:
