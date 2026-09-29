@@ -41,6 +41,12 @@ var reputation := 3.0
 ## Lifetime counters (v0.5.0), persisted and shown in the menu Stats panel.
 ## "missed" (v0.14.0): board offers that expired overnight.
 var stats := {"delivered": 0, "late": 0, "scrapped": 0, "cancelled": 0, "earned_cents": 0, "missed": 0}
+## Workshop log (v0.15.0): capped ring buffer of shop events, persisted.
+var workshop_log := WorkshopLog.new()
+
+## One line into the workshop log, stamped with the current shop day.
+func _log_event(kind: String, text: String) -> void:
+	workshop_log.append(kind, text, day_cycle.day)
 ## Today's shop event (v0.7.0) — deterministic per day, refreshed on rollover.
 var today_event: Dictionary = Events.QUIET.duplicate(true)
 ## This week's season (v0.11.0) — deterministic per week number.
@@ -174,6 +180,7 @@ func _on_menu_upgrade_buy(id: String) -> void:
 		return
 	upgrades.buy(id)
 	_apply_upgrade_effects()
+	_log_event("upgrade", "installed %s ($%s)" % [e.name, _cents_str(int(e.cost_cents))])
 	if id == "pro_machine":
 		_machine(1)["filament_g"] = SPOOL_G  # ships with a spool loaded
 	_refresh_printer_locks()
@@ -204,6 +211,15 @@ func _on_menu_stats() -> void:
 	for a in _achievements():
 		lines.append(("%s  %s" % ["✓", a.name]) if a.done else ("·  %s — %s" % [a.name, a.hint]))
 	main_menu.show_stats(lines)
+
+## Workshop log panel (v0.15.0): the ring buffer, oldest first.
+func _on_menu_log() -> void:
+	var lines: Array[String] = []
+	if workshop_log.count() == 0:
+		lines.append("Nothing in the log yet — deliver, fail, miss or buy something.")
+	for e in workshop_log.entries():
+		lines.append("Day %d · [%s] %s" % [int(e.day), str(e.kind), str(e.text)])
+	main_menu.show_log(lines)
 
 ## Computed milestones (v0.6.0) — derived from live state, nothing to persist.
 func _achievements() -> Array[Dictionary]:
@@ -414,6 +430,8 @@ func _load_save() -> void:
 		guide_done = bool(payload.guide_done)
 	if payload.has("crate_next"):
 		_crate_next = maxi(int(payload.crate_next), 0)
+	if payload.has("log"):
+		workshop_log.restore(payload.log)
 
 func apply_setting(key: String, value, persist := true) -> void:
 	settings[key] = value
@@ -453,6 +471,7 @@ func _save_game() -> void:
 			"guide_done": guide_done,
 			"crate_next": _crate_next,
 			"board": job_board.snapshot_payload(),
+			"log": workshop_log.snapshot(),
 		})
 	var ok: bool = load("res://scripts/BrowserSave.gd").save_payload(payload)
 	save_status_line = "%s at %s" % ["saved ok" if ok else "save FAILED",
@@ -1708,6 +1727,7 @@ func _build_hud() -> void:
 		main_menu.show_settings(settings))
 	main_menu.settings_changed.connect(_on_menu_setting)
 	main_menu.stats_pressed.connect(_on_menu_stats)
+	main_menu.log_pressed.connect(_on_menu_log)
 	main_menu.reset_requested.connect(request_reset_shop)
 	main_menu.reset_disarmed.connect(func() -> void: _reset_armed = false)
 	main_menu.open_menu()
@@ -1974,6 +1994,9 @@ func _on_print_done(ok: bool, idx: int) -> void:
 			_printers[idx].set_failed(true)
 		if c.state in [Contract.State.PREPARING, Contract.State.PRINTING, Contract.State.INSPECTION]:
 			_advance(c, Contract.State.FAILED)
+		var cause: String = (m.get("sim") as PrintSim).failure_cause
+		_log_event("failed", "%s — %s" % [c.model_name,
+			cause if cause != "" else "print failed"])
 		_set_prompt("Print FAILED — %s lost. [E] clear the printer" % c.model_name)
 		m["contract"] = null
 
@@ -2262,6 +2285,8 @@ func _try_pack_held() -> bool:
 	_discard_part_for(m)
 	m["contract"] = null
 	last_pack_grade = eff_grade
+	_log_event("delivered", "%s — grade %s, $%s%s" % [c.model_name, result.grade,
+		_cents_str(payout), " (late)" if late else ""])
 	# Reputation and lifetime stats.
 	if late:
 		_rep_event(-0.2)
@@ -2310,6 +2335,7 @@ func _scrap_held() -> bool:
 	m["contract"] = null
 	_rep_event(-0.4)
 	stats.scrapped += 1
+	_log_event("scrap", "scrapped %s — no payout" % c.model_name)
 	_save_game()
 	sfx.play("buzz")
 	_set_prompt("Scrapped %s. No payout — reputation hit." % c.model_name)
@@ -2534,19 +2560,23 @@ func _on_day_changed(new_day: int) -> void:
 		var names: Array[String] = []
 		for c in expired:
 			names.append(c.model_name)
+			_log_event("expired", "%s left the board (never accepted)" % c.model_name)
 		missed_note = ". Missed %d board job%s (%s) — reputation hit." % [
 			expired.size(), "" if expired.size() == 1 else "s", ", ".join(names)]
 		sfx.play("buzz")
 	# A rent holiday skips only the charge — the rest of the day still runs.
 	if bool(today_event.rent_free):
+		_log_event("event", "%s — no rent today" % today_event.name)
 		_set_prompt("Day %d — %s%s" % [new_day, today_event.name, missed_note])
 	else:
 		var rent_due := rent_for_day(new_day) + int(season.extra_rent_cents)
 		if ledger.can_afford(rent_due):
 			ledger.charge(rent_due, "rent day %d" % new_day)
+			_log_event("rent", "rent paid $%s" % _cents_str(rent_due))
 			_set_prompt("Day %d — rent paid ($%s)%s" % [new_day, _cents_str(rent_due), missed_note])
 		else:
 			rent_debt_cents += rent_due
+			_log_event("rent", "rent UNPAID — now owe $%s" % _cents_str(rent_debt_cents))
 			_set_prompt("Day %d — rent UNPAID (now owe $%s)%s" % [new_day, _cents_str(rent_debt_cents), missed_note])
 	for m in machines:
 		if not _is_cancelled_for(m):
@@ -2566,6 +2596,7 @@ func _on_day_changed(new_day: int) -> void:
 		m["contract"] = null
 		_rep_event(-0.6)
 		stats.cancelled += 1
+		_log_event("cancel", "client cancelled %s — far too late" % c.model_name)
 		sfx.play("buzz")
 		_set_prompt("Client cancelled %s — far too late. Reputation hit." % c.model_name)
 
@@ -2763,6 +2794,7 @@ func _on_design_test_print(design: Dictionary) -> void:
 	var layers := clampi(ceili(float(d.height_mm) / float(d.layer_mm)), 20, 800)
 	sim.start_job("PROTO-%d" % Time.get_ticks_msec(), d.name, layers)
 	_guide("prototype")
+	_log_event("prototype", "%s started on Printer %d" % [d.name, idx + 1])
 	_save_game()
 	design_studio.show_feedback("Prototype started on Printer %d. It is paid from your filament balance." % (idx + 1))
 	_close_design_studio()

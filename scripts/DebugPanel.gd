@@ -80,7 +80,7 @@ func _build() -> void:
 	v.add_child(_log)
 
 	var hint := Label.new()
-	hint.text = "F3 panel  [1]spawn [2]fail [3]skip [4]funds [5]clear save [6]reset"
+	hint.text = "F3 panel  [1]spawn [2]fail [3]skip [4]funds [5]clear save [6]reset [7]log"
 	hint.add_theme_color_override("font_color", Color(0.6, 0.66, 0.6))
 	hint.add_theme_font_size_override("font_size", 11)
 	v.add_child(hint)
@@ -112,6 +112,8 @@ func _unhandled_input(event: InputEvent) -> void:
 				_action_clear_save()
 			KEY_6:
 				_action_reset()
+			KEY_7:
+				_action_dump_log()
 
 func label_text(key: String) -> String:
 	if not DEBUG_PANEL or not _labels.has(key):
@@ -207,6 +209,13 @@ func _action_clear_save() -> void:
 func _action_reset() -> void:
 	_log_line("reset: reloading scene")
 	get_tree().reload_current_scene()
+
+## [7] Dump the workshop log to stdout (headless debugging).
+func _action_dump_log() -> void:
+	var wl: WorkshopLog = main.workshop_log
+	for e in wl.entries():
+		print("[log] day %d [%s] %s" % [int(e.day), str(e.kind), str(e.text)])
+	_log_line("log dumped (%d entries)" % wl.count())
 
 func _contract_by_id(id: String) -> Contract:
 	for c in main.job_board._queue:

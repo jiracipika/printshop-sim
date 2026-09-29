@@ -20,6 +20,7 @@ signal upgrades_pressed
 signal upgrade_buy_pressed(id: String)
 signal settings_pressed
 signal stats_pressed
+signal log_pressed
 signal reset_requested
 signal reset_disarmed
 signal settings_changed(key: String, value)
@@ -36,6 +37,7 @@ var _upgrades_panel: Control
 var _settings_panel: Control
 var _howto_panel: Control
 var _stats_panel: Control
+var _log_panel: Control
 var _settings_applying := false
 var _open := false
 var _contracts_open := false
@@ -43,6 +45,7 @@ var _upgrades_open := false
 var _settings_open := false
 var _howto_open := false
 var _stats_open := false
+var _log_open := false
 
 const COLOR_STEEL := Color("#202B2B")
 const COLOR_PAPER := Color("#EEE5D3")
@@ -63,7 +66,7 @@ func is_open() -> bool:
 func open_menu() -> void:
 	visible = true
 	disarm_reset_button()
-	for panel in [_contracts_panel, _upgrades_panel, _settings_panel, _howto_panel, _stats_panel]:
+	for panel in [_contracts_panel, _upgrades_panel, _settings_panel, _howto_panel, _stats_panel, _log_panel]:
 		if panel != null:
 			panel.visible = false
 	_contracts_open = false
@@ -71,11 +74,12 @@ func open_menu() -> void:
 	_settings_open = false
 	_howto_open = false
 	_stats_open = false
+	_log_open = false
 	is_open()
 
 func close_menu() -> void:
 	visible = false
-	for panel in [_contracts_panel, _upgrades_panel, _settings_panel, _howto_panel, _stats_panel]:
+	for panel in [_contracts_panel, _upgrades_panel, _settings_panel, _howto_panel, _stats_panel, _log_panel]:
 		if panel != null:
 			panel.visible = false
 	_contracts_open = false
@@ -83,13 +87,14 @@ func close_menu() -> void:
 	_settings_open = false
 	_howto_open = false
 	_stats_open = false
+	_log_open = false
 	is_open()
 
 ## True while any subpanel is showing — Esc should step back to the main
 ## panel rather than close the menu.
 func subpanel_open() -> bool:
 	return visible and (_contracts_open or _upgrades_open or _settings_open \
-		or _howto_open or _stats_open)
+		or _howto_open or _stats_open or _log_open)
 
 func contracts_visible() -> bool:
 	return visible and _contracts_open
@@ -201,6 +206,10 @@ func _build() -> void:
 	stats_btn.pressed.connect(func() -> void: stats_pressed.emit())
 	buttons.add_child(stats_btn)
 
+	var log_btn := _make_button("Log", "Log")
+	log_btn.pressed.connect(func() -> void: log_pressed.emit())
+	buttons.add_child(log_btn)
+
 	var quit := _make_button("Quit", "Quit")
 	quit.pressed.connect(func() -> void: get_tree().quit())
 	buttons.add_child(quit)
@@ -224,6 +233,7 @@ func _build() -> void:
 	_build_settings_panel()
 	_build_howto_panel()
 	_build_stats_panel()
+	_build_log_panel()
 
 func _apply_quit_visibility() -> void:
 	if _root == null:
@@ -731,6 +741,86 @@ func show_stats(lines: Array[String]) -> void:
 	_stats_open = true
 	is_open()
 
+## --- log panel (v0.15.0) ---------------------------------------------------------
+
+func _build_log_panel() -> void:
+	_log_panel = Control.new()
+	_log_panel.name = "LogPanel"
+	_log_panel.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_log_panel.mouse_filter = Control.MOUSE_FILTER_STOP
+	_log_panel.visible = false
+	_root.add_child(_log_panel)
+
+	var dim := ColorRect.new()
+	dim.color = Color(COLOR_STEEL, 0.92)
+	dim.set_anchors_preset(Control.PRESET_FULL_RECT)
+	dim.mouse_filter = Control.MOUSE_FILTER_STOP
+	_log_panel.add_child(dim)
+
+	var sheet := PanelContainer.new()
+	sheet.name = "Sheet"
+	sheet.set_anchors_preset(Control.PRESET_FULL_RECT)
+	sheet.offset_left = 110.0
+	sheet.offset_top = 48.0
+	sheet.offset_right = -110.0
+	sheet.offset_bottom = -48.0
+	sheet.add_theme_stylebox_override("panel", _sheet_style())
+	_log_panel.add_child(sheet)
+
+	var sv := VBoxContainer.new()
+	sv.name = "SheetBox"
+	sv.add_theme_constant_override("separation", 12)
+	sheet.add_child(sv)
+
+	var h1 := Label.new()
+	h1.name = "Title"
+	h1.text = "WORKSHOP LOG"
+	h1.add_theme_color_override("font_color", COLOR_PAPER)
+	h1.add_theme_font_size_override("font_size", 28)
+	sv.add_child(h1)
+
+	var sub := Label.new()
+	sub.name = "Sub"
+	sub.text = "the last 30 things that happened around the shop"
+	sub.add_theme_color_override("font_color", COLOR_MINT)
+	sub.add_theme_font_size_override("font_size", 12)
+	sv.add_child(sub)
+
+	var scroll := ScrollContainer.new()
+	scroll.name = "Scroll"
+	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	sv.add_child(scroll)
+
+	var list := VBoxContainer.new()
+	list.name = "List"
+	list.add_theme_constant_override("separation", 6)
+	scroll.add_child(list)
+
+	sv.add_child(_make_back_button(func() -> void:
+		_log_panel.visible = false
+		_log_open = false
+		is_open()))
+
+## lines: preformatted log lines from Main, oldest first.
+func show_log(lines: Array[String]) -> void:
+	var list: VBoxContainer = _log_panel.get_node("Sheet/SheetBox/Scroll/List")
+	for child in list.get_children():
+		list.remove_child(child)
+		child.free()
+	for i in lines.size():
+		var line := lines[lines.size() - 1 - i]  # newest at the top of the page
+		var l := Label.new()
+		l.text = line
+		l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		# Failures and misses read hotter than deliveries and purchases.
+		var hot := "[failed]" in line or "[expired]" in line or "[cancel]" in line
+		l.add_theme_color_override("font_color", COLOR_TERRA if hot else COLOR_PAPER)
+		l.add_theme_font_size_override("font_size", 15)
+		list.add_child(l)
+	_show_panel(_log_panel)
+	_log_open = true
+	is_open()
+
 ## --- shared panel helpers ------------------------------------------------------
 
 func _sheet_style() -> StyleBoxFlat:
@@ -756,7 +846,7 @@ func _make_back_button(on_pressed: Callable) -> Button:
 
 func _show_panel(panel: Control) -> void:
 	disarm_reset_button()
-	for p in [_contracts_panel, _upgrades_panel, _settings_panel, _howto_panel, _stats_panel]:
+	for p in [_contracts_panel, _upgrades_panel, _settings_panel, _howto_panel, _stats_panel, _log_panel]:
 		if p != null:
 			p.visible = p == panel
 	_contracts_open = panel == _contracts_panel
@@ -764,6 +854,7 @@ func _show_panel(panel: Control) -> void:
 	_settings_open = panel == _settings_panel
 	_howto_open = panel == _howto_panel
 	_stats_open = panel == _stats_panel
+	_log_open = panel == _log_panel
 
 func _make_card(s: Dictionary) -> PanelContainer:
 	var card := PanelContainer.new()

@@ -98,25 +98,29 @@ Risk: medium-low; touches JobBoard rotation and the rollover handler.
 
 ---
 
-## Slice 4 — v0.15.0 "The workshop log" (history & forensics)
+## Slice 4 — v0.15.0 "The workshop log" (history & forensics) — SHIPPED
 
 Goal: players should be able to answer "what happened overnight?" and
 "why did that print fail?"
 
 Feature checks:
-- [ ] Ring buffer of the last 30 shop events (delivered/failed/expired/
-      rent/upgrades/prototypes) with day stamp and one-line detail
-- [ ] Failure cause strings: PrintSim records the worst risk that triggered a
-      failure ("support collapse at layer 34") and the log shows it
-- [ ] New menu panel "Log" (or a page in Stats) rendering the buffer
-- [ ] Buffer persists in the save (validated, capped at 30 entries)
-- [ ] DebugPanel action [7]: dump the log to stdout for headless debugging
+- [x] Ring buffer of the last 30 shop events (delivered/failed/expired/
+      rent/upgrades/prototypes/scrap/cancel) with day stamp and one-line
+      detail (scripts/WorkshopLog.gd, pure logic like Ledger)
+- [x] Failure cause strings: PrintSim records the worst risk that triggered a
+      failure ("support collapse at layer 34" / "came off the bed at layer N"
+      / "part toppled at layer N") and the log shows it
+- [x] New menu panel "Log" renders the buffer newest-first; failures,
+      expiries and cancellations read terracotta
+- [x] Buffer persists in the save (validated, capped at 30 entries)
+- [x] DebugPanel action [7]: dumps the log to stdout for headless debugging
 
 Test checks:
-- [ ] events append in order, cap at 30, oldest dropped
-- [ ] persistence round-trip preserves the buffer
-- [ ] failure cause recorded for seeded and risk-driven failures
-- [ ] all suites green
+- [x] events append in order, cap at 30, oldest dropped
+- [x] persistence round-trip preserves the buffer (incl. JSON round-trip
+      and over-cap restore keeping the newest 30)
+- [x] failure cause recorded for seeded and risk-driven failures
+- [x] all suites green (50 new checks in v015_test)
 
 Risk: low.
 

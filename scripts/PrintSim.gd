@@ -36,6 +36,10 @@ var _failed := false
 ## that means the print fails mid-way (tick = _failure_roll * layers_total).
 var failure_threshold: float = 0.55
 var _failure_tick: int = -1
+## One-line cause for the most recent failure (v0.15.0), e.g.
+## "support collapse at layer 34" — the worst prep risk at the failure
+## moment. Cleared by reset(); set for BOTH seeded and risk-rolled failures.
+var failure_cause := ""
 
 ## Task 12 upgrade seam: multiplies sim time accumulation so owned extruder
 ## upgrades genuinely shorten prints. Layer counts, progress and the
@@ -68,6 +72,7 @@ func start_job(id: String, model: String, layers: int) -> void:
 	_tick_accum = 0.0
 	_failed = false
 	_failure_tick = -1
+	failure_cause = ""
 	if not failure_seeded:
 		_roll_failure_tick()
 	state = State.RUNNING
@@ -148,6 +153,7 @@ func reset() -> void:
 	_tick_accum = 0.0
 	_failed = false
 	_failure_tick = -1
+	failure_cause = ""
 
 func _step_tick() -> void:
 	if _failed:
@@ -157,8 +163,20 @@ func _step_tick() -> void:
 	layers_done += 1
 	if failure_seeded and layers_done == int(layers_total / 2):  # seeded mid-print failure
 		_failed = true
+		failure_cause = _cause_line(layers_done)
 	elif _failure_tick >= 0 and layers_done == _failure_tick:
 		_failed = true  # risk-rolled deterministic failure (task 09 seam)
+		failure_cause = _cause_line(layers_done)
 	if layers_done >= layers_total:
 		state = State.DONE_OK
 		print_finished.emit(true)
+
+## The worst prep risk at the failure moment, as one log line. Tie order
+## mirrors _roll_failure_tick's maxf nesting: support, then adhesion, then
+## stability.
+func _cause_line(layer: int) -> String:
+	if support_need >= adhesion_risk and support_need >= stability_risk:
+		return "support collapse at layer %d" % layer
+	if adhesion_risk >= stability_risk:
+		return "came off the bed at layer %d" % layer
+	return "part toppled at layer %d" % layer

@@ -104,6 +104,8 @@ static func validate(payload: Variant) -> Dictionary:
 		return {}
 	if not _board_valid(p):
 		return {}
+	if not _log_valid(p):
+		return {}
 
 	var out: Dictionary = p.duplicate(true)
 	out["version"] = int(p["version"])
@@ -270,6 +272,31 @@ static func _board_valid(p: Dictionary) -> bool:
 		for f in job["risk_flags"]:
 			if not (f is String) or not (f as String in Contract.VALID_RISK_FLAGS):
 				return false
+	return true
+
+
+## Optional "log" key (v0.15.0): workshop-log ring buffer — Array of
+## {seq, day, kind, text} entries. Types/ranges must check; more than CAP
+## (30) entries is tolerated (restore keeps the newest CAP).
+static func _log_valid(p: Dictionary) -> bool:
+	if not p.has("log"):
+		return true
+	if typeof(p["log"]) != TYPE_ARRAY:
+		return false
+	for e in p["log"]:
+		if typeof(e) != TYPE_DICTIONARY:
+			return false
+		var d: Dictionary = e
+		if not d.has_all(["seq", "day", "kind", "text"]):
+			return false
+		if not _is_int(d["seq"]):
+			return false
+		if not _is_int(d["day"]) or int(d["day"]) < 1:
+			return false
+		if not (d["kind"] is String) or (d["kind"] as String).is_empty():
+			return false
+		if not (d["text"] is String):
+			return false
 	return true
 
 

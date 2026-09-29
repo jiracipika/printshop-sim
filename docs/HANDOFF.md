@@ -1,6 +1,31 @@
-# Current handoff — board pressure (v0.14.0)
+# Current handoff — the workshop log (v0.15.0)
 
 ## Current active work
+
+v0.15.0 adds history and forensics. WorkshopLog.gd (pure RefCounted logic,
+Ledger-style) keeps a 30-entry ring buffer of shop events — deliveries with
+grade+payout, print failures WITH CAUSE (PrintSim now records
+"support collapse at layer N" / "came off the bed at layer N" /
+"part toppled at layer N" for both seeded and risk-rolled failures),
+board offers missed overnight, rent paid/unpaid, upgrades installed,
+prototypes started, scraps and cancellations. A new "Log" button on the main
+menu renders the buffer newest-first with day stamps; failures, expiries and
+cancellations read terracotta. The buffer persists in the save payload
+("log": [{seq, day, kind, text}], validated by SaveSystem._log_valid;
+restore keeps the newest 30 if a longer history appears). DebugPanel action
+[7] dumps the log to stdout for headless debugging.
+
+Local verification on Godot 4.7.1: all 28 suites + smoke pass (1139 checks,
+50 new in tests/v015_test.gd), `python3 -m pytest tests/test_build_web.py -q`
+passes (21 tests). Engine screenshot confirmed the Log panel layout.
+
+Next iteration: v0.16.0 "The radio" per docs/ROADMAP.md slice 5.
+
+---
+
+# Previous handoff — board pressure (v0.14.0)
+
+## Previous active work
 
 v0.14.0 makes the job board first come, first served. Calm generated jobs now
 CARRY OVER across mornings instead of being wiped; rush jobs and competing
