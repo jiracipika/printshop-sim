@@ -32,6 +32,19 @@ const CRATE_POS := Vector3(-3.0, 0.0, 1.4)  # supplies corner, clear of the prin
 ## (-ROOM_W / 2 + 0.2) because consts can't forward-reference ROOM_W here.
 const RADIO_POS := Vector3(-3.3, 1.58, -1.0)
 
+## Season visuals (v0.17.0): per-season look for the window pane, fog and sun
+## tint. The calm entry reproduces the pre-v0.17 look exactly.
+const SEASON_LOOK := {
+	"calm": {"pane": Color("#D8E8DF"), "glow": Color("#CFE3DA"), "energy": 1.2,
+		"fog_color": Color("#C9C2AE"), "fog_density": 0.008, "sun": Color(1.0, 1.0, 1.0)},
+	"humid": {"pane": Color("#C4D6CE"), "glow": Color("#C2D4CC"), "energy": 1.0,
+		"fog_color": Color("#BEC9BE"), "fog_density": 0.012, "sun": Color(0.93, 0.98, 1.0)},
+	"cold_snap": {"pane": Color("#DCE9F2"), "glow": Color("#D3E2EC"), "energy": 1.15,
+		"fog_color": Color("#BFCBD6"), "fog_density": 0.008, "sun": Color(0.85, 0.93, 1.0)},
+	"boom": {"pane": Color("#EAE2C8"), "glow": Color("#E4D9B4"), "energy": 1.25,
+		"fog_color": Color("#D6C9A8"), "fog_density": 0.008, "sun": Color(1.0, 0.92, 0.76)},
+}
+
 var job_board: Node
 var ledger: Ledger
 var upgrades: Upgrades
@@ -54,6 +67,13 @@ func _log_event(kind: String, text: String) -> void:
 var today_event: Dictionary = Events.QUIET.duplicate(true)
 ## This week's season (v0.11.0) — deterministic per week number.
 var season: Dictionary = Events.CALM_SEASON.duplicate(true)
+## Season visuals (v0.17.0): the window pane material plus the rain-streak and
+## frost overlay nodes; the overlays are the only added draw calls and are
+## gated behind the quality (shadows) toggle.
+var _window_mat: StandardMaterial3D
+var _rain: Node3D
+var _frost: MeshInstance3D
+var _rain_speeds: Array[float] = []
 var _crate_label: Label3D
 var _chalk_label: Label3D
 var _chalk_cache := ""
@@ -374,6 +394,7 @@ func request_reset_shop() -> void:
 func _apply_quality() -> void:
 	if _sun != null:
 		_sun.shadow_enabled = bool(settings.get("shadows", true))
+	_apply_season_visuals()
 	# Browser-safe start: mouse visible, gameplay paused until a deliberate
 	# left click captures the pointer.
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
@@ -747,6 +768,26 @@ func _refresh_event() -> void:
 	today_event = Events.for_day(day_cycle.day)
 	season = Events.season_for_week(int((day_cycle.day - 1) / 7.0) + 1)
 	_refresh_crate_label()
+	_apply_season_visuals()
+
+## Paint this week's season onto the window pane and fog, and show/hide the
+## rain-streak and frost overlays. The overlays are the only added draw calls
+## — hidden when the quality toggle (shadows) is off for weak devices.
+func _apply_season_visuals() -> void:
+	if _window_mat == null or _env == null:
+		return
+	var id := str(season.get("id", "calm"))
+	var look: Dictionary = SEASON_LOOK.get(id, SEASON_LOOK["calm"])
+	_window_mat.albedo_color = look.pane
+	_window_mat.emission = look.glow
+	_window_mat.emission_energy_multiplier = float(look.energy)
+	_env.fog_light_color = look.fog_color
+	_env.fog_density = float(look.fog_density)
+	var fx := bool(settings.get("shadows", true))
+	if _rain != null:
+		_rain.visible = fx and id == "humid"
+	if _frost != null:
+		_frost.visible = fx and id == "cold_snap"
 
 func _refresh_crate_label() -> void:
 	if _crate_label != null:
@@ -762,6 +803,13 @@ func _apply_daylight() -> void:
 	daylight = clampf(daylight, 0.0, 1.0)
 	_sun.light_energy = 0.2 + 1.0 * daylight
 	_sun.light_color = Color(1.0, 0.72, 0.5).lerp(Color(1.0, 0.96, 0.88), daylight)
+	# Season tint (v0.17.0): cold weeks cool the sun, booms warm it gold.
+	var look: Dictionary = SEASON_LOOK.get(str(season.get("id", "calm")), SEASON_LOOK["calm"])
+	var tint: Color = look.sun
+	_sun.light_color = Color(
+		minf(_sun.light_color.r * tint.r, 1.0),
+		minf(_sun.light_color.g * tint.g, 1.0),
+		minf(_sun.light_color.b * tint.b, 1.0))
 	_env.ambient_light_energy = 0.55 + 0.5 * daylight
 	if _sky_mat != null:
 		_sky_mat.sky_energy_multiplier = 0.3 + 0.8 * daylight
@@ -855,6 +903,49 @@ func _build_environment() -> void:
 	pane.position = Vector3(1.9, 1.8, -ROOM_D / 2.0 + 0.13)
 	pane.add_to_group("props")
 	add_child(pane)
+	_window_mat = pm
+
+	# Rain streaks (v0.17.0): thin unshaded quads sliding down the glass on
+	# humid weeks — window-only, no room-wide particles. Hidden by default.
+	var rain := Node3D.new()
+	rain.name = "RainStreaks"
+	rain.visible = false
+	add_child(rain)
+	_rain = rain
+	var streak_mat := StandardMaterial3D.new()
+	streak_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	streak_mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	# Dark against the bright pane — rain on glass reads as dark lines.
+	streak_mat.albedo_color = Color(0.30, 0.38, 0.46, 0.65)
+	for i in range(10):
+		var streak := MeshInstance3D.new()
+		var sb := BoxMesh.new()
+		sb.size = Vector3(0.014, 0.17, 0.005)
+		streak.mesh = sb
+		streak.material_override = streak_mat
+		streak.position = Vector3(
+			1.25 + 0.14 * float(i), 1.35 + 0.09 * float((i * 7) % 10),
+			-ROOM_D / 2.0 + 0.165)
+		rain.add_child(streak)
+		_rain_speeds.append(0.55 + 0.05 * float((i * 3) % 7))
+
+	# Frost creep (v0.17.0): translucent icy band across the pane's lower
+	# half during cold snaps. Hidden by default.
+	var frost := MeshInstance3D.new()
+	var fb := BoxMesh.new()
+	fb.size = Vector3(1.56, 0.6, 0.012)
+	frost.mesh = fb
+	var frost_mat := StandardMaterial3D.new()
+	frost_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	frost_mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	# Icy blue-gray, darker than the pane so the creep actually reads.
+	frost_mat.albedo_color = Color(0.72, 0.81, 0.9, 0.5)
+	frost.material_override = frost_mat
+	frost.position = Vector3(1.9, 1.53, -ROOM_D / 2.0 + 0.155)
+	frost.visible = false
+	frost.add_to_group("props")
+	add_child(frost)
+	_frost = frost
 	for rail in [
 		[Vector3(1.62, 0.04, 0.08), Vector3(1.9, 1.8, -ROOM_D / 2.0 + 0.11)],
 		[Vector3(0.06, 1.2, 0.08), Vector3(1.16, 1.8, -ROOM_D / 2.0 + 0.11)],
@@ -1979,8 +2070,21 @@ func _physics_process(delta: float) -> void:
 		s.tick(delta)
 	day_cycle.tick(delta)
 	_apply_daylight()
+	_animate_rain(delta)
 	_update_print_visuals(delta)
 	_update_hud()
+
+## Slide the rain streaks down the glass and wrap them at the sill. The whole
+## node is hidden outside humid weeks, so this early-returns for free.
+func _animate_rain(delta: float) -> void:
+	if _rain == null or not _rain.visible:
+		return
+	var kids := _rain.get_children()
+	for i in range(kids.size()):
+		var streak := kids[i] as Node3D
+		streak.position.y -= _rain_speeds[i] * delta
+		if streak.position.y < 1.28:
+			streak.position.y += 1.05
 
 ## Drive each machine's deposition visual from its own sim (v0.3.0: both
 ## machines can print — and fail — independently).
@@ -2910,6 +3014,18 @@ func _on_design_test_print(design: Dictionary) -> void:
 	_close_design_studio()
 	_prompt.text = "Prototype printing — click Play to return to the shop"
 
+## Icon glyph per season (v0.17.0) on the HUD season line. Same symbol block
+## as the existing ★☆ glyphs so the default font renders them.
+func _season_icon(id: String) -> String:
+	match id:
+		"humid":
+			return "☔"
+		"cold_snap":
+			return "☃"
+		"boom":
+			return "☀"
+	return ""
+
 func _update_hud() -> void:
 	_set_reticle(paused == false)
 	var lines: Array[String] = []
@@ -2923,7 +3039,7 @@ func _update_hud() -> void:
 	lines.append("Day %d — rent $%s/day" % [day_cycle.day, _cents_str(today_rent)])
 	lines.append("Today: %s" % today_event.name)
 	if str(season.name) != "":
-		lines.append("This week: %s" % season.name)
+		lines.append("This week: %s %s" % [_season_icon(str(season.get("id", "calm"))), season.name])
 	if not guide_done:
 		lines.append("▸ Objective: %s" % _guide_current())
 	if rent_debt_cents > 0:

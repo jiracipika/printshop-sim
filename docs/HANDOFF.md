@@ -1,4 +1,38 @@
-# Current handoff — the radio (v0.16.0)
+# Current handoff — weather in the windows (v0.17.0)
+
+## Current active work
+
+v0.17.0 makes seasons visible. A SEASON_LOOK table in Main.gd drives the
+back-wall window per season: humid = hazier pane + denser fog (0.012),
+cold_snap = icy pane tint + a translucent frost band across the lower glass,
+boom = warm pane glow + golden fog, calm = the exact pre-v0.17 look
+(albedo #D8E8DF / glow #CFE3DA / 1.2 energy, fog #C9C2AE @ 0.008). Rain
+streaks (10 thin unshaded quads, dark against the bright pane, sliding down
+and wrapping at the sill) animate only on humid weeks via _animate_rain in
+_physics_process; frost shows only on cold snaps. _apply_daylight now
+multiplies the time-of-day sun color by the season tint (cold cools it,
+boom warms it gold). The HUD season line gains weather icons — ☔ / ☃ / ☀,
+chosen from the same symbol block as the existing ★☆ so the default font
+renders them (verified in-engine). The overlays are the only added draw
+calls and are gated behind the existing quality (shadows) toggle via
+_apply_season_visuals, which runs from _refresh_event (boot, save-load and
+rollover) and _apply_quality. No new save keys — season derives from day.
+
+Local verification on Godot 4.7.1: all 30 suites + smoke pass (1216 checks
+by the checks=/ALL PASS aggregation, 39 new in tests/v017_test.gd),
+`python3 -m pytest tests/test_build_web.py -q` passes (21 tests). Engine
+screenshot confirmed rain streaks on the pane + the ☔ HUD line.
+
+TEST HAZARD REMINDER: -s test scripts must not name the Main/MainMenu
+classes (compile-time autoload failure — see v0.16 notes). Read Main
+constants via `load("res://scripts/Main.gd")` at runtime instead.
+
+Next iteration: v0.18.0 "Multi-part orders" per docs/ROADMAP.md slice 7
+(deepest slice — consider splitting if it exceeds ~600 changed lines).
+
+---
+
+# Previous handoff — the radio (v0.16.0)
 
 ## Current active work
 

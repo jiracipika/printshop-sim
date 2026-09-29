@@ -155,28 +155,35 @@ loop extremely simple and quiet.
 
 ---
 
-## Slice 6 — v0.17.0 "Weather in the windows"
+## Slice 6 — v0.17.0 "Weather in the windows" — SHIPPED
 
 Goal: make seasons visible, not just numeric.
 
 Feature checks:
-- [ ] Season visuals: humid = hazy window sheen; cold snap = frost tint on
-      the window pane + cooler sun color; boom = warm golden light; calm =
-      current look
-- [ ] Rain streaks during humid weeks (cheap animated quads on the window
-      only — no room-wide particles)
-- [ ] Sky/sun tint shifts per season (existing _apply_daylight extended)
-- [ ] HUD season line gains an icon word ("This week: Cold snap ❄ ...")
-- [ ] All effects Compatibility-safe and gated behind the existing quality
-      toggle where they cost anything
+- [x] Season visuals on the back-wall window via a SEASON_LOOK table: humid =
+      hazier pane + denser fog; cold snap = icy pane tint + frost band across
+      the lower glass + cooler sun; boom = warm pane glow + golden fog/sun;
+      calm = byte-identical to the pre-v0.17 look
+- [x] Rain streaks during humid weeks: 10 thin unshaded quads sliding down
+      the pane only (window-local node, no room-wide particles), wrapping at
+      the sill; dark against the bright glass so they read
+- [x] Sky/sun tint shifts per season (_apply_daylight multiplies the
+      time-of-day color by the season tint)
+- [x] HUD season line gains a weather icon glyph (☔ / ☃ / ☀ — same symbol
+      block as the existing ★☆ so the default font renders them)
+- [x] All effects Compatibility-safe; the only added draw calls (rain +
+      frost overlays) are gated behind the existing quality (shadows) toggle;
+      the tint changes are free and always apply
 
 Test checks:
-- [ ] per-season visual state flips when the week changes (node/param probe)
-- [ ] effects disabled by the quality toggle where applicable
-- [ ] frame budget: a 60-second headless run shows no tick growth
-- [ ] all suites green
+- [x] per-season visual state flips when the season changes (pane material,
+      fog color/density, overlay visibility — node/param probe)
+- [x] overlays hidden when the quality toggle is off; tints stay
+- [x] frame budget: 60 s of simulated rain ticks stay bounded, node count
+      never grows, hidden rain does not animate
+- [x] all 30 suites + smoke green (39 new checks in v017_test); pytest 21/21
 
-Risk: medium — visual tuning is iterative; ship conservative.
+Risk: medium — visual tuning is iterative; shipped conservative.
 
 ---
 
