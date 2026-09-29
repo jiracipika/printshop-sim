@@ -168,6 +168,8 @@ var _night_pane: MeshInstance3D
 var _night_mat: StandardMaterial3D
 var _clouds: Array[MeshInstance3D] = []
 var _cloud_speeds: Array[float] = []
+## Clock-driven cloud opacity; _animate_clouds applies the edge fade on top.
+var _cloud_base_alpha := 0.3
 var _current_sky_month := -1
 ## Season pane-energy target (SEASON_LOOK.energy); _apply_daylight scales it
 ## by the clock so noon always lands exactly on the season's value.
@@ -967,9 +969,7 @@ func _apply_daylight() -> void:
 	_window_mat.emission_energy_multiplier = _season_energy * (0.45 + 0.55 * daylight)
 	if _night_mat != null:
 		_night_mat.albedo_color.a = nightness
-	for i in range(_clouds.size()):
-		var cm := _clouds[i].material_override as StandardMaterial3D
-		cm.albedo_color.a = (0.3 - 0.12 * nightness)
+	_cloud_base_alpha = 0.3 - 0.12 * nightness
 
 ## Per-printer display name + lock tag follow the unlock upgrades, and the
 ## farm door opens once any farm kit is owned.
@@ -2365,12 +2365,18 @@ func _physics_process(delta: float) -> void:
 	_update_hud()
 
 ## Drift the cloud wisps sideways across the glass and wrap them (v0.25.0).
+## The wrap teleports from the left edge back to the right, so the clouds
+## fade out near the frame edges — no visible pop.
 func _animate_clouds(delta: float) -> void:
 	for i in range(_clouds.size()):
 		var c := _clouds[i]
 		c.position.x -= _cloud_speeds[i] * delta
 		if c.position.x < 1.0:
 			c.position.x = 2.9
+		var edge := clampf((c.position.x - 1.3) / 0.25, 0.0, 1.0) \
+			* clampf((2.7 - c.position.x) / 0.25, 0.0, 1.0)
+		var cm := c.material_override as StandardMaterial3D
+		cm.albedo_color.a = _cloud_base_alpha * edge
 
 ## Slide the rain streaks down the glass and wrap them at the sill. The whole
 ## node is hidden outside humid weeks, so this early-returns for free.
@@ -3605,7 +3611,8 @@ func _update_chalkboard() -> void:
 	for i in range(5):
 		stars += "*" if i < roundi(reputation) else "."
 	var week := int((day_cycle.day - 1) / 7.0) + 1
-	var week_line := "Week %d %s" % [week, _season_icon(str(season.get("id", "calm")))]
+	var icon := _season_icon(str(season.get("id", "calm")))
+	var week_line := "Week %d %s" % [week, icon] if icon != "" else "Week %d" % week
 	var text := "SHOP LEDGER\nDay %d · %s\nDelivered: %d\nMissed: %d\nEarned: $%s\nRep %s %.1f" % [
 		day_cycle.day, week_line,
 		int(stats.delivered), int(stats.missed),

@@ -116,6 +116,16 @@ func _test_window() -> void:
 	main._animate_clouds(2.0)
 	var x1: float = main._clouds[0].position.x
 	_ok(x1 < x0, "clouds drift sideways")
+	# Edge fade: dim near the frame, full opacity mid-pane (no wrap pop).
+	var cm: StandardMaterial3D = main._clouds[0].material_override
+	main._clouds[0].position.x = 1.22
+	main._animate_clouds(0.016)
+	var faded: float = cm.albedo_color.a
+	main._clouds[0].position.x = 2.0
+	main._animate_clouds(0.016)
+	var mid: float = cm.albedo_color.a
+	_ok(mid > 0.0 and faded < mid * 0.5,
+		"clouds fade at the frame edges (%.2f < %.2f)" % [faded, mid])
 	main._clouds[0].position.x = 0.98
 	main._animate_clouds(0.05)
 	_ok(main._clouds[0].position.x > 2.0, "clouds wrap back across the glass")
