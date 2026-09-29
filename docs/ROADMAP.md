@@ -383,6 +383,33 @@ Test checks:
 
 ---
 
+## Post-roadmap — v0.25.0 "Outside the window" — SHIPPED
+
+- [x] The window is a light box: the day pane gains a procedural day view
+      (hazy sun, hill band, rooftop silhouettes) under the season tint; a
+      night pane crossfades over it with the shop clock (stars fully on at
+      the t=0 midnight boot, gone by noon)
+- [x] Real constellations: one featured per REAL month (Orion in January,
+      Leo in March, Scorpius in June, Lyra in July, Taurus in December...)
+      drawn with star positions + connecting lines following the actual
+      asterisms, over ~170 field stars; Ursa Major and a corner regular are
+      always faintly present
+- [x] The moon shows its REAL phase (anchored to the 2000-01-06 new moon;
+      per-pixel terminator, waxing lit-right / waning lit-left)
+- [x] Lit city skyline along the horizon; two cloud wisps drift in front of
+      the glass for parallax and dim at night
+- [x] Season-pane energy ownership combined: SEASON_LOOK.energy is the
+      target, the clock scales it (noon lands exactly on the season value —
+      v0.17 semantics preserved)
+
+Test checks:
+- [x] 19 new checks in v025_test (month table, constellation data soundness,
+      texture caching/distinctness, moon-phase anchors, crossfade at
+      midnight/noon, cloud drift + wrap, real-month texture binding)
+- [x] all 39 suites + smoke green (1420 checks); pytest 21/21
+
+---
+
 ## Definition of done (every slice)
 
 - [ ] Feature checks above all ticked

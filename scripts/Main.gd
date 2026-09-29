@@ -161,6 +161,17 @@ var _bells_played := 0
 var _stations_heard: Array[int] = []
 ## The left wall poster's caption label (rotates weekly, v0.24.0).
 var _poster_label: Label3D
+## Outside view (v0.25.0): the window is a light box. The day pane keeps the
+## old emissive look; the night pane crossfades in over it carrying the
+## starfield; two cloud wisps drift in front for parallax.
+var _night_pane: MeshInstance3D
+var _night_mat: StandardMaterial3D
+var _clouds: Array[MeshInstance3D] = []
+var _cloud_speeds: Array[float] = []
+var _current_sky_month := -1
+## Season pane-energy target (SEASON_LOOK.energy); _apply_daylight scales it
+## by the clock so noon always lands exactly on the season's value.
+var _season_energy := 1.2
 ## Last five delivery grades, oldest first (v0.23.0) — feeds Perfectionist.
 var recent_grades: Array[String] = []
 ## False until _ready finishes: boot-time station marks happen before the
@@ -909,7 +920,7 @@ func _apply_season_visuals() -> void:
 	var look: Dictionary = SEASON_LOOK.get(id, SEASON_LOOK["calm"])
 	_window_mat.albedo_color = look.pane
 	_window_mat.emission = look.glow
-	_window_mat.emission_energy_multiplier = float(look.energy)
+	_season_energy = float(look.energy)
 	_env.fog_light_color = look.fog_color
 	_env.fog_density = float(look.fog_density)
 	var fx := bool(settings.get("shadows", true))
@@ -925,6 +936,13 @@ func _refresh_crate_label() -> void:
 
 ## Day/night (v0.2.0): brightness and warmth follow the shop clock. Direction
 ## stays fixed (interior scene); energy/color carry the time of day.
+## The night pane's texture: one per real month, built lazily and cached.
+func _sky_texture_for_month() -> ImageTexture:
+	var month: int = Time.get_date_dict_from_system().month
+	if month != _current_sky_month:
+		_current_sky_month = month
+	return ShopArt.window_night(month)
+
 func _apply_daylight() -> void:
 	if _sun == null or _env == null:
 		return
@@ -942,6 +960,15 @@ func _apply_daylight() -> void:
 	_env.ambient_light_energy = 0.55 + 0.5 * daylight
 	if _sky_mat != null:
 		_sky_mat.sky_energy_multiplier = 0.3 + 0.8 * daylight
+	# Outside view (v0.25.0): the day pane glows with the sun; the starfield
+	# fades in as the shop clock passes dusk. Clouds dim at night.
+	var nightness := clampf(1.15 - 1.8 * daylight, 0.0, 1.0)
+	_window_mat.emission_energy_multiplier = _season_energy * (0.45 + 0.55 * daylight)
+	if _night_mat != null:
+		_night_mat.albedo_color.a = nightness
+	for i in range(_clouds.size()):
+		var cm := _clouds[i].material_override as StandardMaterial3D
+		cm.albedo_color.a = (0.3 - 0.12 * nightness)
 
 ## Per-printer display name + lock tag follow the unlock upgrades, and the
 ## farm door opens once any farm kit is owned.
@@ -1025,14 +1052,53 @@ func _build_environment() -> void:
 	pane.mesh = pb
 	var pm := StandardMaterial3D.new()
 	pm.albedo_color = Color("#D8E8DF")
+	pm.albedo_texture = ShopArt.window_day()
 	pm.emission_enabled = true
 	pm.emission = Color("#CFE3DA")
+	pm.emission_texture = ShopArt.window_day()
 	pm.emission_energy_multiplier = 1.2
 	pane.material_override = pm
 	pane.position = Vector3(1.9, 1.8, -ROOM_D / 2.0 + 0.13)
 	pane.add_to_group("props")
 	add_child(pane)
 	_window_mat = pm
+
+	# Night pane (v0.25.0): the starfield, crossfaded over the day view by
+	# the shop clock; the featured constellation follows the REAL month.
+	var night := MeshInstance3D.new()
+	var nb := BoxMesh.new()
+	nb.size = Vector3(1.5, 1.1, 0.01)
+	night.mesh = nb
+	var nm := StandardMaterial3D.new()
+	nm.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	nm.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	nm.albedo_texture = _sky_texture_for_month()
+	nm.albedo_color = Color(1, 1, 1, 0)
+	night.material_override = nm
+	night.position = Vector3(1.9, 1.8, -ROOM_D / 2.0 + 0.15)
+	night.add_to_group("props")
+	add_child(night)
+	_night_pane = night
+	_night_mat = nm
+
+	# Cloud wisps drifting in front of the glass for parallax.
+	for i in range(2):
+		var cloud := MeshInstance3D.new()
+		var cq := QuadMesh.new()
+		cq.size = Vector2(0.8 - 0.25 * i, 0.5 - 0.15 * i)
+		cloud.mesh = cq
+		var cm := StandardMaterial3D.new()
+		cm.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+		cm.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+		cm.albedo_texture = ShopArt.cloud()
+		cm.albedo_color = Color(1, 1, 1, 0)
+		cloud.material_override = cm
+		cloud.position = Vector3(1.3 + 0.8 * i, 2.05 - 0.25 * i,
+			-ROOM_D / 2.0 + 0.17)
+		cloud.add_to_group("props")
+		add_child(cloud)
+		_clouds.append(cloud)
+		_cloud_speeds.append(0.02 + 0.013 * i)
 
 	# Rain streaks (v0.17.0): thin unshaded quads sliding down the glass on
 	# humid weeks — window-only, no room-wide particles. Hidden by default.
@@ -2293,8 +2359,17 @@ func _physics_process(delta: float) -> void:
 	day_cycle.tick(delta)
 	_apply_daylight()
 	_animate_rain(delta)
+	_animate_clouds(delta)
 	_update_print_visuals(delta)
 	_update_hud()
+
+## Drift the cloud wisps sideways across the glass and wrap them (v0.25.0).
+func _animate_clouds(delta: float) -> void:
+	for i in range(_clouds.size()):
+		var c := _clouds[i]
+		c.position.x -= _cloud_speeds[i] * delta
+		if c.position.x < 1.0:
+			c.position.x = 2.9
 
 ## Slide the rain streaks down the glass and wrap them at the sill. The whole
 ## node is hidden outside humid weeks, so this early-returns for free.

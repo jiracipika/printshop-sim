@@ -1,4 +1,36 @@
-# Current handoff — studio & street pass (v0.24.0)
+# Current handoff — outside the window (v0.25.0)
+
+## Current active work
+
+Post-roadmap atmosphere drop. The window is a light box: the day pane now
+carries ShopArt.window_day() (hazy sun, hills, rooftops) as albedo +
+emission texture under the season tint, and a night pane (unshaded, alpha)
+crossfades over it — nightness = clamp(1.15 - 1.8 x daylight) written by
+_apply_daylight, which also scales the day pane's emission as
+_season_energy x (0.45 + 0.55 x daylight). Season/clock ownership is
+SPLIT: _apply_season_visuals writes the _season_energy target (calm 1.2,
+boom 1.25), the clock scales it — at noon the pane lands exactly on the
+season value (v0.17's absolute pins preserved at noon).
+
+The night sky is ShopArt.window_night(month), one cached texture per REAL
+month (Time.get_date_dict_from_system().month, cached in Sfx-style via
+ShopArt.tex): deep-blue gradient, ~170 seeded field stars, the month's
+FEATURED constellation drawn bright with connecting lines (ShopArt.
+MONTH_SKY maps 1..12 -> orion, gemini, leo, ursa_major, bootes, scorpius,
+lyra, cygnus, pegasus, andromeda, perseus, taurus; CONSTELLATIONS holds
+normalized star/line data following the real asterisms), Ursa Major faint
+always, a moon with its REAL phase (moon_phase() anchored to the 2000-01-06
+new moon; per-pixel terminator, waxing lit-right), and a lit city skyline.
+Two cloud wisps (ShopArt.cloud()) drift in front via _animate_clouds and
+dim at night. The whole outside costs ~4 quads and cached textures.
+
+Local verification: all 39 suites + smoke pass (1420 checks, 19 new in
+tests/v025_test.gd), pytest 21/21. Screenshot confirmed the night sky,
+crescent moon and constellation through the glass.
+
+---
+
+# Previous handoff — studio & street pass (v0.24.0)
 
 ## Current active work
 

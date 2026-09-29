@@ -251,3 +251,230 @@ static func calendar() -> ImageTexture:
 						c = line
 				img.set_pixel(x, y, c)
 		return _finish(img))
+
+
+## --- outside view (v0.25.0) ---------------------------------------------------
+##
+## The shop window is a light box: a procedural day view by day and a night
+## sky by night, both drawn as textures so the whole "outside" costs two
+## quads. The night sky features one REAL constellation per month (Orion in
+## January, Leo in March, Scorpius in July...) over a city skyline, plus a
+## moon whose phase follows the real date.
+
+const SKY_W := 512
+const SKY_H := 320
+
+## One featured constellation per real-world month (evening sky, northern
+## hemisphere, approximate). Patterns follow the real asterisms.
+const MONTH_SKY: Array[String] = [
+	"orion", "gemini", "leo", "ursa_major", "bootes", "scorpius",
+	"lyra", "cygnus", "pegasus", "andromeda", "perseus", "taurus",
+]
+
+## Simplified real constellations: normalized star positions in their sky
+## box plus connecting segments (star index pairs).
+const CONSTELLATIONS := {
+	"orion": {"stars": [[0.62, 0.18], [0.38, 0.22], [0.52, 0.48], [0.47, 0.52],
+		[0.42, 0.56], [0.55, 0.82], [0.28, 0.85]],
+		"lines": [[0, 2], [1, 4], [2, 3], [3, 4], [2, 5], [4, 6]]},
+	"gemini": {"stars": [[0.30, 0.12], [0.55, 0.16], [0.28, 0.38], [0.52, 0.42],
+		[0.30, 0.62], [0.55, 0.66], [0.26, 0.85], [0.58, 0.88]],
+		"lines": [[0, 2], [2, 4], [4, 6], [1, 3], [3, 5], [5, 7], [2, 3]]},
+	"leo": {"stars": [[0.30, 0.58], [0.36, 0.44], [0.44, 0.38], [0.50, 0.26],
+		[0.40, 0.22], [0.70, 0.50], [0.58, 0.44]],
+		"lines": [[0, 1], [1, 5], [5, 6], [6, 2], [2, 3], [3, 4], [4, 1]]},
+	"ursa_major": {"stars": [[0.15, 0.55], [0.25, 0.50], [0.35, 0.52], [0.44, 0.57],
+		[0.52, 0.66], [0.68, 0.70], [0.80, 0.62]],
+		"lines": [[0, 1], [1, 2], [2, 3], [3, 4], [4, 5], [5, 6]]},
+	"bootes": {"stars": [[0.50, 0.75], [0.38, 0.58], [0.50, 0.42], [0.64, 0.48],
+		[0.60, 0.66], [0.48, 0.28]],
+		"lines": [[0, 1], [1, 2], [2, 3], [3, 4], [4, 0], [2, 5]]},
+	"scorpius": {"stars": [[0.45, 0.30], [0.25, 0.22], [0.22, 0.34], [0.50, 0.38],
+		[0.56, 0.52], [0.52, 0.66], [0.44, 0.78], [0.32, 0.86], [0.20, 0.88]],
+		"lines": [[0, 3], [3, 4], [4, 5], [5, 6], [6, 7], [7, 8], [1, 0], [2, 0]]},
+	"lyra": {"stars": [[0.40, 0.20], [0.46, 0.34], [0.58, 0.40], [0.52, 0.56],
+		[0.40, 0.50]],
+		"lines": [[0, 1], [1, 2], [2, 3], [3, 4], [4, 1]]},
+	"cygnus": {"stars": [[0.50, 0.18], [0.50, 0.40], [0.50, 0.78], [0.28, 0.52],
+		[0.72, 0.44]],
+		"lines": [[0, 1], [1, 2], [3, 1], [1, 4]]},
+	"pegasus": {"stars": [[0.35, 0.35], [0.62, 0.32], [0.66, 0.58], [0.38, 0.60],
+		[0.18, 0.75], [0.80, 0.80]],
+		"lines": [[0, 1], [1, 2], [2, 3], [3, 0], [0, 4], [2, 5]]},
+	"andromeda": {"stars": [[0.55, 0.25], [0.45, 0.42], [0.35, 0.58], [0.25, 0.75],
+		[0.52, 0.36]],
+		"lines": [[0, 1], [1, 2], [2, 3], [1, 4]]},
+	"perseus": {"stars": [[0.30, 0.30], [0.42, 0.38], [0.52, 0.52], [0.60, 0.66],
+		[0.55, 0.82]],
+		"lines": [[0, 1], [1, 2], [2, 3], [3, 4]]},
+	"taurus": {"stars": [[0.55, 0.40], [0.48, 0.46], [0.40, 0.52], [0.32, 0.46],
+		[0.36, 0.38], [0.68, 0.30], [0.15, 0.62]],
+		"lines": [[0, 1], [1, 2], [2, 3], [3, 4], [1, 5]]},
+}
+
+
+static func featured_constellation(month: int) -> String:
+	return MONTH_SKY[clampi(month, 1, 12) - 1]
+
+
+## Approximate moon phase 0..1 (0 = new, 0.5 = full) from the real date,
+## anchored to the known new moon of 2000-01-06 18:14 UTC.
+static func moon_phase(now_unix: int = -1) -> float:
+	if now_unix < 0:
+		now_unix = int(Time.get_unix_time_from_system())
+	var days := float(now_unix - 947182440) / 86400.0
+	return fposmod(days / 29.530588, 1.0)
+
+
+static func _sky_dot(img: Image, cx: float, cy: float, r: float, c: Color) -> void:
+	for y in range(int(cy - r), int(cy + r) + 1):
+		for x in range(int(cx - r), int(cx + r) + 1):
+			if x < 0 or y < 0 or x >= SKY_W or y >= SKY_H:
+				continue
+			var d := Vector2(float(x) - cx, float(y) - cy).length()
+			if d <= r:
+				img.set_pixel(x, y, c)
+
+
+static func _sky_line(img: Image, a: Vector2, b: Vector2, c: Color) -> void:
+	var steps := int(a.distance_to(b)) + 1
+	for i in steps + 1:
+		var p := a.lerp(b, float(i) / float(maxi(steps, 1)))
+		var x := int(p.x)
+		var y := int(p.y)
+		if x >= 0 and y >= 0 and x < SKY_W and y < SKY_H:
+			img.set_pixel(x, y, c)
+
+
+static func _draw_constellation(img: Image, id: String, box: Rect2, star_r: float,
+		star_c: Color, line_c: Color) -> void:
+	var data: Dictionary = CONSTELLATIONS[id]
+	var pts: Array[Vector2] = []
+	for st in data.stars:
+		pts.append(Vector2(
+			box.position.x + float(st[0]) * box.size.x,
+			box.position.y + float(st[1]) * box.size.y))
+	for ln in data.lines:
+		_sky_line(img, pts[int(ln[0])], pts[int(ln[1])], line_c)
+	for pt in pts:
+		_sky_dot(img, pt.x, pt.y, star_r, star_c)
+
+
+static func window_night(month: int) -> ImageTexture:
+	return tex("window_night:%d" % clampi(month, 1, 12), func() -> ImageTexture:
+		var img := Image.create(SKY_W, SKY_H, false, Image.FORMAT_RGBA8)
+		var top := Color("#0B1626")
+		var bottom := Color("#24354F")
+		for y in SKY_H:
+			var row := top.lerp(bottom, pow(float(y) / float(SKY_H), 1.4))
+			for x in SKY_W:
+				img.set_pixel(x, y, Color(row.r, row.g, row.b, 1.0))
+		# Field stars, deterministic per month.
+		var rng := RandomNumberGenerator.new()
+		rng.seed = hash("printshop-sky-%d" % clampi(month, 1, 12))
+		for i in range(170):
+			var sx := rng.randf_range(2.0, SKY_W - 2.0)
+			var sy := rng.randf_range(2.0, SKY_H * 0.72)
+			var b := rng.randf_range(0.25, 0.95)
+			_sky_dot(img, sx, sy, 1.0 if b < 0.8 else 1.6,
+				Color(0.92, 0.95, 1.0, b))
+		# Featured constellation front and center; regulars faint in the
+		# corners so the sky reads as real wherever you look.
+		var featured := featured_constellation(month)
+		_draw_constellation(img, featured,
+			Rect2(0.30 * SKY_W, 0.10 * SKY_H, 0.46 * SKY_W, 0.62 * SKY_H),
+			2.4, Color(0.98, 0.97, 0.88), Color(0.55, 0.68, 0.85, 0.85))
+		_draw_constellation(img, "ursa_major",
+			Rect2(0.02 * SKY_W, 0.30 * SKY_H, 0.22 * SKY_W, 0.28 * SKY_H),
+			1.4, Color(0.85, 0.90, 1.0, 0.8), Color(0.45, 0.55, 0.72, 0.5))
+		_draw_constellation(img, "pegasus" if featured != "pegasus" else "cygnus",
+			Rect2(0.66 * SKY_W, 0.06 * SKY_H, 0.30 * SKY_W, 0.30 * SKY_H),
+			1.3, Color(0.85, 0.90, 1.0, 0.75), Color(0.45, 0.55, 0.72, 0.45))
+		# Moon with its real phase: per-pixel terminator — the shadow circle
+		# slides across the disc (left while waxing, right while waning) and
+		# the lit fraction lands on the real phase at every step.
+		var phase := moon_phase()
+		var mx := 0.12 * SKY_W
+		var my := 0.16 * SKY_H
+		var mr := 13.0
+		_sky_dot(img, mx, my, mr + 1.5, Color(0.9, 0.93, 1.0, 0.35))
+		var side := -1.0 if phase < 0.5 else 1.0
+		var shift := side * mr * (1.0 - cos(TAU * phase))
+		for y in range(int(my - mr - 1), int(my + mr + 2)):
+			for x in range(int(mx - mr - 1), int(mx + mr + 2)):
+				if x < 0 or y < 0 or x >= SKY_W or y >= SKY_H:
+					continue
+				var dm := Vector2(float(x) - mx, float(y) - my).length()
+				if dm > mr:
+					continue
+				var ds := Vector2(float(x) - mx - shift, float(y) - my).length()
+				var lit := clampf((ds - mr * 0.92) / (mr * 0.16), 0.0, 1.0)
+				var c := Color(0.93, 0.94, 0.90).lerp(
+					Color(top.r, top.g, top.b), lit)
+				img.set_pixel(x, y, c)
+		# City skyline with a few lit windows, haze band above it.
+		var rng2 := RandomNumberGenerator.new()
+		rng2.seed = hash("printshop-skyline")
+		var hx := 0
+		while hx < SKY_W:
+			var bw := int(rng2.randf_range(24.0, 58.0))
+			var bh := int(rng2.randf_range(18.0, 58.0))
+			for y in range(SKY_H - bh, SKY_H):
+				for x in range(hx, mini(hx + bw, SKY_W)):
+					img.set_pixel(x, y, Color(0.05, 0.08, 0.12))
+			for w in range(int(bw * bh / 260.0)):
+				var wx := hx + 3 + int(rng2.randf_range(0.0, float(bw) - 6.0))
+				var wy := SKY_H - bh + 3 + int(rng2.randf_range(0.0, float(bh) - 6.0))
+				if wx < SKY_W and wy < SKY_H:
+					img.set_pixel(wx, wy, Color(1.0, 0.85, 0.55, rng2.randf_range(0.5, 0.95)))
+			hx += bw + int(rng2.randf_range(2.0, 10.0))
+		return _finish(img))
+
+
+static func window_day() -> ImageTexture:
+	return tex("window_day", func() -> ImageTexture:
+		var img := Image.create(SKY_W, SKY_H, false, Image.FORMAT_RGBA8)
+		var top := Color("#AFCFC8")
+		var bottom := Color("#DCEAE2")
+		for y in SKY_H:
+			var row := top.lerp(bottom, pow(float(y) / float(SKY_H), 1.2))
+			for x in SKY_W:
+				img.set_pixel(x, y, Color(row.r, row.g, row.b, 1.0))
+		# Hazy sun glow.
+		for y in range(int(SKY_H * 0.12), int(SKY_H * 0.42)):
+			for x in range(int(SKY_W * 0.60), int(SKY_W * 0.92)):
+				var d := Vector2(x - SKY_W * 0.76, y - SKY_H * 0.27).length()
+				var glow := clampf(1.0 - d / (SKY_W * 0.2), 0.0, 1.0)
+				if glow > 0.0:
+					var c := img.get_pixel(x, y)
+					img.set_pixel(x, y, c.lerp(Color(0.98, 0.99, 0.92), glow * 0.55))
+		# Distant hill band, then rooftop silhouettes.
+		for x in SKY_W:
+			var hy := SKY_H * 0.72 + sin(float(x) * 0.012) * 6.0 + sin(float(x) * 0.05) * 3.0
+			for y in range(int(hy), SKY_H):
+				img.set_pixel(x, y, Color(0.52, 0.62, 0.56))
+		var rng := RandomNumberGenerator.new()
+		rng.seed = hash("printshop-skyline-day")
+		var hx := 0
+		while hx < SKY_W:
+			var bw := int(rng.randf_range(20.0, 50.0))
+			var bh := int(rng.randf_range(12.0, 40.0))
+			for y in range(SKY_H - bh - 8, SKY_H - 8):
+				for x in range(hx, mini(hx + bw, SKY_W)):
+					img.set_pixel(x, y, Color(0.42, 0.52, 0.47))
+			hx += bw + int(rng.randf_range(2.0, 8.0))
+		return _finish(img))
+
+
+static func cloud() -> ImageTexture:
+	return tex("cloud", func() -> ImageTexture:
+		var size := 128
+		var img := Image.create(size, size, false, Image.FORMAT_RGBA8)
+		var noise := _noise(77, 3.0)
+		for y in size:
+			for x in size:
+				var d := Vector2(float(x) - 64.0, (float(y) - 64.0) * 1.6).length() / 52.0
+				var n := 0.5 + 0.5 * noise.get_noise_2d(x, y)
+				var a := clampf(1.0 - d, 0.0, 1.0) * n
+				img.set_pixel(x, y, Color(1.0, 1.0, 1.0, clampf(a * 0.9, 0.0, 0.9)))
+		return _finish(img))

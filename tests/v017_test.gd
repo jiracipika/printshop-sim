@@ -121,8 +121,10 @@ func _test_season_visuals() -> void:
 		"cold sun is cooler at the same hour")
 	_ok(absf(main._env.fog_density - 0.008) < 1e-6, "cold fog density unchanged")
 
-	# Boom: warm golden fog and sun.
+	# Boom: warm golden fog and sun. Since v0.25 the clock scales the pane's
+	# emission — at noon it lands exactly on the season's energy value.
 	_set_season(main, "boom")
+	main.day_cycle.t = 0.5
 	main._apply_daylight()
 	var calm_fog: Color = (load("res://scripts/Main.gd") as GDScript).SEASON_LOOK["calm"].fog_color
 	_ok(main._env.fog_light_color.r > calm_fog.r
@@ -130,7 +132,7 @@ func _test_season_visuals() -> void:
 		"boom fog warms up")
 	_ok(main._sun.light_color.b < calm_blue, "boom sun loses blue (gold)")
 	_ok(absf(float(main._window_mat.emission_energy_multiplier) - 1.25) < 0.001,
-		"boom pane glows warmer")
+		"boom pane glows warmer at noon")
 
 	# Back to calm restores everything.
 	_set_season(main, "calm")
