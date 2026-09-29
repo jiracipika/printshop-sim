@@ -137,7 +137,7 @@ var active_part: Grabbable:
 	get: return _machine(_focus).get("part")
 
 var settings := {"mouse_sens_scale": 1.0, "sfx_volume": 0.8, "invert_y": false, "shadows": true,
-	"music_enabled": true, "music_volume": 0.35}
+	"music_enabled": true, "music_volume": 0.35, "quality_preset": "Standard"}
 var _settings_dirty := false
 var sfx: Sfx
 var _hum: AudioStreamPlayer3D
@@ -410,11 +410,21 @@ func request_reset_shop() -> void:
 	BrowserSave.clear()
 	get_tree().reload_current_scene()
 
-## Quality settings (v0.4.0): directional shadows can be turned off for weak
-## devices; persists in the save like the rest of the settings.
+## Quality settings (v0.4.0 shadows; v0.20.0 presets): Low / Standard / High.
+## The preset drives shadows + glow; the shadows checkbox stays in sync
+## (checking it = Standard, unchecking = Low). Persists in the save.
 func _apply_quality() -> void:
+	var preset := str(settings.get("quality_preset", "Standard"))
+	if preset != "Low" and preset != "High":
+		preset = "Standard"
+	var shadows_on := preset != "Low"
+	settings["shadows"] = shadows_on
 	if _sun != null:
-		_sun.shadow_enabled = bool(settings.get("shadows", true))
+		_sun.shadow_enabled = shadows_on
+	if _env != null:
+		_env.glow_enabled = preset != "Low"
+		_env.glow_intensity = 0.8 if preset == "High" else 0.5
+	# Overlays and other quality-gated visuals follow _apply_season_visuals.
 	_apply_season_visuals()
 	# Browser-safe start: mouse visible, gameplay paused until a deliberate
 	# left click captures the pointer.
@@ -470,7 +480,7 @@ func _load_save() -> void:
 	if payload.has("settings"):
 		var s: Dictionary = payload.settings
 		for key in ["mouse_sens_scale", "sfx_volume", "invert_y", "shadows",
-				"music_enabled", "music_volume"]:
+				"music_enabled", "music_volume", "quality_preset"]:
 			if s.has(key):
 				apply_setting(key, s[key], false)
 	_update_music_state()
@@ -528,6 +538,10 @@ func apply_setting(key: String, value, persist := true) -> void:
 		"music_enabled":
 			_update_music_state()
 		"shadows":
+			# Checkbox stays in sync with the preset: on = Standard, off = Low.
+			settings["quality_preset"] = "Standard" if bool(value) else "Low"
+			_apply_quality()
+		"quality_preset":
 			_apply_quality()
 		# mouse_sens_scale / invert_y are read live by the look paths.
 	if persist:
@@ -1891,6 +1905,9 @@ func _build_hud() -> void:
 	_prompt.add_theme_font_size_override("font_size", 18)
 	_prompt.text = "Click to play"
 	_hud.add_child(_prompt)
+	# Narrow/portrait windows (v0.20.0): reflow the status card on resize.
+	get_viewport().size_changed.connect(_apply_hud_layout)
+	_apply_hud_layout()
 
 	# Center reticle: a tiny dot for the grab/interact ray.
 	_reticle = ColorRect.new()
@@ -3147,6 +3164,30 @@ func _season_icon(id: String) -> String:
 		"boom":
 			return "☀"
 	return ""
+
+## Portrait / narrow-window HUD layout (v0.20.0): below 500 px wide the
+## status card spans the viewport (label wraps) so long contract lines stay
+## readable at phone sizes; wide windows keep the compact card.
+func _apply_hud_layout() -> void:
+	if _hud == null or _status == null:
+		return
+	var card := _status.get_parent()
+	if card == null or not (card is PanelContainer):
+		return
+	var width := _hud.get_viewport().get_visible_rect().size.x
+	var narrow := width < 500.0
+	_status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART if narrow \
+		else TextServer.AUTOWRAP_OFF
+	if narrow:
+		card.set_anchors_preset(Control.PRESET_TOP_WIDE)
+		card.offset_left = 10.0
+		card.offset_right = -10.0
+		card.offset_top = 10.0
+	else:
+		card.set_anchors_preset(Control.PRESET_TOP_LEFT)
+		card.offset_left = 10.0
+		card.offset_top = 10.0
+		card.reset_size()
 
 func _update_hud() -> void:
 	_set_reticle(paused == false)

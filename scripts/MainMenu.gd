@@ -554,6 +554,26 @@ func _build_settings_panel() -> void:
 			settings_changed.emit("shadows", on))
 	sv.add_child(shadows)
 
+	# Quality preset (v0.20.0): one dropdown driving shadows + glow; the
+	# shadows checkbox above stays in sync (checked = Standard, off = Low).
+	var quality_row := HBoxContainer.new()
+	quality_row.name = "QualityRow"
+	var quality_label := Label.new()
+	quality_label.text = "Quality preset"
+	quality_label.add_theme_color_override("font_color", COLOR_PAPER)
+	quality_label.add_theme_font_size_override("font_size", 16)
+	quality_row.add_child(quality_label)
+	var quality_opt := OptionButton.new()
+	quality_opt.name = "QualityOption"
+	for preset in ["Low", "Standard", "High"]:
+		quality_opt.add_item(preset)
+	quality_opt.add_theme_font_size_override("font_size", 15)
+	quality_opt.item_selected.connect(func(idx: int) -> void:
+		if not _settings_applying:
+			settings_changed.emit("quality_preset", ["Low", "Standard", "High"][idx]))
+	quality_row.add_child(quality_opt)
+	sv.add_child(quality_row)
+
 	var reset := Button.new()
 	reset.name = "ResetButton"
 	reset.text = "Reset shop (new game)"
@@ -626,6 +646,10 @@ func show_settings(current: Dictionary) -> void:
 	invert.set_pressed_no_signal(bool(current.get("invert_y", false)))
 	shadows.set_pressed_no_signal(bool(current.get("shadows", true)))
 	music.set_pressed_no_signal(bool(current.get("music_enabled", true)))
+	var preset: String = str(current.get("quality_preset", "Standard"))
+	var qidx := ["Low", "Standard", "High"].find(preset)
+	(_settings_panel.get_node("Sheet/SheetBox/QualityRow/QualityOption") as OptionButton) \
+		.selected = qidx if qidx >= 0 else 1
 	_settings_applying = false
 	_show_panel(_settings_panel)
 	_settings_open = true

@@ -138,15 +138,16 @@ func _test_season_visuals() -> void:
 		and not main._rain.visible and not main._frost.visible,
 		"calm restores pane and hides overlays")
 
-	# Quality toggle gates the overlays (tints are free and stay).
-	main.settings["shadows"] = false
+	# Quality toggle gates the overlays (tints are free and stay). Since
+	# v0.20 the preset owns the gate: Low = off, Standard/High = on.
+	main.settings["quality_preset"] = "Low"
 	main._apply_quality()
 	_set_season(main, "humid")
 	_ok(not main._rain.visible and main._sun.shadow_enabled == false,
 		"quality off hides rain even on humid weeks")
 	_set_season(main, "cold_snap")
 	_ok(not main._frost.visible, "quality off hides frost too")
-	main.settings["shadows"] = true
+	main.settings["quality_preset"] = "Standard"
 	main._apply_quality()
 	_ok(main._frost.visible, "quality on brings frost back")
 	_set_season(main, "humid")

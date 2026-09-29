@@ -164,6 +164,10 @@ static func _settings_valid(p: Dictionary) -> bool:
 		return false
 	if s.has("music_enabled") and not (s["music_enabled"] is bool):
 		return false
+	if s.has("quality_preset") and not (s["quality_preset"] is String):
+		return false
+	if s.has("quality_preset") and not (s["quality_preset"] in ["Low", "Standard", "High"]):
+		return false
 	return true
 
 

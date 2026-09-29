@@ -1,4 +1,33 @@
-# Current handoff — reputation tiers (v0.19.0)
+# Current handoff — 1.0-rc (v0.20.0) — ROADMAP COMPLETE
+
+## Current active work
+
+v0.20.0 closes the roadmap as the 1.0 release candidate. Quality presets
+(Low / Standard / High) live in Settings as a dropdown next to the shadows
+checkbox: Low disables shadows, glow AND the v0.17 season overlays; High
+boosts glow to 0.8; the checkbox stays in sync (checked = Standard, off =
+Low, so old muscle memory still works). settings.quality_preset persists
+(validator accepts the three names; pre-v0.20 saves default Standard).
+_apply_quality is the single enforcer; _apply_season_visuals reads the gate.
+The HUD reflows for portrait: below 500 px the status card spans the
+viewport with word-wrap (_apply_hud_layout, wired to viewport size_changed);
+the audit asserts card + prompt stay inside 390x844 and touch hit regions
+(interact 96x96, pause 72x48) stay >= 48 px. The draw-call audit counts
+135 visible / 341 total meshes against a 180/400 budget in-suite. A full
+accept -> prep -> print -> collect -> pack -> deliver loop runs at Low
+quality in v020_test. README + this file now describe the 1.0-rc.
+
+Local verification on Godot 4.7.1: all 34 suites + smoke pass (1323 checks,
+19 new in tests/v020_test.gd), `python3 -m pytest tests/test_build_web.py -q`
+passes (21 tests). Engine screenshot confirmed the Settings preset dropdown.
+
+**Remaining work is human-only**: playtesting/balance passes on the live
+build, Android signing (keystore in /Volumes/ADATA SDK; the committed debug
+keystore must NEVER ship), and a cross-browser matrix pass.
+
+---
+
+# Previous handoff — reputation tiers (v0.19.0)
 
 ## Current active work
 

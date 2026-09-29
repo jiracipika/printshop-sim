@@ -10,83 +10,40 @@ The deployed version may lag local development. Check the in-game version/build 
 
 ## Current Milestone
 
-Complete playable contract loop with the shop day, true parallel printing
-across four machines, a procedural contract board, a reputation system, a
-physical spool economy with color demands, daily shop events, weekly
-seasons, guided objectives, same-day tips and a live chalkboard ledger —
-rebalanced after a full economy audit (v0.12.0). The print farm (v0.13.0)
-adds a rear extension behind a sealed door: two more printers unlock via
-the Print farm kits and ship without filament. Filament is real: printers hold grams from loaded
-spools, every print consumes its estimate, failed prints salvage half the
-grams back, and new spools come from the crate ($12). Accept a job, pick an orientation, print it, carry
-the part to the packing table, deliver, get paid — against the clock: days
-pass, rent comes due each day, late deliveries pay half, and clients cancel
-after two extra days. Both printers can hold and print separate contracts at
-the same time; printer 2 is a purchasable Pro machine that prints 25% faster.
-The contract board is generated fresh every shop morning (deterministic per
-day) with rush work paying a premium for 1-2 day deadlines. Menu has a
-How-to-play screen and a Stats panel (lifetime deliveries, earnings,
-reputation). Reputation (0-5 stars, shown in the HUD) scales every payout
-x0.8-x1.2: on-time deliveries raise it, late work, scrapped parts and
-cancelled jobs cost it. Failed prints salvage half their filament back.
-Eight upgrades now include the Textured PEI plate (unlocks flat-side
-printing on tippy parts), filament dryer and print enclosure (stacking risk
-reductions). The look includes glow, sun shadows (toggleable in Settings for
-slow devices) and a soft vignette.
+1.0-rc (v0.20.0). A complete first-person print-shop tycoon: accept jobs
+from a deterministic procedural board, pick an orientation, print, carry
+the part to the packing table, deliver, get paid — against the clock with
+rent, deadlines, reputation and a filament economy.
 
-Working in local automated tests (15 suites, 656 checks):
-- Workshop enclosure, collision walls, workbench, two FDM printers (frame, bed,
-  gantry, oscillating nozzle), packing table, spool shelf, posters, rug, wall
-  clock, props, ceiling lights, window, procedural sky with gentle fog.
-- Procedural textures everywhere (plaster walls, plywood, tiled floor, brushed
-  steel, cardboard) — no external assets; web-export safe.
-- First-person WASD/mouse movement, click-to-play, Escape/focus pause, center
-  reticle; full mobile touch overlay (stick, look, Interact, Pause).
-- Full loop: E at a printer accepts a contract, E previews/cycles orientation
-  (support %, material estimate, risk level), E confirms and consumes filament
-  from the loaded spool, the print grows visibly on the bed, failed prints are
-  cleared (half the grams salvaged), finished parts are carried to the packing
-  table, graded A/B/C/F, delivered for a reputation-scaled grade payout.
-  Exactly-once payouts in an integer-cents ledger.
-- Spool economy (v0.6.0): buy spools at the crate, carry and load them into a
-  printer (E while holding), printers show a shrinking coil, HUD shows grams
-  per machine, filament persists in the save. Milestone achievements render
-  in the Stats panel.
-- Daily events (v0.7.0): each morning brings a deterministic event — filament
-  sale ($8 spools), rush week (payouts +25%), power hiccups (riskier prints),
-  rent holiday, or a quiet day. Day 1 always opens quiet.
-- Weekly seasons + same-day tips (v0.11.0): each 7-day week carries a
-  deterministic season (humid spell raises adhesion risk, cold snap raises
-  rent, market boom lifts payouts); delivering the same day you accept earns
-  a 15% tip; a chalkboard ledger on the wall shows live shop stats.
-- Color demands (v0.8.0): clients want Clay, Sage or Honey; the crate cycles
-  colors (sign shows the next), the loaded spool's color shows on the machine,
-  and a mismatch caps the grade at B — right color, top payout.
-- Guided objectives (v0.9.0): a HUD checklist walks new players through
-  accept → print → collect → deliver → spools → design computer → reputation,
-  persists, and retires when done. Settings gained a two-press
-  "Reset shop (new game)" button; collected prints free the printer
-  immediately for the next job.
-- Art pass (v0.10.0): 512px plaster/wood/floor with plank gaps, stains and
-  scuffs; baseboards; pegboard with tools; wall calendar; printer build-plate
-  grid and live LCD status screens; cables and power strip; windowsill;
-  trash bin; packing-table tape and scale; pendant cords; second plant;
-  design-computer screen glow.
-- True parallel printing: each machine owns its sim, contract, prep state and
-  printed part; all of them can print, fail, and deliver independently.
-  The rear print farm (v0.13.0) holds printers 3 and 4 behind a sealed door
-  that opens with the Print farm kit upgrades ($80 / $120); they ship empty.
-  Printer 2 remains the faster Pro machine.
-- Risk-driven deterministic failures (bad orientation can lose the print),
-  F-grade scrap path, printer hum and synthesized SFX (grab, place, beep,
-  chime, cash, buzz) on a dedicated audio bus.
-- Upgrades shop (heated bed, dual-gear extruder, stiffened frame, premium
-  nozzle, Pro machine unlock for printer 2) with real sim effects; settings
-  panel (look sensitivity, volume, invert Y); versioned save with corruption
-  fallback covering balance, upgrades, settings and the shop day.
-- Shop day: a 90-second day with day/night lighting, $4.00 daily rent (unpaid
-  rent accrues as debt that payouts repay first), contract deadlines — late
-  delivery pays half, two days overdue the client cancels.
+Highlights since the prototype milestone:
+- Print farm (v0.13): rear extension with printers 3 & 4 behind a sealed
+  door, unlocked by the farm kits; true parallel printing across 4 machines.
+- Balance pass (v0.12) from a full economy audit: flattened payouts,
+  real material charges, steeper rent, meaningful rush premiums.
+- Board pressure (v0.14): first come, first served — rush and competing
+  offers expire overnight (reputation cost); Reserve pins a job.
+- Workshop log (v0.15): 30-event ring buffer with failure forensics
+  ("support collapse at layer 34") in a Log menu panel.
+- The radio (v0.16): runtime-synthesized lo-fi loop on its own Music bus,
+  E-toggle radio prop, design-studio ducking, printer servo blips.
+- Weather (v0.17): seasons paint the window — humid haze + rain streaks,
+  cold-snap frost, golden booms; HUD weather icons.
+- Multi-part orders (v0.18): ×2/×3 production runs with partial packs
+  stacking on the table, reprint flow, and order-grade aggregation
+  (single F caps at C, two F kill the order).
+- Reputation tiers (v0.19): the board gates job difficulty by star tier,
+  rush premiums scale +10%/tier, tier-ups announce once, new achievements.
+- Hardening (v0.20): Low/Standard/High quality presets (shadows + glow),
+  portrait-safe HUD reflow, draw-call budget, touch targets >= 48 px.
+
+Filament is real: printers hold grams from loaded spools, every print
+consumes its estimate, failed prints salvage half the grams back, and new
+spools come from the crate ($12). Reputation (0-5 stars) scales every
+payout x0.8-x1.2; missed board offers, late work, scrapped parts and
+cancellations cost stars. Days pass (~90 s), rent comes due each morning,
+late deliveries pay half, and clients cancel after two extra days.
+
+Working in local automated tests (34 suites, 1323 checks incl. a full delivery loop at Low quality, portrait-HUD and draw-call budget audits):
 
 Pending (human-only):
 - Hands-on playtesting and balance passes; physical iOS/Android device

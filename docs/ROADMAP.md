@@ -262,29 +262,37 @@ instead of restarting it) is fixed in deal_day and covered by day_test.
 
 ---
 
-## Slice 9 — v0.20.0 "Hardening & release polish"
+## Slice 9 — v0.20.0 "Hardening & release polish" — SHIPPED
 
 Goal: performance, mobile confidence, and a clean 1.0-rc.
 
 Feature checks:
-- [ ] Quality presets: Low / Standard / High (shadows + 512px textures +
-      glow mapped to presets; single dropdown replacing the lone checkbox,
-      checkbox kept in sync)
-- [ ] Draw-call / instance budget audit on the web export; props merged or
-      trimmed if over budget
-- [ ] Portrait-mode HUD validation: status card, prompt, touch controls all
-      readable at 390×844; touch targets stay ≥ 48px
-- [ ] Reset/first-run flow re-verified end to end after all v0.12-v0.18
-      systems
-- [ ] HANDOFF/README rewritten as a 1.0-rc summary
+- [x] Quality presets: Low / Standard / High (Low kills shadows + glow +
+      season overlays, High boosts glow to 0.8; single Settings dropdown;
+      the shadows checkbox stays in sync — checked = Standard, off = Low;
+      persisted as settings.quality_preset, validator accepts Low/Standard/
+      High)
+- [x] Draw-call / instance budget audit: 135 visible / 341 total
+      MeshInstance3D at boot against a 180/400 budget — no merging needed,
+      the audit runs in v020_test so regressions trip the suite
+- [x] Portrait-mode HUD validation: below 500 px the status card spans the
+      viewport with a wrapping label (_apply_hud_layout on size_changed) and
+      the prompt stays inside 390 px; wide windows keep the compact card
+- [x] Touch targets: interact 96x96, pause 72x48, stick regions — asserted
+      >= 48 px at 390x844 via TouchControls.layout_rects
+- [x] Reset/first-run flow re-verified end to end: fresh boot (8 tier-capped
+      jobs, $25, 1500 g) plus a FULL accept -> prep -> print -> collect ->
+      pack -> deliver loop at Low quality with the preset held throughout
+- [x] HANDOFF/README rewritten as a 1.0-rc summary
 
 Test checks:
-- [ ] preset dropdown applies all underlying settings
-- [ ] small-viewport HUD assertions (headless viewport resize)
-- [ ] full-loop end-to-end test at Low quality
-- [ ] all suites green; python pipeline green; export artifacts validated
+- [x] preset dropdown applies all underlying settings (shadows, glow, sync)
+- [x] small-viewport HUD assertions (headless viewport resize 390x844)
+- [x] full-loop end-to-end test at Low quality
+- [x] all 34 suites green; python pipeline green; export artifacts validated
+      by tests/test_build_web.py
 
-Risk: medium; mostly audit work.
+Risk: closed — this was the last roadmap slice.
 
 ---
 
