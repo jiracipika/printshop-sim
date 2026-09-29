@@ -54,8 +54,9 @@ func _test_textures() -> void:
 		"texture cache returns the same instance")
 
 	# SFX: every sound builds a stream; the printer hum and music loop.
+	# (v0.22.0 grew the bank to 14: servo, three music keys, steps + bell.)
 	var lengths: Dictionary = Sfx.stream_lengths()
-	_ok(lengths.size() == 11, "all eleven sfx streams build")
+	_ok(lengths.size() == 14, "all fourteen sfx streams build")
 	for key in lengths:
 		_ok(float(lengths[key]) > 0.0, "sfx %s has positive length" % key)
 	var hum: AudioStreamWAV = Sfx.stream("hum")

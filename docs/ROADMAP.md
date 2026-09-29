@@ -323,6 +323,26 @@ Test checks:
 
 ---
 
+## Post-roadmap — v0.22.0 "Presence pass" — SHIPPED
+
+- [x] Footsteps: soft alternating step1/step2 thuds paced to the walk
+      (STEP_INTERVAL 0.42 s, immediate first step, idle pre-charges half an
+      interval, airborne/idle feet never step)
+- [x] Morning bell: one soft two-partial ding at every live day rollover
+      (DayCycle.restore never emits, so save-loads stay silent)
+- [x] Radio star milestone: stations heard at least once persist (save key
+      stations_heard, validator 0..2); the third unlock toasts like any
+      milestone; boot marks the playing station without saving (see the
+      boot-guard note in HANDOFF)
+
+Test checks:
+- [x] 21 new checks in v022_test (streams, pacing, alternation, bell,
+      heard-set persistence + silent reload); v021's doormat check moved to
+      the farm doorway; shop_art stream count 11 -> 14
+- [x] all 36 suites + smoke green (1369 checks); pytest 21/21
+
+---
+
 ## Definition of done (every slice)
 
 - [ ] Feature checks above all ticked

@@ -152,6 +152,16 @@ var _servo_timers: Array[float] = []
 var _toast: Label
 var _toast_t := 0.0
 var _achv_toasted: Array[String] = []
+## Presence pass (v0.22.0): footstep timing, and which radio stations have
+## played at least once (persists; feeds the Radio star milestone).
+var _step_timer := 0.0
+var _step_alt := false
+var _steps_played := 0
+var _bells_played := 0
+var _stations_heard: Array[int] = []
+## False until _ready finishes: boot-time station marks happen before the
+## save loads, and saving there would clobber the player's file.
+var _boot_ready := false
 var _reticle: ColorRect
 var pitch := 0.0
 var yaw := 0.0
@@ -286,6 +296,8 @@ func _achievements() -> Array[Dictionary]:
 			"done": reputation >= 3.5},
 		{"name": "Top of the market", "hint": "reach a 4.25+ reputation",
 			"done": reputation >= 4.25},
+		{"name": "Radio star", "hint": "hear all 3 radio stations",
+			"done": _stations_heard.size() >= 3},
 		{"name": "Fully kitted", "hint": "own all 8 upgrades",
 			"done": upgrades.owned_count() == 8},
 		{"name": "Week one", "hint": "keep the shop open past day 7",
@@ -402,6 +414,7 @@ func _ready() -> void:
 	apply_setting("sfx_volume", float(settings.sfx_volume), false)
 	_apply_quality()
 	_refresh_event()
+	_boot_ready = true
 
 ## Reset the shop: clear the save and reload. Two-press confirm lives in the
 ## Settings button (MainMenu feeds this).
@@ -478,6 +491,8 @@ func _update_music_state() -> void:
 				_music.play()
 		if not _music.playing:
 			_music.play()
+		if _music.playing:
+			_mark_station_heard(station)
 	elif _music.playing:
 		_music.stop()
 
@@ -546,6 +561,12 @@ func _load_save() -> void:
 		for name in payload.achv_toasted:
 			if name is String:
 				_achv_toasted.append(name)
+	if payload.has("stations_heard") and typeof(payload.stations_heard) == TYPE_ARRAY:
+		_stations_heard.clear()
+		for st in payload.stations_heard:
+			var si := int(st)
+			if si >= 0 and si <= 2 and not _stations_heard.has(si):
+				_stations_heard.append(si)
 	# Silently adopt anything already earned at load time (a persisted set
 	# can lag the save — the check only runs while the HUD renders): a boot
 	# must never toast old news.
@@ -604,6 +625,7 @@ func _save_game() -> void:
 			"log": workshop_log.snapshot(),
 			"tier_announced": announced_tier,
 			"achv_toasted": _achv_toasted,
+			"stations_heard": _stations_heard,
 		})
 	var ok: bool = load("res://scripts/BrowserSave.gd").save_payload(payload)
 	save_status_line = "%s at %s" % ["saved ok" if ok else "save FAILED",
@@ -1618,8 +1640,8 @@ func _build_props() -> void:
 	pot_body.position = Vector3(-2.9, 0.3, 2.25)
 	add_child(pot_body)
 
-	# Dressing (v0.21.0): doormat under the shop door, a coffee mug on the
-	# design bench, and a cardboard stack by the packing table.
+	# Dressing (v0.21.0): doormat under the farm doorway, a coffee mug on
+	# the design bench, and a cardboard stack by the packing table.
 	var mat_mesh := MeshInstance3D.new()
 	var mat_box := BoxMesh.new()
 	mat_box.size = Vector3(1.3, 0.022, 0.7)
@@ -1628,7 +1650,7 @@ func _build_props() -> void:
 	mat_mat.albedo_color = Color("#8A5A3B")
 	mat_mat.roughness = 0.95
 	mat_mesh.material_override = mat_mat
-	mat_mesh.position = Vector3((DOOR_X0 + DOOR_X1) / 2.0, 0.011, ROOM_D / 2.0 - 0.45)
+	mat_mesh.position = Vector3((DOOR_X0 + DOOR_X1) / 2.0, 0.011, -ROOM_D / 2.0 + 0.45)
 	mat_mesh.add_to_group("props")
 	add_child(mat_mesh)
 
@@ -2212,6 +2234,7 @@ func _physics_process(delta: float) -> void:
 	if not _player.is_on_floor():
 		_player.velocity.y -= 14.0 * delta
 	_player.move_and_slide()
+	_footsteps(delta, dir.length_squared() > 0.0, _player.is_on_floor())
 	for m in machines:
 		var s: PrintSim = m.get("sim")
 		s.tick(delta)
@@ -2377,6 +2400,27 @@ func _toggle_radio() -> void:
 		_log_event("radio", "radio off")
 		_set_prompt("Radio off — E turns it back on")
 	sfx.play("click")
+
+## Footsteps (v0.22.0): soft alternating thuds timed to the walk. Idle time
+## pre-charges the timer to half a step so a resumed walk starts promptly.
+const STEP_INTERVAL := 0.42
+
+func _footsteps(delta: float, moving: bool, on_floor: bool) -> void:
+	if not moving or not on_floor:
+		_step_timer = minf(_step_timer + delta, STEP_INTERVAL * 0.5)
+		return
+	_step_timer -= delta
+	if _step_timer <= 0.0:
+		_step_timer = STEP_INTERVAL
+		_step_alt = not _step_alt
+		sfx.play("step2" if _step_alt else "step1")
+		_steps_played += 1
+
+## Morning bell (v0.22.0): one soft two-partial ding as the new day starts.
+## DayCycle.restore sets the day without emitting, so save-loads stay silent.
+func _morning_bell() -> void:
+	_bells_played += 1
+	sfx.play("bell")
 
 ## Printer stepper blips (v0.16.0): quiet, rate-limited ticks while a machine
 ## prints — organic spacing so four machines never sync into a drone.
@@ -2983,6 +3027,7 @@ func _on_day_changed(new_day: int) -> void:
 	var expired: Array = job_board.rotate_day(new_day, true,
 		Events.tier_max_difficulty(tier), Events.tier_rush_mult(tier))
 	_refresh_event()
+	_morning_bell()
 	var missed_note := ""
 	if not expired.is_empty():
 		stats.missed += expired.size()
@@ -3293,6 +3338,15 @@ func _apply_hud_layout() -> void:
 		card.offset_left = 10.0
 		card.offset_top = 10.0
 		card.reset_size()
+
+## Record a station as heard (v0.22.0); third one unlocks Radio star.
+func _mark_station_heard(station: int) -> void:
+	if station >= 0 and station <= 2 and not _stations_heard.has(station):
+		_stations_heard.append(station)
+		# The boot mark lands before _load_save; saving there would wipe the
+		# file with a fresh-shop payload. The next natural save persists it.
+		if _boot_ready:
+			_save_game()
 
 ## Flash a top-center toast; the fade lives in _physics_process.
 func _show_toast(text: String) -> void:

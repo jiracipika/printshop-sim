@@ -162,13 +162,13 @@ func _test_radio_and_toasts() -> void:
 	for prop in main3.get_tree().get_nodes_in_group("props"):
 		if prop is MeshInstance3D:
 			var p := prop as MeshInstance3D
-			if p.position.y < 0.02 and p.position.z > 2.0 and absf(p.position.x - 1.6) < 0.1:
+			if p.position.y < 0.02 and p.position.z < -2.0 and absf(p.position.x - 1.6) < 0.1:
 				found.mat = true
 			if p.position.y > 0.9 and p.position.y < 1.0 and p.position.z < -2.0:
 				found.mug = true
 			if p.position.x > 2.8 and p.position.y > 0.1 and p.position.y < 0.6:
 				found.boxes += 1
-	_ok(found.mat, "doormat sits under the shop door")
+	_ok(found.mat, "doormat sits under the farm doorway")
 	_ok(found.mug, "coffee mug on the design bench")
 	_ok(found.boxes >= 3, "cardboard stack by the packing table")
 	var total := 0

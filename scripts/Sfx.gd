@@ -102,6 +102,25 @@ static func stream(sound: String) -> AudioStreamWAV:
 			# Printer stepper blip (v0.16.0): tiny high tick, played quietly
 			# and rate-limited by Main while a print runs.
 			s = _wav(_tone(2350.0, 0.035, 0.001, 7.0))
+		"step1":
+			# Footstep (v0.22.0): soft low thud + scuffed noise, alternating
+			# with step2 so a walk doesn't sound like a metronome. Scaled
+			# down — footsteps are texture, not percussion.
+			var step := _mix(_tone(72.0, 0.09, 0.004, 3.0), _noise_burst(0.045, 6.0, 1.2))
+			for i in step.size():
+				step[i] *= 0.7
+			s = _wav(step)
+		"step2":
+			var step2 := _mix(_tone(64.0, 0.1, 0.004, 3.0), _noise_burst(0.05, 5.0, 1.2))
+			for i in step2.size():
+				step2[i] *= 0.7
+			s = _wav(step2)
+		"bell":
+			# Morning bell (v0.22.0): two soft partials, long release.
+			var ring := _mix(_tone(880.0, 0.9, 0.01, 1.6), _tone(1318.5, 0.7, 0.01, 1.4), 0.35)
+			for i in ring.size():
+				ring[i] *= 0.7
+			s = _wav(ring)
 		"music":
 			s = music_station_stream(0)
 		"hum":
@@ -128,7 +147,7 @@ static func stream(sound: String) -> AudioStreamWAV:
 
 static func stream_lengths() -> Dictionary:
 	var out: Dictionary = {}
-	for key in ["grab", "place", "beep", "chime", "buzz", "cash", "click", "upgrade", "hum", "servo", "music"]:
+	for key in ["grab", "place", "beep", "chime", "buzz", "cash", "click", "upgrade", "hum", "servo", "music", "step1", "step2", "bell"]:
 		var s := stream(key)
 		if s != null:
 			out[key] = s.data.size() / 2.0 / RATE

@@ -108,6 +108,8 @@ static func validate(payload: Variant) -> Dictionary:
 		return {}
 	if not _achv_toasted_valid(p):
 		return {}
+	if not _stations_heard_valid(p):
+		return {}
 
 	var out: Dictionary = p.duplicate(true)
 	out["version"] = int(p["version"])
@@ -176,6 +178,25 @@ static func _settings_valid(p: Dictionary) -> bool:
 			return false
 		var rs := float(s["radio_station"])
 		if rs != floorf(rs) or rs < 0.0 or rs > 2.0:
+			return false
+	return true
+
+
+## Optional "stations_heard" key (v0.22.0): absent = fine; present must be
+## an array of station indexes 0..2 (at most 3, duplicates tolerated-read).
+static func _stations_heard_valid(p: Dictionary) -> bool:
+	if not p.has("stations_heard"):
+		return true
+	if typeof(p["stations_heard"]) != TYPE_ARRAY:
+		return false
+	if p["stations_heard"].size() > 3:
+		return false
+	for v in p["stations_heard"]:
+		var t := typeof(v)
+		if t != TYPE_INT and t != TYPE_FLOAT:
+			return false
+		var f := float(v)
+		if f != floorf(f) or f < 0.0 or f > 2.0:
 			return false
 	return true
 

@@ -1,4 +1,33 @@
-# Current handoff — flavor & feel (v0.21.0)
+# Current handoff — presence pass (v0.22.0)
+
+## Current active work
+
+Post-roadmap feel drop. Footsteps: Sfx "step1"/"step2" (low thud + scuff
+noise, scaled 0.7) alternate via Main._footsteps(delta, moving, on_floor)
+called from _physics_process after move_and_slide — first step immediate,
+STEP_INTERVAL 0.42 s pacing, idle time pre-charges half an interval,
+airborne/idle never step. Morning bell: Sfx "bell" (two partials, 0.9 s)
+rings once per live day rollover via _morning_bell in _on_day_changed;
+DayCycle.restore sets the day without emitting, so save-loads stay silent.
+Radio star milestone: _stations_heard (Array[int]) records every station
+heard playing — marked in _update_music_state whenever the music actually
+plays, persisted as save key "stations_heard" (validator: ints 0..2, <= 3);
+the achievements list gained "Radio star" (all 3 heard) and the standard
+toast/log machinery announces it.
+
+BOOT-SAVE GUARD (critical, bit during this slice): the boot station mark
+runs inside _build_audio BEFORE _load_save, and _mark_station_heard used to
+_save_game() there — silently clobbering the player's save with a
+fresh-shop payload every boot. _boot_ready (set at the end of _ready) now
+gates that save; the boot mark lands in memory and the next natural save
+persists it. NEVER save before _load_save has run.
+
+Local verification: all 36 suites + smoke pass (1369 checks, 21 new in
+tests/v022_test.gd), pytest 21/21.
+
+---
+
+# Previous handoff — flavor & feel (v0.21.0)
 
 ## Current active work
 
