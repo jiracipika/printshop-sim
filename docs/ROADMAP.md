@@ -465,6 +465,25 @@ Test checks:
 
 ---
 
+## Post-roadmap — v0.29.0 "Atmosphere & onboarding" — SHIPPED
+
+- [x] Snowfall outside the glass on cold-snap weeks: 12 white flakes,
+      slower than the rain with a sideways sway, sill wrap, quality-gated
+      like the rain/frost
+- [x] Moonlight: a cool blue spill through the window at night — energy
+      follows the same nightness curve as the starfield, no shadows
+      (the cheapest possible atmosphere)
+- [x] How-to-play gains an INPUTS section covering all three input
+      methods (mouse + keyboard, touch, gamepad)
+
+Test checks:
+- [x] 15 new checks in v029_test (snow lifecycle: build/gate/fall/wrap/
+      bounded/quality; moonlight curve noon-vs-midnight, no shadows;
+      how-to input coverage)
+- [x] all 42 suites + playtest bot + pytest green
+
+---
+
 ## Definition of done (every slice)
 
 - [ ] Feature checks above all ticked

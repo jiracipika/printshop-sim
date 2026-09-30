@@ -724,6 +724,10 @@ func _build_howto_panel() -> void:
 		+ "4.  When the print finishes, E collects the part.\n" \
 		+ "5.  Carry it to the PACKING table and press E to deliver. Grade A pays best; F pays nothing.\n" \
 		+ "×2/×3 orders: the payout is per copy — pack each part, then E at the printer prints the next.\n" \
+		+ "\nINPUTS\n" \
+		+ "Mouse + keyboard: WASD move, mouse look, E interact, Esc menu, F2 photo mode.\n" \
+		+ "Touch: left stick to move, right side to look, on-screen interact/pause.\n" \
+		+ "Gamepad: stick/d-pad move, right stick look, A interact, START menu, Y photo.\n" \
 		+ "\nWATCH THE CLOCK\n" \
 		+ "Days pass (~90 s each). Rent is due every morning — unpaid rent becomes debt.\n" \
 		+ "Deliver late and the client pays half. Two days too late, the job is cancelled.\n" \

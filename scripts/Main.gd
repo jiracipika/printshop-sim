@@ -168,6 +168,11 @@ var _night_pane: MeshInstance3D
 var _night_mat: StandardMaterial3D
 var _clouds: Array[MeshInstance3D] = []
 var _cloud_speeds: Array[float] = []
+## Outside weather (v0.29.0): snowflakes drift past the glass on cold-snap
+## weeks; a cool moonlight spills through the window at night.
+var _snow: Node3D
+var _snow_phases: Array[float] = []
+var _moonlight: OmniLight3D
 ## Clock-driven cloud opacity; _animate_clouds applies the edge fade on top.
 var _cloud_base_alpha := 0.3
 var _current_sky_month := -1
@@ -946,6 +951,8 @@ func _apply_season_visuals() -> void:
 		_rain.visible = fx and id == "humid"
 	if _frost != null:
 		_frost.visible = fx and id == "cold_snap"
+	if _snow != null:
+		_snow.visible = fx and id == "cold_snap"
 
 func _refresh_crate_label() -> void:
 	if _crate_label != null:
@@ -984,6 +991,8 @@ func _apply_daylight() -> void:
 	if _night_mat != null:
 		_night_mat.albedo_color.a = nightness
 	_cloud_base_alpha = 0.3 - 0.12 * nightness
+	if _moonlight != null:
+		_moonlight.light_energy = 0.55 * nightness
 
 ## Per-printer display name + lock tag follow the unlock upgrades, and the
 ## farm door opens once any farm kit is owned.
@@ -1114,6 +1123,40 @@ func _build_environment() -> void:
 		add_child(cloud)
 		_clouds.append(cloud)
 		_cloud_speeds.append(0.02 + 0.013 * i)
+
+	# Snow (v0.29.0): small white flakes sliding down the glass on cold-snap
+	# weeks — window-local like the rain, slower, with a sideways sway.
+	var snow := Node3D.new()
+	snow.name = "Snowfall"
+	snow.visible = false
+	add_child(snow)
+	_snow = snow
+	var flake_mat := StandardMaterial3D.new()
+	flake_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	flake_mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	flake_mat.albedo_color = Color(1, 1, 1, 0.85)
+	for i in range(12):
+		var flake := MeshInstance3D.new()
+		var fb := BoxMesh.new()
+		fb.size = Vector3(0.022, 0.022, 0.004)
+		flake.mesh = fb
+		flake.material_override = flake_mat
+		flake.position = Vector3(
+			1.25 + 0.13 * float(i % 10), 1.35 + 0.09 * float((i * 5) % 10),
+			-ROOM_D / 2.0 + 0.16)
+		snow.add_child(flake)
+		_snow_phases.append(float(i) * 0.7)
+
+	# Moonlight (v0.29.0): a cool spill through the window at night. No
+	# shadows — the cheapest possible atmosphere.
+	var moon := OmniLight3D.new()
+	moon.position = Vector3(1.9, 1.8, -ROOM_D / 2.0 + 0.7)
+	moon.light_color = Color("#A9C3E8")
+	moon.omni_range = 4.5
+	moon.light_energy = 0.0
+	moon.shadow_enabled = false
+	add_child(moon)
+	_moonlight = moon
 
 	# Rain streaks (v0.17.0): thin unshaded quads sliding down the glass on
 	# humid weeks — window-only, no room-wide particles. Hidden by default.
@@ -2400,9 +2443,25 @@ func _physics_process(delta: float) -> void:
 	day_cycle.tick(delta)
 	_apply_daylight()
 	_animate_rain(delta)
+	_animate_snow(delta)
 	_animate_clouds(delta)
 	_update_print_visuals(delta)
 	_update_hud()
+
+## Snow (v0.29.0): flakes fall slower than rain and sway sideways; the
+## whole node is hidden outside cold snaps.
+func _animate_snow(delta: float) -> void:
+	if _snow == null or not _snow.visible:
+		return
+	var kids := _snow.get_children()
+	for i in range(kids.size()):
+		var flake := kids[i] as Node3D
+		_snow_phases[i] += delta * 1.6
+		flake.position.y -= 0.11 * delta
+		flake.position.x += sin(_snow_phases[i]) * 0.02 * delta
+		if flake.position.y < 1.28:
+			flake.position.y = 2.32
+			flake.position.x = 1.25 + 0.13 * float(i % 10)
 
 ## Drift the cloud wisps sideways across the glass and wrap them (v0.25.0).
 ## The wrap teleports from the left edge back to the right, so the clouds

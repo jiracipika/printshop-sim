@@ -1,4 +1,23 @@
-# Current handoff — couch menus (v0.28.0)
+# Current handoff — atmosphere & onboarding (v0.29.0)
+
+## Current active work
+
+Post-roadmap atmosphere drop. Cold-snap weeks now snow OUTSIDE the glass:
+_snow (12 white unshaded flakes under _snow) animates via _animate_snow —
+slower than the rain with a sideways sway, wrapping at the sill; gated by
+season + quality exactly like the rain (_apply_season_visuals). A
+moonlight OmniLight (_moonlight, icy #A9C3E8, no shadows) spills through
+the window at night — energy 0.55 x nightness in _apply_daylight, so it
+rises and falls with the starfield. The How-to-play panel gained an
+INPUTS section documenting mouse+keyboard, touch and gamepad controls.
+
+Local verification: all 42 suites + playtest bot + pytest green (15 new
+checks in tests/v029_test.gd). Screenshot confirmed snow + crescent moon
++ constellation through the cold-snap glass.
+
+---
+
+# Previous handoff — couch menus (v0.28.0)
 
 ## Current active work
 
