@@ -447,6 +447,7 @@ func _ready() -> void:
 	apply_setting("sfx_volume", float(settings.sfx_volume), false)
 	_apply_quality()
 	_refresh_event()
+	_register_gamepad_actions()
 	_boot_ready = true
 
 ## Reset the shop: clear the save and reload. Two-press confirm lives in the
@@ -2247,6 +2248,17 @@ func _unhandled_input(event: InputEvent) -> void:
 			_try_grab_or_place()
 		elif event.physical_keycode == KEY_F2:
 			_toggle_photo_mode()
+	elif event is InputEventJoypadButton and event.pressed:
+		# Gamepad (v0.27.0): A interacts, B steps back like Esc, Y is photo
+		# mode. START is polled every frame (see _poll_pad_buttons) so it
+		# keeps working while the menu holds focus.
+		match event.button_index:
+			JOY_BUTTON_A:
+				_try_grab_or_place()
+			JOY_BUTTON_B:
+				_route_escape()
+			JOY_BUTTON_Y:
+				_toggle_photo_mode()
 	# Deliberate (re)capture: allowed when paused, or when effectively
 	# unlocked (covers the browser case where pointer lock was denied or
 	# lost — raw mode fell back to VISIBLE while captured was still true —
@@ -2261,6 +2273,8 @@ func _unhandled_input(event: InputEvent) -> void:
 		paused = false
 		_set_reticle(true)
 		_prompt.text = "WASD move   Mouse look   E interact   Esc release mouse"
+		if Input.get_connected_joypads().size() > 0:
+			_prompt.text += "   ·   Gamepad: stick move/look, A interact, Start menu"
 	elif event is InputEventMouseMotion and get_mouse_locked():
 		var mm := event as InputEventMouseMotion
 		var sens := _mouse_sens()
@@ -2311,7 +2325,18 @@ func get_touch_look_sens() -> float:
 	var vs := get_viewport().get_visible_rect().size
 	return MOUSE_SENS * float(settings.get("mouse_sens_scale", 1.0)) * 3.0 * (720.0 / maxf(vs.y, 1.0))
 
+## Gamepad menu button (v0.27.0): polled START edge — deterministic per
+## physics frame and immune to UI focus consumption while menus are open.
+var _pad_start_prev := false
+
+func _poll_pad_buttons() -> void:
+	var pressed := Input.is_joy_button_pressed(0, JOY_BUTTON_START)
+	if pressed and not _pad_start_prev:
+		_route_escape()
+	_pad_start_prev = pressed
+
 func _physics_process(delta: float) -> void:
+	_poll_pad_buttons()
 	if _toast_t > 0.0:
 		_toast_t = maxf(_toast_t - delta, 0.0)
 		if _toast != null:
@@ -2321,13 +2346,15 @@ func _physics_process(delta: float) -> void:
 	if _player == null:
 		return
 	var touch_active := touch_controls != null and touch_controls.effective_enabled() and touch_controls.is_motion_enabled()
-	if paused or (not get_mouse_locked() and not touch_active):
+	var pad_active := Input.get_connected_joypads().size() > 0
+	if paused or (not get_mouse_locked() and not touch_active and not pad_active):
 		# Paused (Esc/focus loss) or browser took pointer lock away: no
 		# movement, no simulation, and latched inputs are dropped.
 		drop_motion_inputs()
 		return
 	_servo_blips(delta)
 	apply_touch_look()
+	_apply_gamepad_look(delta)
 	_player.rotation.y = yaw
 	_camera.rotation.x = pitch
 	var dir := Vector3.ZERO
@@ -2534,6 +2561,52 @@ func _toggle_radio() -> void:
 		_log_event("radio", "radio off")
 		_set_prompt("Radio off — E turns it back on")
 	sfx.play("click")
+
+## Gamepad bindings (v0.27.0): registered at runtime instead of
+## project.godot — serialized InputEventJoypad* entries in the [input]
+## section break autoload registration in headless -s mode. Idempotent:
+## guards against double-adding across scene reloads.
+func _register_gamepad_actions() -> void:
+	var sticks := {
+		"move_forward": [JOY_AXIS_LEFT_Y, -1.0, JOY_BUTTON_DPAD_UP],
+		"move_back": [JOY_AXIS_LEFT_Y, 1.0, JOY_BUTTON_DPAD_DOWN],
+		"move_left": [JOY_AXIS_LEFT_X, -1.0, JOY_BUTTON_DPAD_LEFT],
+		"move_right": [JOY_AXIS_LEFT_X, 1.0, JOY_BUTTON_DPAD_RIGHT],
+	}
+	for action in sticks:
+		if not InputMap.has_action(action):
+			continue
+		var already := false
+		for ev in InputMap.action_get_events(action):
+			if ev is InputEventJoypadMotion or ev is InputEventJoypadButton:
+				already = true
+		if already:
+			continue
+		var spec: Array = sticks[action]
+		var motion := InputEventJoypadMotion.new()
+		motion.axis = int(spec[0])
+		motion.axis_value = float(spec[1])
+		InputMap.action_add_event(action, motion)
+		var dpad := InputEventJoypadButton.new()
+		dpad.button_index = int(spec[2])
+		InputMap.action_add_event(action, dpad)
+
+## Gamepad look (v0.27.0): right stick, deadzone 0.15, scaled per second by
+## the mouse sensitivity setting.
+func _apply_gamepad_look(delta: float) -> void:
+	var vx := Input.get_joy_axis(0, JOY_AXIS_RIGHT_X)
+	var vy := Input.get_joy_axis(0, JOY_AXIS_RIGHT_Y)
+	if absf(vx) < 0.15 and absf(vy) < 0.15:
+		return
+	var look := 2.6 * delta * _mouse_sens()
+	yaw -= vx * look
+	pitch = clampf(pitch - vy * look, -1.4, 1.4)
+
+## Gamepad rumble (v0.27.0): soft pulse on delivery, harsher on failure.
+## A no-op wherever no pad is connected (headless included).
+func _rumble(low: float, high: float, seconds: float) -> void:
+	for pad in Input.get_connected_joypads():
+		Input.start_joy_vibration(pad, low, high, seconds)
 
 ## Footsteps (v0.22.0): soft alternating thuds timed to the walk. Idle time
 ## pre-charges the timer to half a step so a resumed walk starts promptly.
@@ -2832,6 +2905,7 @@ func _try_pack_held() -> bool:
 				_log_event("scrap", "second F — %s order failed" % c.model_name)
 				_save_game()
 				sfx.play("buzz")
+				_rumble(0.7, 0.2, 0.4)
 				_set_prompt("Second F — the %s order is dead. No payout, rep hit." % c.model_name)
 				return true
 			m["scrap"] = true
@@ -2892,6 +2966,7 @@ func _try_pack_held() -> bool:
 		_guide("stars")
 	_save_game()
 	sfx.play("cash")
+	_rumble(0.25, 0.5, 0.25)
 	var tip: int = payout - roundi(float(payout) / 1.10)
 	if late:
 		_set_prompt("Delivered LATE %s%s (%s) — $%s · rep down" % [c.model_name,
