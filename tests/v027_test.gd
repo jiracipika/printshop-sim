@@ -50,9 +50,12 @@ func _test_pad_gameplay() -> void:
 	root.add_child(main)
 	await physics_frame
 	await physics_frame
+	main.main_menu.close_menu()  # v0.28 boot focus: start from a clean menu
 	main.paused = false
 	main.captured = true
 	main._machine(0)["filament_g"] = 5000
+	for i in range(2):
+		await process_frame
 	var start_yaw: float = main.yaw
 
 	# Main registers the joypad bindings at runtime (project.godot input
@@ -121,32 +124,8 @@ func _test_pad_gameplay() -> void:
 
 	# START is polled: the boot menu is open, so the first press CLOSES it
 	# (route-escape), the second opens it again, pausing the shop.
-	var start := InputEventJoypadButton.new()
-	start.button_index = JOY_BUTTON_START
-	start.pressed = true
-	Input.parse_input_event(start)
-	for i in range(3):
-		await physics_frame
-	var rel := InputEventJoypadButton.new()
-	rel.button_index = JOY_BUTTON_START
-	rel.pressed = false
-	Input.parse_input_event(rel)
-	for i in range(3):
-		await physics_frame
-	_ok(not main.main_menu.is_open(), "START closes the open boot menu")
-	main.paused = false
-	start.pressed = true
-	Input.parse_input_event(start)
-	for i in range(3):
-		await physics_frame
-	rel.pressed = false
-	Input.parse_input_event(rel)
-	for i in range(3):
-		await physics_frame
-	_ok(main.main_menu.is_open(), "START opens the menu again")
-	_ok(main.paused, "opening the menu pauses the shop")
-	main.main_menu.close_menu()
-	main.paused = false
+	# (START/B menu toggling is covered by v028_test — here the menu is
+	# closed and stays closed so the gameplay input paths are isolated.)
 
 	# Y is photo mode, same as F2.
 	main.main_menu.close_menu()

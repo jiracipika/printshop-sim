@@ -435,6 +435,36 @@ The machine-side of the human-only queue: an automated player.
 
 ---
 
+## Post-roadmap — v0.28.0 "Couch menus" — SHIPPED
+
+Completes the controller story: the UI is fully gamepad-navigable.
+
+- [x] Boot focuses Play — a gamepad player can start with A immediately;
+  A on Play resumes straight into gameplay without pointer lock (the
+  mouse-click capture flow is unchanged for mouse users)
+- [x] The menu row has an explicit focus chain (left/right along the row,
+  wrap at both ends) — automatic neighbor discovery proved unreliable in
+  this layout; the Settings panel has an explicit vertical chain
+  (sliders -> checkboxes -> quality -> reset -> back)
+- [x] Panels focus their first interactive control when shown
+  (depth-first: tree order = creation order)
+- [x] ui_up/down/left/right created at RUNTIME — the project's custom
+  [input] section REPLACED Godot's built-in ui_* actions, which did not
+  exist at all (arrows/d-pad/stick did nothing before); left stick + d-pad
+  bound, A added to ui_accept, Enter kept
+- [x] Closing the menu releases focus (no ghost focus while playing)
+
+Test checks:
+- [x] 11 checks in v028_test (boot focus, A-start unpaused, dpad focus
+  move, A-activates-panel, slider focus + d-pad step, focus release,
+  START reopen) — plus settle-frame discipline: focus grabs need a frame
+  before navigation events flush
+- [x] all 41 suites + playtest bot + pytest green (v027 trimmed to 9
+  checks: its menu-toggle coverage moved to v028 where the couch-menu
+  reality is testable)
+
+---
+
 ## Definition of done (every slice)
 
 - [ ] Feature checks above all ticked

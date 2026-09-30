@@ -208,8 +208,12 @@ var _boot_prompt := "Click to play"
 
 func _on_menu_play() -> void:
 	# Menu closes; the existing capture prompt flow takes over from here.
+	# Gamepad players resume straight away — no pointer lock involved.
 	main_menu.close_menu()
 	_flush_settings_if_dirty()
+	if Input.get_connected_joypads().size() > 0:
+		paused = false
+		_set_reticle(true)
 	_prompt.text = _boot_prompt
 
 func _on_menu_contracts() -> void:
@@ -377,6 +381,11 @@ func _route_escape() -> void:
 			main_menu.close_menu()
 			_flush_settings_if_dirty()
 			_prompt.text = _boot_prompt
+			# Gamepad (v0.28.0): no pointer lock needed — resume straight
+			# into play when a pad is connected.
+			if Input.get_connected_joypads().size() > 0:
+				paused = false
+				_set_reticle(true)
 		return
 	main_menu.open_menu()
 	paused = true
@@ -448,6 +457,10 @@ func _ready() -> void:
 	_apply_quality()
 	_refresh_event()
 	_register_gamepad_actions()
+	# Couch boot (v0.28.0): the menu is visible from the start — focus Play
+	# so a gamepad can begin with A (mouse users: Enter also works).
+	if main_menu != null and main_menu._play_button != null:
+		main_menu._play_button.grab_focus()
 	_boot_ready = true
 
 ## Reset the shop: clear the save and reload. Two-press confirm lives in the
@@ -2590,6 +2603,55 @@ func _register_gamepad_actions() -> void:
 		var dpad := InputEventJoypadButton.new()
 		dpad.button_index = int(spec[2])
 		InputMap.action_add_event(action, dpad)
+	# Couch menus (v0.28.0): the left stick drives UI navigation next to the
+	# d-pad, and A activates the focused control. Added only when missing.
+	var ui_sticks := {
+		"ui_up": [JOY_AXIS_LEFT_Y, -1.0], "ui_down": [JOY_AXIS_LEFT_Y, 1.0],
+		"ui_left": [JOY_AXIS_LEFT_X, -1.0], "ui_right": [JOY_AXIS_LEFT_X, 1.0],
+	}
+	# The project's custom [input] section REPLACED Godot's built-in
+	# ui_* actions — they do not exist unless we create them here.
+	for action in ui_sticks:
+		if not InputMap.has_action(action):
+			InputMap.add_action(action)
+			InputMap.action_set_deadzone(action, 0.2)
+		var has_axis := false
+		var has_btn := false
+		for ev in InputMap.action_get_events(action):
+			if ev is InputEventJoypadMotion:
+				has_axis = true
+			if ev is InputEventJoypadButton:
+				has_btn = true
+		if not has_axis:
+			var spec2: Array = ui_sticks[action]
+			var m2 := InputEventJoypadMotion.new()
+			m2.axis = int(spec2[0])
+			m2.axis_value = float(spec2[1])
+			InputMap.action_add_event(action, m2)
+		if not has_btn:
+			var b2 := InputEventJoypadButton.new()
+			b2.button_index = JOY_BUTTON_DPAD_UP if action == "ui_up" \
+				else JOY_BUTTON_DPAD_DOWN if action == "ui_down" \
+				else JOY_BUTTON_DPAD_LEFT if action == "ui_left" \
+				else JOY_BUTTON_DPAD_RIGHT
+			InputMap.action_add_event(action, b2)
+	if not InputMap.has_action("ui_accept"):
+		InputMap.add_action("ui_accept")
+	var has_joy_accept := false
+	var has_enter := false
+	for ev in InputMap.action_get_events("ui_accept"):
+		if ev is InputEventJoypadButton:
+			has_joy_accept = true
+		if ev is InputEventKey and (ev as InputEventKey).physical_keycode == KEY_ENTER:
+			has_enter = true
+	if not has_joy_accept:
+		var accept := InputEventJoypadButton.new()
+		accept.button_index = JOY_BUTTON_A
+		InputMap.action_add_event("ui_accept", accept)
+	if not has_enter:
+		var enter := InputEventKey.new()
+		enter.physical_keycode = KEY_ENTER
+		InputMap.action_add_event("ui_accept", enter)
 
 ## Gamepad look (v0.27.0): right stick, deadzone 0.15, scaled per second by
 ## the mouse sensitivity setting.

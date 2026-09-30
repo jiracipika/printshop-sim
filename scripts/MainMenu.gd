@@ -39,6 +39,8 @@ var _howto_panel: Control
 var _stats_panel: Control
 var _log_panel: Control
 var _settings_applying := false
+## Couch menus (v0.28.0): the Play button, focused whenever the menu opens.
+var _play_button: Button
 var _open := false
 var _contracts_open := false
 var _upgrades_open := false
@@ -66,6 +68,8 @@ func is_open() -> bool:
 func open_menu() -> void:
 	visible = true
 	disarm_reset_button()
+	if _play_button != null:
+		_play_button.grab_focus()
 	for panel in [_contracts_panel, _upgrades_panel, _settings_panel, _howto_panel, _stats_panel, _log_panel]:
 		if panel != null:
 			panel.visible = false
@@ -79,6 +83,9 @@ func open_menu() -> void:
 
 func close_menu() -> void:
 	visible = false
+	var focused := get_viewport().gui_get_focus_owner()
+	if focused != null:
+		focused.release_focus()
 	for panel in [_contracts_panel, _upgrades_panel, _settings_panel, _howto_panel, _stats_panel, _log_panel]:
 		if panel != null:
 			panel.visible = false
@@ -173,6 +180,7 @@ func _build() -> void:
 	layout.add_child(buttons)
 
 	var play := _make_button("Play", "Play")
+	_play_button = play
 	play.add_theme_color_override("font_color", COLOR_STEEL)
 	var play_sb := StyleBoxFlat.new()
 	play_sb.bg_color = COLOR_TERRA
@@ -214,6 +222,16 @@ func _build() -> void:
 	quit.pressed.connect(func() -> void: get_tree().quit())
 	buttons.add_child(quit)
 	_apply_quit_visibility()
+	# Couch menus (v0.28.0): explicit focus chain — automatic neighbor
+	# discovery proved unreliable here, so the row is wired by hand
+	# (left/right along the row, with a wrap from Quit back to Play).
+	var row: Array[Button] = [play, contracts, upgrades, settings, howto,
+		stats_btn, log_btn, quit]
+	for i in range(row.size()):
+		row[i].focus_neighbor_left = row[(i - 1 + row.size()) % row.size()].get_path()
+		row[i].focus_neighbor_right = row[(i + 1) % row.size()].get_path()
+		row[i].focus_neighbor_top = row[0].get_path()
+		row[i].focus_neighbor_bottom = row[0].get_path()
 
 	var version := Label.new()
 	version.name = "Version"
@@ -337,6 +355,7 @@ func show_contracts(summaries: Array[Dictionary]) -> void:
 
 ## --- upgrades panel (task 12) ------------------------------------------------
 
+	_focus_first_button_for("show_contracts")
 func _build_upgrades_panel() -> void:
 	_upgrades_panel = Control.new()
 	_upgrades_panel.name = "UpgradesPanel"
@@ -409,6 +428,7 @@ func show_upgrades(cards: Array[Dictionary], balance_line := "") -> void:
 	_show_panel(_upgrades_panel)
 	_upgrades_open = true
 	is_open()
+	_focus_first_button_for("show_upgrades")
 
 var _balance_line := ""
 
@@ -657,6 +677,8 @@ func show_settings(current: Dictionary) -> void:
 
 ## --- how-to-play panel (v0.4.0) -------------------------------------------------
 
+	_chain_settings_focus()
+	_focus_first_button_for("show_settings")
 func _build_howto_panel() -> void:
 	_howto_panel = Control.new()
 	_howto_panel.name = "HowToPanel"
@@ -889,6 +911,58 @@ func _make_back_button(on_pressed: Callable) -> Button:
 	back.add_theme_font_size_override("font_size", 17)
 	back.pressed.connect(on_pressed)
 	return back
+
+## Couch menus (v0.28.0): explicit vertical focus chain for the settings
+## panel (slider rows, checkboxes, quality option, reset, back).
+func _chain_settings_focus() -> void:
+	var order: Array[String] = [
+		"Sheet/SheetBox/SensSliderRow/SensSlider",
+		"Sheet/SheetBox/VolSliderRow/VolSlider",
+		"Sheet/SheetBox/MusicSliderRow/MusicSlider",
+		"Sheet/SheetBox/MusicCheck",
+		"Sheet/SheetBox/InvertCheck",
+		"Sheet/SheetBox/ShadowsCheck",
+		"Sheet/SheetBox/QualityRow/QualityOption",
+		"Sheet/SheetBox/ResetButton",
+		"Sheet/SheetBox/Back",
+	]
+	var nodes: Array[Control] = []
+	for path in order:
+		var n: Control = _settings_panel.get_node_or_null(path) as Control
+		if n == null or n.focus_mode == Control.FOCUS_NONE:
+			continue
+		nodes.append(n)
+	for i in range(nodes.size()):
+		nodes[i].focus_neighbor_bottom = nodes[(i + 1) % nodes.size()].get_path()
+		nodes[i].focus_neighbor_top = nodes[(i - 1 + nodes.size()) % nodes.size()].get_path()
+		nodes[i].focus_neighbor_left = NodePath("")
+		nodes[i].focus_neighbor_right = NodePath("")
+
+func _focus_first_button_for(fn_name: String) -> void:
+	match fn_name:
+		"show_contracts":
+			_focus_first_button(_contracts_panel)
+		"show_upgrades":
+			_focus_first_button(_upgrades_panel)
+		"show_settings":
+			_focus_first_button(_settings_panel)
+
+## Couch menus (v0.28.0): put focus on the panel's first interactive Button
+## so the gamepad can navigate immediately. No-op when nothing is focusable.
+func _focus_first_button(panel: Control) -> void:
+	if panel == null or not panel.visible:
+		return
+	# Depth-first: tree order is creation order, so the panel's first
+	# interactive control wins over shallower late additions.
+	var stack: Array[Node] = [panel]
+	while stack.size() > 0:
+		var n: Node = stack.pop_back()
+		if n is Control and (n as Control).focus_mode != Control.FOCUS_NONE \
+				and n != panel:
+			(n as Control).grab_focus()
+			return
+		for i in range(n.get_child_count() - 1, -1, -1):
+			stack.append(n.get_child(i))
 
 func _show_panel(panel: Control) -> void:
 	disarm_reset_button()

@@ -1,4 +1,35 @@
-# Current handoff — the playtest bot (v0.26.0)
+# Current handoff — couch menus (v0.28.0)
+
+## Current active work
+
+Finishes the controller story: the UI is gamepad-first now. MainMenu grabs
+focus on Play whenever the menu opens (open_menu -> _play_button), each
+panel focuses its first interactive control when shown
+(_focus_first_button_for -> _focus_first_button, DEPTH-FIRST traversal —
+tree order is creation order; breadth-first let a late shallow CheckBox
+beat the top slider), and closing the menu releases focus. The menu row
+and the Settings panel carry EXPLICIT focus_neighbor chains — automatic
+neighbor discovery was unreliable with this layout, and arrows/stick/d-pad
+did nothing at all because the project's custom [input] section REPLACED
+Godot's built-in ui_* actions: Main._register_gamepad_actions now CREATES
+ui_up/down/left/right (left stick + d-pad, deadzone 0.2) and ui_accept
+(A + Enter) at runtime, idempotently. Gamepad boot gap closed: A on the
+focused Play starts the game unpaused (no pointer lock needed), and
+closing the menu with a pad connected resumes play the same way (_route_escape
+close path + _on_menu_play). Keyboard users: Enter activates too, arrows
+navigate (newly working — the ui actions simply did not exist before).
+
+TEST DISCIPLINE: simulated input needs settle frames — after grabbing
+focus or opening a menu, await 2-3 process frames BEFORE pressing
+navigation buttons (the grab lands on the next frame; presses flush
+before it and are lost). This bit three separate checks.
+
+Local verification: all 41 suites + playtest bot + pytest green (v027
+trimmed to 9 checks — its menu-toggle coverage moved to v028).
+
+---
+
+# Previous handoff — the playtest bot (v0.26.0)
 
 ## Current active work
 
