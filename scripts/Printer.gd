@@ -217,12 +217,18 @@ func set_filament(frac: float) -> void:
 	_coil.scale = Vector3(1.0, clampf(frac, 0.02, 1.0), 1.0)
 	_coil.visible = frac > 0.02
 
-## Main sets the display name ("Printer 1" / "Printer 2 — PRO").
+## Main sets the display name ("Printer 1" / "Printer 2 — PRO"). The name
+## gets its own billboard label above the machine — the front LCD is owned
+## by set_status and would clobber the name on the next visual update.
 func set_display_name(text: String) -> void:
 	if _name_label == null:
-		for child in get_children():
-			if child is Label3D and child != _lock_label:
-				_name_label = child
-				break
-	if _name_label != null:
-		_name_label.text = text
+		_name_label = Label3D.new()
+		_name_label.font_size = 34
+		_name_label.pixel_size = 0.0022
+		_name_label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+		_name_label.modulate = Color("#EEE5D3")
+		_name_label.outline_modulate = Color("#202B2B")
+		_name_label.outline_size = 4
+		_name_label.position = Vector3(0, 0.86, 0)
+		add_child(_name_label)
+	_name_label.text = text

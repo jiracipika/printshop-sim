@@ -95,6 +95,17 @@ func _test_scene() -> void:
 	p1.set_status("L10/40 25%")
 	_ok(p1._screen_label.text == "L10/40 25%", "LCD text updates")
 
+	# Regression: the display name owns a dedicated label. It used to be
+	# scavenged onto the LCD, where the per-frame set_status immediately
+	# clobbered "Printer 2 — PRO".
+	p1.set_display_name("Printer 1 — TEST")
+	p1.set_status("Ready")
+	main._update_print_visuals(0.016)
+	_ok(p1._name_label != null and p1._name_label != p1._screen_label
+		and str(p1._name_label.text) == "Printer 1 — TEST",
+		"display name keeps its own label across visual updates")
+	_ok(str(p1._screen_label.text) == "Ready", "LCD stays owned by set_status")
+
 	# Drive a real print and confirm the LCD mirrors progress.
 	ledger_setup(main)
 	main.paused = false

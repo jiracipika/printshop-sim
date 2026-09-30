@@ -363,7 +363,7 @@ func _select_template(name: String) -> void:
 		"Cable ring":
 			_design.width_mm = 46.0
 			_design.depth_mm = 46.0
-			_design.height_mm = 12.0
+			_design.height_mm = 20.0
 		"Storage block":
 			_design.width_mm = 88.0
 			_design.depth_mm = 62.0
