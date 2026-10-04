@@ -2526,8 +2526,8 @@ func _update_print_visuals(delta: float) -> void:
 			_printers[i].set_filament(clampf(float(machines[i].get("filament_g", 0)) / float(SPOOL_G), 0.0, 1.0))
 		if i < _printers.size() and _printers[i].get("set_status") != null:
 			if s.is_running():
-				_printers[i].set_status("L%d/%d %d%%" % [s.layers_done, s.layers_total,
-					roundi(s.progress() * 100.0)])
+				_printers[i].set_status("L%d/%d %d%%\n~%ds left" % [s.layers_done, s.layers_total,
+					roundi(s.progress() * 100.0), ceili(s.remaining_real_time_s())])
 			elif s.state == PrintSim.State.DONE_FAIL:
 				_printers[i].set_status("ERROR — clear")
 			elif s.state == PrintSim.State.DONE_OK:
@@ -2563,6 +2563,8 @@ func _on_print_done(ok: bool, idx: int) -> void:
 	if c == null:
 		if not m.get("prototype", {}).is_empty() and ok:
 			_set_prompt("Prototype complete — press E at Printer %d to collect it" % (idx + 1))
+			_show_toast("%s is ready at Printer %d" % [m.prototype.name, idx + 1])
+			_log_event("prototype_done", "%s completed on Printer %d" % [m.prototype.name, idx + 1])
 		return
 	if ok and c.state == Contract.State.PRINTING:
 		_advance(c, Contract.State.INSPECTION)
@@ -2885,6 +2887,9 @@ func _collect_on(idx: int) -> bool:
 			_print_visuals[idx].reset()
 		sfx.play("grab")
 		_set_prompt("Prototype collected — place it on a shelf or bench")
+		_show_toast("%s collected" % prototype.name)
+		_log_event("prototype_collected", "%s collected from Printer %d" % [prototype.name, idx + 1])
+		_save_game()
 		return true
 	if c == null or c.state != Contract.State.INSPECTION:
 		return false
@@ -3574,6 +3579,15 @@ func _open_design_studio() -> void:
 	_set_reticle(false)
 	_music_ducked = true  # the radio steps back while you design
 	_update_music_state()
+	var status_lines: Array[String] = []
+	for i in machines.size():
+		var m := _machine(i)
+		var sim: PrintSim = m.get("sim")
+		var state := "Locked"
+		if upgrades.machine_unlocked(i):
+			state = sim.get_state_name().replace("IDLE", "Ready").replace("DONE_OK", "Collect part").replace("DONE_FAIL", "Clear bed")
+		status_lines.append("P%d · %s · %dg loaded" % [i + 1, state, int(m.get("filament_g", 0))])
+	design_studio.set_printer_status(status_lines)
 	design_studio.open()
 
 func _close_design_studio() -> void:
@@ -3782,7 +3796,7 @@ func _update_hud() -> void:
 			PrintSim.State.RUNNING:
 				lines.append("%sPrinting %s — layer %d/%d  %.0f%%" % [
 					prefix, s.model_name, s.layers_done, s.layers_total, s.progress() * 100.0])
-				lines.append("Material: %d g   Risks: %s" % [s.material_used_g(), str(s.current_risks())])
+				lines.append("~%ds left · Deposited ~%d/%dg · Risks: %s" % [ceili(s.remaining_real_time_s()), roundi(float(m.get("last_est_g", 0)) * s.progress()), int(m.get("last_est_g", 0)), "none" if s.current_risks().is_empty() else ", ".join(s.current_risks())])
 			PrintSim.State.DONE_OK:
 				var c2: Contract = m.get("contract")
 				if c2 != null and c2.state == Contract.State.INSPECTION:

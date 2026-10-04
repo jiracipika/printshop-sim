@@ -102,6 +102,12 @@ func estimated_print_time_s() -> float:
 func material_used_g() -> int:
 	return int(layers_done * MATERIAL_G_PER_LAYER)
 
+func remaining_real_time_s() -> float:
+	if state != State.RUNNING:
+		return 0.0
+	var remaining := float(maxi(layers_total - layers_done, 0)) / TICK_HZ - _tick_accum
+	return maxf(remaining, 0.0) / maxf(speed_multiplier, 0.01)
+
 func progress() -> float:
 	if layers_total <= 0:
 		return 0.0

@@ -15,6 +15,15 @@ const FILAMENTS := {"Clay": "#DA623A", "Sage": "#738771", "Honey": "#C3A076"}
 const SHAPES := ["Desk planter", "Cable ring", "Storage block",
 	"Phone stand", "Plant marker", "Drawer knob"]
 
+const PROFILES := {"Draft": [0.30, 1.2, 10.0], "Balanced": [0.20, 1.6, 18.0], "Detail": [0.12, 2.0, 25.0]}
+var _library := BlueprintLibrary.new()
+var _library_picker: OptionButton
+var _title_edit: LineEdit
+var _notes: Label
+var _printer_status: Label
+var _preview_camera: Camera3D
+var _auto_rotate := true
+var _spin_button: Button
 var _design := defaults()
 var _preview_root: Node3D
 var _preview_mesh: MeshInstance3D
@@ -166,10 +175,12 @@ func _ready() -> void:
 	_build()
 
 func _process(delta: float) -> void:
-	if visible and _preview_mesh != null:
+	if visible and _preview_mesh != null and _auto_rotate:
 		_preview_mesh.rotate_y(delta * 0.28)
 
 func open() -> void:
+	var library_ok := _library.read()
+	_refresh_library()
 	var file := FileAccess.open(SAVE_PATH, FileAccess.READ)
 	if file != null:
 		var parsed: Variant = JSON.parse_string(file.get_as_text())
@@ -180,6 +191,8 @@ func open() -> void:
 	visible = true
 	_refresh_preview()
 	_info.text = "A print-ready starting point. Change a size, then test it on a printer."
+	if not library_ok:
+		show_feedback("Could not read your blueprint library. Existing designs were kept.")
 
 func close() -> void:
 	visible = false
@@ -189,6 +202,19 @@ func current_design() -> Dictionary:
 
 func show_feedback(message: String) -> void:
 	_info.text = message
+
+func set_printer_status(lines: Array[String]) -> void:
+	_printer_status.text = "PRINTERS\n" + "\n".join(lines)
+
+static func design_guidance(source: Dictionary) -> String:
+	var d := normalize(source)
+	var notes: Array[String] = []
+	if float(d.wall_mm) < 1.2:
+		notes.append("Thin walls: Balanced is a sturdier starting point.")
+	if float(d.height_mm) > minf(float(d.width_mm), float(d.depth_mm)) * 2.5:
+		notes.append("Tall and narrow: try a wider base.")
+	notes.append("Satin PETG finish" if d.material == "PETG" else "Matte PLA finish")
+	return "  ·  ".join(notes)
 
 func _build() -> void:
 	var dim := ColorRect.new()
@@ -235,6 +261,7 @@ func _build() -> void:
 	camera.position = Vector3(0.2, 0.16, 0.34)
 	camera.rotation = Vector3(-0.39, 0.53, 0.0)
 	camera.fov = 38.0
+	_preview_camera = camera
 	_preview_root.add_child(camera)
 	camera.current = true
 	var light := DirectionalLight3D.new()
@@ -255,6 +282,25 @@ func _build() -> void:
 	viewport_box.stretch = true
 	viewport_box.add_child(_preview_view)
 	left.add_child(viewport_box)
+	var turns := HBoxContainer.new()
+	for spec in [["Turn left", -PI / 6.0], ["Turn right", PI / 6.0]]:
+		var turn := _button(str(spec[0]))
+		turn.pressed.connect(_turn_preview.bind(float(spec[1])))
+		turns.add_child(turn)
+	_spin_button = _button("Auto rotate")
+	_spin_button.toggle_mode = true
+	_spin_button.button_pressed = true
+	_spin_button.toggled.connect(func(on: bool) -> void: _auto_rotate = on)
+	turns.add_child(_spin_button)
+	left.add_child(turns)
+	left.add_child(_label("PREVIEW ZOOM", 13, MINT))
+	var zoom := HSlider.new()
+	zoom.min_value = 25
+	zoom.max_value = 60
+	zoom.value = 38
+	zoom.value_changed.connect(func(value: float) -> void: _preview_camera.fov = value)
+	left.add_child(zoom)
+	_build_library(left)
 	left.add_child(_label("PLA is easy to print. PETG is tougher and more heat resistant.", 13, MUTED))
 
 	var right := VBoxContainer.new()
@@ -271,6 +317,15 @@ func _build() -> void:
 		templates.add_child(button)
 		_buttons[name] = button
 	right.add_child(templates)
+	right.add_child(_label("QUICK PRINT PROFILES", 13, MINT))
+	var profiles := HBoxContainer.new()
+	for name in PROFILES:
+		var profile := _button(name)
+		profile.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		profile.pressed.connect(_select_profile.bind(name))
+		profiles.add_child(profile)
+	right.add_child(profiles)
+	right.add_child(_label("Draft: quick · Balanced: sturdy · Detail: finer layers", 13, MUTED))
 	for spec in [["width_mm", "Width", 24.0, 140.0, 2.0], ["depth_mm", "Depth", 24.0, 140.0, 2.0],
 		["height_mm", "Height", 20.0, 160.0, 2.0], ["wall_mm", "Wall thickness", 0.8, 3.2, 0.2],
 		["layer_mm", "Layer height", 0.12, 0.32, 0.02],
@@ -293,6 +348,11 @@ func _build() -> void:
 	right.add_child(colors)
 	_metric = _label("", 17, PAPER)
 	right.add_child(_metric)
+	_notes = _label("", 13, MINT)
+	_notes.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	right.add_child(_notes)
+	_printer_status = _label("", 13, MUTED)
+	right.add_child(_printer_status)
 	right.add_child(_label("Shells make the walls. Infill supports the inside. Smaller layers add detail but take longer.", 13, MUTED))
 	_info = _label("", 14, PAPER)
 	_info.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
@@ -312,6 +372,74 @@ func _build() -> void:
 	print_button.pressed.connect(_save_and_print)
 	actions.add_child(print_button)
 	right.add_child(actions)
+
+func _build_library(parent: VBoxContainer) -> void:
+	parent.add_child(_label("MY BLUEPRINTS  /  12 SLOTS", 13, MINT))
+	_library_picker = OptionButton.new()
+	parent.add_child(_library_picker)
+	_title_edit = LineEdit.new()
+	_title_edit.placeholder_text = "Name this design"
+	_title_edit.max_length = 32
+	parent.add_child(_title_edit)
+	var actions := HBoxContainer.new()
+	for spec in [["Save blueprint", _save_blueprint], ["Load", _load_blueprint], ["Delete", _delete_blueprint]]:
+		var button := _button(str(spec[0]))
+		button.pressed.connect(spec[1])
+		actions.add_child(button)
+	parent.add_child(actions)
+	_refresh_library()
+
+func _refresh_library() -> void:
+	var selected := _library_picker.selected
+	_library_picker.clear()
+	var entries := _library.entries()
+	_library_picker.disabled = entries.is_empty()
+	if entries.is_empty():
+		_library_picker.add_item("No saved blueprints yet")
+	else:
+		for entry in entries:
+			_library_picker.add_item(entry.title)
+		_library_picker.select(clampi(selected, 0, entries.size() - 1))
+
+func _save_blueprint() -> void:
+	var title := _title_edit.text.strip_edges()
+	if title.is_empty():
+		title = str(_design.name)
+	if _library.save(title, current_design()):
+		_refresh_library()
+		show_feedback("Blueprint saved. Saving the same name updates it.")
+	else:
+		show_feedback("Could not save. Delete a slot if all 12 are full, or check storage.")
+
+func _load_blueprint() -> void:
+	var entries := _library.entries()
+	var index := _library_picker.selected
+	if index < 0 or index >= entries.size():
+		return
+	_design = normalize(entries[index].design)
+	_title_edit.text = entries[index].title
+	_apply_values()
+	_refresh_preview()
+	show_feedback("Blueprint loaded. Adjust it or send a test print.")
+
+func _delete_blueprint() -> void:
+	if _library.remove(_library_picker.selected):
+		_refresh_library()
+		show_feedback("Saved blueprint deleted. Your current design is still on screen.")
+
+func _select_profile(name: String) -> void:
+	var values: Array = PROFILES[name]
+	_design.layer_mm = values[0]
+	_design.wall_mm = values[1]
+	_design.infill_pct = values[2]
+	_apply_values()
+	_refresh_preview()
+	show_feedback("%s profile applied. Sizes and filament are unchanged." % name)
+
+func _turn_preview(amount: float) -> void:
+	_auto_rotate = false
+	_spin_button.set_pressed_no_signal(false)
+	_preview_mesh.rotate_y(amount)
 
 func _add_slider(parent: VBoxContainer, key: String, title: String, min_v: float, max_v: float, step: float) -> void:
 	var row := VBoxContainer.new()
@@ -411,6 +539,7 @@ func _refresh_preview() -> void:
 func _refresh_estimate() -> void:
 	if _metric == null:
 		return
+	_notes.text = design_guidance(_design)
 	var grams := estimate_grams(_design)
 	var seconds := estimate_seconds(_design)
 	var price := 4 if _design.material == "PLA" else 6

@@ -193,6 +193,7 @@ func is_locked() -> bool:
 func set_status(text: String) -> void:
 	if _screen_label != null and _screen_label.text != text:
 		_screen_label.text = text
+		_screen_label.modulate = Color("#DA623A") if text.begins_with("ERROR") else (Color("#C3A076") if text.begins_with("L") else Color("#A8C8AC"))
 
 ## Spool coil resting on the cross-brace between the Z rails: shrinks
 ## downward toward the brace as filament is consumed, hides when empty.
