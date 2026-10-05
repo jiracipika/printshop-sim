@@ -677,6 +677,24 @@ Test checks:
 
 ---
 
+## Post-roadmap — v0.39.0 "News & notices" — SHIPPED
+
+- [x] Media day: A-grade deliveries earn +0.3 reputation instead of +0.2
+      ("the local paper photographs them") — rides the delivery rep branch
+- [x] Backorders: the board deals 10 jobs instead of 8 for the day
+      (extra_jobs event field -> job_board.extra_jobs capacity seam,
+      clamped 0..4); both events carry forecast hints and rotation slots
+      (pool now 14 entries)
+- [x] All legacy event dicts gained the extra_jobs: 0 field shape
+
+Test checks:
+- [x] 6 new checks in v039_test (media-day rep delta through a real
+      delivery, capacity seam 8<->10, rotation occurrence, forecast
+      hints)
+- [x] all 50 suites + playtest bot + pytest green
+
+---
+
 ## Definition of done (every slice)
 
 - [ ] Feature checks above all ticked

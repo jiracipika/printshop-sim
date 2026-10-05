@@ -1,4 +1,24 @@
-# Current handoff — the customers remember (v0.38.0)
+# Current handoff — news & notices (v0.39.0)
+
+## Current active work
+
+Two new daily events. MEDIA_DAY: A-grade deliveries earn +0.3 reputation
+instead of +0.2 (branch in _try_pack_held's delivery rep step, gated on
+today_event.id == "media_day"). BACKORDERS: the board deals 10 jobs for
+the day — new optional event field extra_jobs, surfaced through
+job_board.extra_jobs (clamped 0..4) set in _apply_season_visuals' event
+hook, consumed in JobBoard._fill_to_capacity as capacity + extra_jobs.
+All legacy event dicts gained extra_jobs: 0 for shape consistency;
+Events.FORECAST_HINT covers the new ids. NOTE: Main._refresh_event
+overwrites today_event from Events.for_day — tests that hand-assign
+today_event must not call _refresh_event afterwards.
+
+Local verification: all 50 suites + playtest bot + pytest green (6 new
+checks in tests/v039_test.gd).
+
+---
+
+# Previous handoff — the customers remember (v0.38.0)
 
 ## Current active work
 

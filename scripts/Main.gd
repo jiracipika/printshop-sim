@@ -355,6 +355,8 @@ func _on_menu_today() -> void:
 		lines.append("  risk %+.2f on every print" % float(today_event.failure_delta))
 	if str(season.id) != "calm":
 		lines.append("  %s" % str(season.name))
+	if int(today_event.get("extra_jobs", 0)) > 0:
+		lines.append("  +%d board jobs today" % int(today_event.extra_jobs))
 	lines.append("")
 	var tomorrow := Events.for_day(day_cycle.day + 1)
 	lines.append("TOMORROW -- Day %d" % (day_cycle.day + 1))
@@ -1069,6 +1071,9 @@ func _apply_season_visuals() -> void:
 		_snow.visible = fx and id == "cold_snap"
 	if _window_life != null and _window_life.has_method("set_weather"):
 		_window_life.set_weather(id)
+	# Backorders (v0.39.0): today's event can widen the board.
+	if job_board != null:
+		job_board.extra_jobs = int(today_event.get("extra_jobs", 0))
 
 func _refresh_crate_label() -> void:
 	if _crate_label != null:
@@ -3348,7 +3353,9 @@ func _try_pack_held() -> bool:
 		_rep_event(-0.2)
 		stats.late += 1
 	else:
-		_rep_event(0.2)
+		# Media day (v0.39.0): A-grade deliveries make the local paper.
+		_rep_event(0.3 if str(today_event.get("id", "")) == "media_day" \
+			and final_grade == "A" else 0.2)
 	stats.delivered += 1
 	stats.earned_cents += payout
 	day_earned_today += payout

@@ -34,6 +34,8 @@ var _capacity := 0  # cached fixture-pool size (set on first fill)
 ## difficulty and scale rush payouts. Defaults reproduce the uncapped board.
 var _deal_cap := 5
 var _deal_rush_mult := 1.0
+## Backorders (v0.39.0): extra board slots on top of the fixture capacity.
+var extra_jobs := 0
 ## Regulars (v0.31.0): client name -> completed orders, set by Main before
 ## each deal. Clients with 2+ deliveries write loyalty notes instead of
 ## drawing from the generic pool.
@@ -174,7 +176,8 @@ func _fill_to_capacity() -> void:
 	# fixture list on every refill was pure waste.
 	if _capacity == 0:
 		_capacity = Contract.make_fixture_jobs().size()
-	while _queue.size() < _capacity:
+	var cap := _capacity + clampi(extra_jobs, 0, 4)
+	while _queue.size() < cap:
 		_refill()
 
 ## Return an unstarted job to the front (acceptance was refused, e.g. funds).

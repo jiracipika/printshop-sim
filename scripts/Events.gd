@@ -23,55 +23,78 @@ static func for_day(day: int) -> Dictionary:
 		return QUIET.duplicate(true)
 	var pool := ["quiet", "filament_sale", "quiet", "rush_week",
 		"power_hiccup", "rent_holiday", "quiet", "surplus_stock",
-		"quiet", "steady_hands"]
+		"quiet", "steady_hands", "media_day", "quiet", "backorders",
+		"quiet"]
 	var pick: String = pool[absi(hash("printshop-event-%d" % d)) % pool.size()]
 	return _by_id(pick).duplicate(true)
 
 
 static func _by_id(id: String) -> Dictionary:
 	match id:
+		"media_day":
+			return {"id": id,
+				"name": "Media day — A-grade deliveries in the paper (+0.3 rep)",
+				"spool_price_cents": 1200,
+				"payout_mult": 1.0,
+				"failure_delta": 0.0,
+				"rent_free": false,
+				"extra_jobs": 0}
+		"backorders":
+			return {"id": id,
+				"name": "Backorders — a bigger board today (+2 jobs)",
+				"spool_price_cents": 1200,
+				"payout_mult": 1.0,
+				"failure_delta": 0.0,
+				"rent_free": false,
+				"extra_jobs": 2}
 		"steady_hands":
 			return {"id": id,
 				"name": "Steady hands — prints behave today (risk -0.10)",
 				"spool_price_cents": 1200,
 				"payout_mult": 1.0,
 				"failure_delta": -0.10,
-				"rent_free": false}
+				"rent_free": false,
+    "extra_jobs": 0}
 		"surplus_stock":
 			return {"id": id,
 				"name": "Surplus stock — spools $6 today",
 				"spool_price_cents": 600,
 				"payout_mult": 1.0,
 				"failure_delta": 0.0,
-				"rent_free": false}
+				"rent_free": false,
+    "extra_jobs": 0}
 		"filament_sale":
 			return {"id": id,
 				"name": "Filament sale — spools $8 today",
 				"spool_price_cents": 800,
 				"payout_mult": 1.0,
 				"failure_delta": 0.0,
-				"rent_free": false}
+				"rent_free": false,
+    "extra_jobs": 0}
 		"rush_week":
 			return {"id": id,
 				"name": "Rush week — payouts +25% today",
 				"spool_price_cents": 1200,
 				"payout_mult": 1.25,
 				"failure_delta": 0.0,
-				"rent_free": false}
+				"rent_free": false,
+    "extra_jobs": 0}
 		"power_hiccup":
 			return {"id": id,
 				"name": "Power hiccups — prints riskier today",
 				"spool_price_cents": 1200,
 				"payout_mult": 1.0,
 				"failure_delta": 0.10,
-				"rent_free": false}
+				"rent_free": false,
+    "extra_jobs": 0}
 		"rent_holiday":
 			return {"id": id,
 				"name": "Rent holiday — landlord is away",
 				"spool_price_cents": 1200,
 				"payout_mult": 1.0,
 				"failure_delta": 0.0,
-				"rent_free": true}
+				"rent_free": true,
+    "extra_jobs": 0}
 	return QUIET.duplicate(true)
 
 
@@ -110,6 +133,8 @@ const FORECAST_HINT := {
 	"rent_holiday": "No rent! Take the big jobs.",
 	"surplus_stock": "Spools only $6 — cheapest of the month.",
 	"steady_hands": "Prints behave — a great day for hard jobs.",
+	"media_day": "Ship A-grades — the paper is watching.",
+	"backorders": "More orders on the board — pick the best.",
 }
 
 
