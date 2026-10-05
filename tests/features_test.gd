@@ -190,7 +190,7 @@ func _test_salvage_and_upgrades() -> void:
 	main.sim.failure_seeded = false
 
 	# New upgrades: catalog grew to 8; PEI unlocks flat_side on stability parts.
-	_ok(Upgrades.catalog().size() == 10, "catalog now lists 10 upgrades")
+	_ok(Upgrades.catalog().size() == 11, "catalog now lists 11 upgrades")
 	var tippy: Contract = Contract.new()
 	tippy.id = "T-1"
 	tippy.client = "Test"

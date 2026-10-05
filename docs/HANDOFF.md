@@ -1,4 +1,21 @@
-# Current handoff — news & notices (v0.39.0)
+# Current handoff — grand showcase (v0.40.0)
+
+## Current active work
+
+Shelf upgrade. Upgrades catalog += grand_showcase ($150, 11 entries total
+— Fully kitted milestone and features/upgrades catalog counts re-based to
+11). Main._shelf_cap() = 5 with the upgrade, else 3 — read by the display
+refusal, the restore guard, and the 5 built slot nodes. New milestone
+"Curator" (5 displayed models). NOTE for the next catalog addition: three
+suites pin the catalog count (features_test, upgrades_test, and Fully
+kitted) — update all three together.
+
+Local verification: all 51 suites + playtest bot + pytest green (12 new
+checks in tests/v040_test.gd).
+
+---
+
+# Previous handoff — news & notices (v0.39.0)
 
 ## Current active work
 

@@ -421,8 +421,10 @@ func _achievements() -> Array[Dictionary]:
 				and not recent_grades.has("D") and not recent_grades.has("F")},
 		{"name": "Neighborhood favorite", "hint": "serve 5 clients 3+ times each",
 			"done": _regulars_count() >= 5},
-		{"name": "Fully kitted", "hint": "own all 8 upgrades",
-			"done": upgrades.owned_count() == 8},
+		{"name": "Fully kitted", "hint": "own all 11 upgrades",
+			"done": upgrades.owned_count() == 11},
+		{"name": "Curator", "hint": "display 5 different models (Grand showcase)",
+			"done": _shelf_models.size() >= 5},
 		{"name": "Week one", "hint": "keep the shop open past day 7",
 			"done": day_cycle.day > 7},
 		{"name": "High earner", "hint": "earn $500 lifetime",
@@ -718,7 +720,7 @@ func _load_save() -> void:
 		_shelf_models.clear()
 		for mname in payload.shelf_models:
 			if mname is String and mname != "" and not _shelf_models.has(mname) \
-					and _shelf_models.size() < SHELF_BONUS_MAX_SLOTS:
+					and _shelf_models.size() < _shelf_cap():
 				_shelf_models.append(mname)
 	_refresh_shelf_slots()
 	if payload.has("client_orders") and typeof(payload.client_orders) == TYPE_DICTIONARY:
@@ -1313,7 +1315,7 @@ func _build_environment() -> void:
 	shelf_sign.outline_size = 4
 	shelf_sign.position = SHELF_POS + Vector3(0, 0.28, 0)
 	add_child(shelf_sign)
-	for i in range(SHELF_BONUS_MAX_SLOTS):
+	for i in range(5):
 		var slot := MeshInstance3D.new()
 		var sb := BoxMesh.new()
 		sb.size = Vector3(0.14, 0.12, 0.12)
@@ -2769,6 +2771,11 @@ func _near_finishing() -> bool:
 	return _player != null and _finishing != null \
 		and _player.global_position.distance_to(_finishing.position) <= 1.25
 
+## Grand showcase (v0.40.0): the upgrade widens the shelf to 5 slots
+## (payout cap +10%).
+func _shelf_cap() -> int:
+	return 5 if upgrades.is_owned("grand_showcase") else SHELF_BONUS_MAX_SLOTS
+
 ## Near the display shelf (v0.37.0). Horizontal distance only — the shelf
 ## sits at window height above head level (same pattern as _near_radio).
 func _near_shelf() -> bool:
@@ -2789,8 +2796,8 @@ func _try_display_held(mi: int) -> bool:
 		_set_prompt("%s is already on display" % c.model_name)
 		sfx.play("click")
 		return true
-	if _shelf_models.size() >= SHELF_BONUS_MAX_SLOTS:
-		_set_prompt("The showcase is full (%d models)" % SHELF_BONUS_MAX_SLOTS)
+	if _shelf_models.size() >= _shelf_cap():
+		_set_prompt("The showcase is full (%d models)" % _shelf_cap())
 		sfx.play("buzz")
 		return true
 	_shelf_models.append(c.model_name)

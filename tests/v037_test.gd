@@ -33,7 +33,7 @@ func _run() -> void:
 	main._machine(0)["filament_g"] = 50000
 
 	# Build: shelf board + 3 hidden slots + sign by the window.
-	_ok(main._shelf_parts.size() == 3, "3 display slots built")
+	_ok(main._shelf_parts.size() == 5, "5 display slots built (3 base + 2 grand)")
 	var any_visible := false
 	for slot in main._shelf_parts:
 		if slot.visible:

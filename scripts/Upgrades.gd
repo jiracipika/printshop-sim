@@ -56,6 +56,12 @@ const CATALOG: Array[Dictionary] = [
 		"machine_index": 3,
 	},
 	{
+		"id": "grand_showcase",
+		"name": "Grand showcase",
+		"desc": "Display shelf fits 5 models — payouts up to +10%",
+		"cost_cents": 15000,
+	},
+	{
 		"id": "pei_plate",
 		"name": "Textured PEI plate",
 		"desc": "Grips anything — flat-side printing works on tippy parts",

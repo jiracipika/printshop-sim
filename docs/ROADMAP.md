@@ -695,6 +695,25 @@ Test checks:
 
 ---
 
+## Post-roadmap — v0.40.0 "Grand showcase" — SHIPPED
+
+- [x] New upgrade "Grand showcase" ($150, catalog now 11): the display
+      shelf widens from 3 to 5 models — payout bonus cap +10%
+- [x] _shelf_cap() reads the upgrade dynamically (build 5 slot nodes,
+      restore guard 5, display refusal uses the cap)
+- [x] New milestone "Curator" (display 5 different models); Fully kitted
+      re-based to 11 upgrades
+
+Test checks:
+- [x] 12 new checks in v040_test (catalog entry, base cap 3, purchase via
+      the real path, 5-model display through real flows, slot lights,
+      Curator, +10% payout chain, persistence)
+- [x] cascades updated: features/upgrades catalog counts 10 -> 11,
+      v037 slot count 3 -> 5, Fully kitted 8 -> 11
+- [x] all 51 suites + playtest bot + pytest green
+
+---
+
 ## Definition of done (every slice)
 
 - [ ] Feature checks above all ticked
