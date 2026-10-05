@@ -23,6 +23,7 @@ signal stats_pressed
 signal log_pressed
 signal today_pressed
 signal reset_requested
+signal slot_switch_requested(slot: int)
 signal reset_disarmed
 signal settings_changed(key: String, value)
 
@@ -625,6 +626,24 @@ func _build_settings_panel() -> void:
 	quality_row.add_child(quality_opt)
 	sv.add_child(quality_row)
 
+	var slot_row := HBoxContainer.new()
+	slot_row.name = "SlotRow"
+	var slot_label := Label.new()
+	slot_label.text = "Save slot"
+	slot_label.add_theme_color_override("font_color", COLOR_PAPER)
+	slot_label.add_theme_font_size_override("font_size", 16)
+	slot_row.add_child(slot_label)
+	var slot_opt := OptionButton.new()
+	slot_opt.name = "SlotOption"
+	for n in ["Shop 1", "Shop 2", "Shop 3"]:
+		slot_opt.add_item(n)
+	slot_opt.add_theme_font_size_override("font_size", 15)
+	slot_opt.item_selected.connect(func(idx: int) -> void:
+		if not _settings_applying:
+			slot_switch_requested.emit(idx + 1))
+	slot_row.add_child(slot_opt)
+	sv.add_child(slot_row)
+
 	var reset := Button.new()
 	reset.name = "ResetButton"
 	reset.text = "Reset shop (new game)"
@@ -699,6 +718,8 @@ func show_settings(current: Dictionary) -> void:
 	music.set_pressed_no_signal(bool(current.get("music_enabled", true)))
 	(_settings_panel.get_node("Sheet/SheetBox/HapticsCheck") as CheckBox) \
 		.set_pressed_no_signal(bool(current.get("haptics", true)))
+	(_settings_panel.get_node("Sheet/SheetBox/SlotRow/SlotOption") as OptionButton) \
+		.selected = clampi(int(current.get("active_slot", 1)), 1, 3) - 1
 	var preset: String = str(current.get("quality_preset", "Standard"))
 	var qidx := ["Low", "Standard", "High"].find(preset)
 	(_settings_panel.get_node("Sheet/SheetBox/QualityRow/QualityOption") as OptionButton) \

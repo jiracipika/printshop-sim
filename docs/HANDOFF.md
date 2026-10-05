@@ -1,4 +1,27 @@
-# Current handoff — grand showcase (v0.40.0)
+# Current handoff — save slots (v0.41.0)
+
+## Current active work
+
+Three shops side by side. BrowserSave: slot_path(n), switch_slot(n),
+active_slot(), META file (printshop_meta.json, holds last_slot). Main
+reads META at boot and (when save_path is still the production DEFAULT)
+switches to the active slot; the Settings panel's "Save slot" picker emits
+slot_switch_requested -> request_slot_switch -> save META + switch +
+reload_current_scene. Reset clears only the active slot. clear() SEMANTICS
+(v0.41 critical): pre-boot clears (save_path == DEFAULT) remove ALL slot
+files — that is the "fresh environment" intent every suite relies on;
+slot-mode clears remove only that slot's file. The boot slot-switch is
+gated on save_path == DEFAULT so tests' explicit save_path overrides
+always win. Suites instantiating Main see META-driven slot state — suites
+that need isolation should keep their save_path override (existing
+pattern).
+
+Local verification: all 52 suites + playtest bot + pytest green (14 new
+checks in tests/v041_test.gd).
+
+---
+
+# Previous handoff — grand showcase (v0.40.0)
 
 ## Current active work
 

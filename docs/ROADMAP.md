@@ -714,6 +714,28 @@ Test checks:
 
 ---
 
+## Post-roadmap — v0.41.0 "Save slots" — SHIPPED
+
+- [x] Three save shops side by side: BrowserSave gains slot_path /
+      switch_slot / active_slot + a META file (user://printshop_meta.json)
+      remembering last_slot; boot aims BrowserSave at the active slot
+- [x] Settings panel: "Save slot" picker (Shop 1/2/3) — switching records
+      the choice and reloads the scene into the other shop; Reset clears
+      ONLY the active slot
+- [x] clear() semantics: pre-boot clears (save_path still DEFAULT) remove
+      every slot file (fresh-environment intent); slot-mode clears remove
+      only that slot's file (production reset never wipes other shops)
+
+Test checks:
+- [x] 14 new checks in v041_test (meta boot, per-slot files, isolation
+      both directions, reset scoping, out-of-range fallback)
+- [x] all 52 suites + playtest bot + pytest green
+- [x] Design rule recorded: the boot slot-switch is gated on save_path ==
+      DEFAULT so tests' explicit save_path overrides always win; clear()
+      at DEFAULT wipes all slots (fresh intent), slot-mode clears one
+
+---
+
 ## Definition of done (every slice)
 
 - [ ] Feature checks above all ticked

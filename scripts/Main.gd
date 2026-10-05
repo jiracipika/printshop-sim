@@ -208,6 +208,18 @@ var client_last_grade: Dictionary = {}
 ## False until _ready finishes: boot-time station marks happen before the
 ## save loads, and saving there would clobber the player's file.
 var _boot_ready := false
+## Active save slot (v0.41.0), mirrored from the META file at boot.
+var active_slot := 1
+
+## Switch save slot (v0.41.0): record the choice and reload the scene so
+## every system reads the other slot's file.
+func request_slot_switch(slot: int) -> void:
+	if slot == active_slot:
+		return
+	var bs = load("res://scripts/BrowserSave.gd")
+	bs.save_meta({"last_slot": slot})
+	bs.switch_slot(slot)
+	get_tree().reload_current_scene()
 var _reticle: ColorRect
 var pitch := 0.0
 var yaw := 0.0
@@ -530,6 +542,15 @@ const DOOR_X1 := 2.3
 
 func _ready() -> void:
 	add_to_group("main")
+	# Save slots (v0.41.0): aim BrowserSave at the active slot before any
+	# load/save runs. Defaults to slot 1 when no meta exists.
+	var bs = load("res://scripts/BrowserSave.gd")
+	var meta: Dictionary = bs.load_meta()
+	active_slot = clampi(int(meta.get("last_slot", 1)), 1, 3)
+	# Only the production default path follows the slot; an explicit
+	# save_path (tests) always wins.
+	if bs.save_path == bs.DEFAULT_PATH:
+		bs.switch_slot(active_slot)
 	ledger = Ledger.new()
 	ledger.credit(2500, "opening funds")
 	upgrades = Upgrades.new()
@@ -2386,6 +2407,8 @@ func _build_hud() -> void:
 	main_menu.upgrade_buy_pressed.connect(_on_menu_upgrade_buy)
 	main_menu.settings_pressed.connect(func() -> void:
 		main_menu.show_settings(settings))
+	main_menu.slot_switch_requested.connect(request_slot_switch)
+	settings["active_slot"] = active_slot
 	main_menu.settings_changed.connect(_on_menu_setting)
 	main_menu.stats_pressed.connect(_on_menu_stats)
 	main_menu.log_pressed.connect(_on_menu_log)
