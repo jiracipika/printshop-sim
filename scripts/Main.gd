@@ -313,6 +313,45 @@ func _on_menu_stats() -> void:
 		lines.append(("%s  %s" % ["✓", a.name]) if a.done else ("·  %s — %s" % [a.name, a.hint]))
 	main_menu.show_stats(lines)
 
+## Today panel (v0.35.0): yesterday's recap, today's modifiers, and
+## tomorrow's forecast -- the strategic morning read.
+func _on_menu_today() -> void:
+	var lines: Array[String] = []
+	if daily_earned.is_empty():
+		lines.append("Yesterday: the shop just opened.")
+	else:
+		lines.append("Yesterday: $%s earned" % _cents_str(int(daily_earned[-1])))
+	var yday := day_cycle.day - 1
+	if yday >= 1:
+		var kinds := {}
+		for e in workshop_log.entries():
+			if int(e.day) == yday:
+				kinds[str(e.kind)] = int(kinds.get(str(e.kind), 0)) + 1
+		if kinds.is_empty():
+			lines.append("Quiet day -- nothing in the log.")
+		else:
+			var bits: Array[String] = []
+			for k in ["delivered", "failed", "expired", "cancel", "finished"]:
+				if kinds.has(k):
+					bits.append("%d %s" % [int(kinds[k]), k])
+			if bits.size() > 0:
+				lines.append("Log: " + ", ".join(bits))
+	lines.append("")
+	lines.append("TODAY -- Day %d" % day_cycle.day)
+	lines.append(str(today_event.name))
+	if float(today_event.failure_delta) != 0.0:
+		lines.append("  risk %+.2f on every print" % float(today_event.failure_delta))
+	if str(season.id) != "calm":
+		lines.append("  %s" % str(season.name))
+	lines.append("")
+	var tomorrow := Events.for_day(day_cycle.day + 1)
+	lines.append("TOMORROW -- Day %d" % (day_cycle.day + 1))
+	lines.append("%s -- %s" % [str(tomorrow.name), Events.forecast_hint(day_cycle.day + 1)])
+	if int((day_cycle.day - 1) / 7.0) != int(day_cycle.day / 7.0):
+		var wk := int(day_cycle.day / 7.0) + 1
+		lines.append("  A new week begins: %s" % str(Events.season_for_week(wk).name))
+	main_menu.show_today(lines)
+
 ## Workshop log panel (v0.15.0): the ring buffer, oldest first.
 func _on_menu_log() -> void:
 	var lines: Array[String] = []
@@ -2280,6 +2319,7 @@ func _build_hud() -> void:
 	main_menu.settings_changed.connect(_on_menu_setting)
 	main_menu.stats_pressed.connect(_on_menu_stats)
 	main_menu.log_pressed.connect(_on_menu_log)
+	main_menu.today_pressed.connect(_on_menu_today)
 	main_menu.reset_requested.connect(request_reset_shop)
 	main_menu.reset_disarmed.connect(func() -> void: _reset_armed = false)
 	main_menu.open_menu()

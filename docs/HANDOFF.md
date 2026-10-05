@@ -1,4 +1,26 @@
-# Current handoff — Print Shop 2.0 overhaul (v0.34.0)
+# Current handoff — the morning paper (v0.35.0)
+
+## Current active work
+
+Strategic morning read: a new "Today" menu panel (MainMenu: button
+today_pressed -> Main._on_menu_today -> show_today(lines)). Shows
+yesterday's banked take (daily_earned[-1]) + log-kind counts for
+day_cycle.day - 1 (entries stamped with the CURRENT day via _log_event —
+tests must inject via workshop_log.append(kind, text, yday)), today's
+event/season/failure-delta, and TOMORROW's forecast: Events.for_day(day+1)
+name + Events.forecast_hint (FORECAST_HINT dict maps all 7 event ids to a
+strategy line). Week rolls announce the incoming season
+(Events.season_for_week(week+1)). Derived state only — nothing persisted.
+Panel clone gotcha: cloning a panel block and inserting it before
+func _show_panel landed the code DEAD inside another function — panel
+builders must be real _build_* functions called from the boot build list.
+
+Local verification: all 47 suites + playtest bot + pytest green (12 new
+checks in tests/v035_test.gd).
+
+---
+
+# Previous handoff — Print Shop 2.0 overhaul (v0.34.0)
 
 ## Current active work
 

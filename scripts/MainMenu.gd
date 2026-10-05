@@ -21,6 +21,7 @@ signal upgrade_buy_pressed(id: String)
 signal settings_pressed
 signal stats_pressed
 signal log_pressed
+signal today_pressed
 signal reset_requested
 signal reset_disarmed
 signal settings_changed(key: String, value)
@@ -38,6 +39,7 @@ var _settings_panel: Control
 var _howto_panel: Control
 var _stats_panel: Control
 var _log_panel: Control
+var _today_panel: Control
 var _settings_applying := false
 ## Couch menus (v0.28.0): the Play button, focused whenever the menu opens.
 var _play_button: Button
@@ -48,6 +50,7 @@ var _settings_open := false
 var _howto_open := false
 var _stats_open := false
 var _log_open := false
+var _today_open := false
 
 const COLOR_STEEL := Color("#202B2B")
 const COLOR_PAPER := Color("#EEE5D3")
@@ -70,7 +73,7 @@ func open_menu() -> void:
 	disarm_reset_button()
 	if _play_button != null:
 		_play_button.grab_focus()
-	for panel in [_contracts_panel, _upgrades_panel, _settings_panel, _howto_panel, _stats_panel, _log_panel]:
+	for panel in [_contracts_panel, _upgrades_panel, _settings_panel, _howto_panel, _stats_panel, _log_panel, _today_panel]:
 		if panel != null:
 			panel.visible = false
 	_contracts_open = false
@@ -79,6 +82,8 @@ func open_menu() -> void:
 	_howto_open = false
 	_stats_open = false
 	_log_open = false
+	_today_open = false
+	_today_open = false
 	is_open()
 
 func close_menu() -> void:
@@ -86,7 +91,7 @@ func close_menu() -> void:
 	var focused := get_viewport().gui_get_focus_owner()
 	if focused != null:
 		focused.release_focus()
-	for panel in [_contracts_panel, _upgrades_panel, _settings_panel, _howto_panel, _stats_panel, _log_panel]:
+	for panel in [_contracts_panel, _upgrades_panel, _settings_panel, _howto_panel, _stats_panel, _log_panel, _today_panel]:
 		if panel != null:
 			panel.visible = false
 	_contracts_open = false
@@ -95,13 +100,15 @@ func close_menu() -> void:
 	_howto_open = false
 	_stats_open = false
 	_log_open = false
+	_today_open = false
+	_today_open = false
 	is_open()
 
 ## True while any subpanel is showing — Esc should step back to the main
 ## panel rather than close the menu.
 func subpanel_open() -> bool:
 	return visible and (_contracts_open or _upgrades_open or _settings_open \
-		or _howto_open or _stats_open or _log_open)
+		or _howto_open or _stats_open or _log_open or _today_open)
 
 func contracts_visible() -> bool:
 	return visible and _contracts_open
@@ -218,6 +225,10 @@ func _build() -> void:
 	log_btn.pressed.connect(func() -> void: log_pressed.emit())
 	buttons.add_child(log_btn)
 
+	var today_btn := _make_button("Today", "Today")
+	today_btn.pressed.connect(func() -> void: today_pressed.emit())
+	buttons.add_child(today_btn)
+
 	var quit := _make_button("Quit", "Quit")
 	quit.pressed.connect(func() -> void: get_tree().quit())
 	buttons.add_child(quit)
@@ -226,7 +237,7 @@ func _build() -> void:
 	# discovery proved unreliable here, so the row is wired by hand
 	# (left/right along the row, with a wrap from Quit back to Play).
 	var row: Array[Button] = [play, contracts, upgrades, settings, howto,
-		stats_btn, log_btn, quit]
+		stats_btn, log_btn, today_btn, quit]
 	for i in range(row.size()):
 		row[i].focus_neighbor_left = row[(i - 1 + row.size()) % row.size()].get_path()
 		row[i].focus_neighbor_right = row[(i + 1) % row.size()].get_path()
@@ -252,6 +263,7 @@ func _build() -> void:
 	_build_howto_panel()
 	_build_stats_panel()
 	_build_log_panel()
+	_build_today_panel()
 
 func _apply_quit_visibility() -> void:
 	if _root == null:
@@ -806,6 +818,13 @@ func _build_stats_panel() -> void:
 		is_open()))
 
 ## lines: preformatted stat strings from Main.
+func show_today(lines: Array[String]) -> void:
+	var body: Label = _today_panel.get_node("Sheet/SheetBox/Body")
+	body.text = "\n".join(lines)
+	_show_panel(_today_panel)
+	_today_open = true
+	is_open()
+
 func show_stats(lines: Array[String]) -> void:
 	var body: Label = _stats_panel.get_node("Sheet/SheetBox/Body")
 	body.text = "\n".join(lines)
@@ -814,6 +833,57 @@ func show_stats(lines: Array[String]) -> void:
 	is_open()
 
 ## --- log panel (v0.15.0) ---------------------------------------------------------
+
+func _build_today_panel() -> void:
+	_today_panel = Control.new()
+	_today_panel.name = "TodayPanel"
+	_today_panel.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_today_panel.mouse_filter = Control.MOUSE_FILTER_STOP
+	_today_panel.visible = false
+	_root.add_child(_today_panel)
+
+	var dim := ColorRect.new()
+	dim.color = Color(COLOR_STEEL, 0.92)
+	dim.set_anchors_preset(Control.PRESET_FULL_RECT)
+	dim.mouse_filter = Control.MOUSE_FILTER_STOP
+	_today_panel.add_child(dim)
+
+	var sheet := PanelContainer.new()
+	sheet.name = "Sheet"
+	sheet.set_anchors_preset(Control.PRESET_FULL_RECT)
+	sheet.offset_left = 260.0
+	sheet.offset_top = 130.0
+	sheet.offset_right = -260.0
+	sheet.offset_bottom = -300.0
+	sheet.add_theme_stylebox_override("panel", _sheet_style())
+	_today_panel.add_child(sheet)
+
+	var sv := VBoxContainer.new()
+	sv.name = "SheetBox"
+	sv.add_theme_constant_override("separation", 12)
+	sheet.add_child(sv)
+
+	var h1 := Label.new()
+	h1.name = "Title"
+	h1.text = "TODAY"
+	h1.add_theme_color_override("font_color", COLOR_PAPER)
+	h1.add_theme_font_size_override("font_size", 28)
+	sv.add_child(h1)
+
+	var body := Label.new()
+	body.name = "Body"
+	body.text = ""
+	body.add_theme_color_override("font_color", COLOR_PAPER)
+	body.add_theme_font_size_override("font_size", 17)
+	sv.add_child(body)
+
+	sv.add_child(_make_back_button(func() -> void:
+		_today_panel.visible = false
+		_stats_open = false
+		is_open()))
+
+## lines: preformatted stat strings from Main.
+
 
 func _build_log_panel() -> void:
 	_log_panel = Control.new()
@@ -970,9 +1040,10 @@ func _focus_first_button(panel: Control) -> void:
 
 func _show_panel(panel: Control) -> void:
 	disarm_reset_button()
-	for p in [_contracts_panel, _upgrades_panel, _settings_panel, _howto_panel, _stats_panel, _log_panel]:
+	for p in [_contracts_panel, _upgrades_panel, _settings_panel, _howto_panel, _stats_panel, _log_panel, _today_panel]:
 		if p != null:
 			p.visible = p == panel
+	_today_open = panel == _today_panel
 	_contracts_open = panel == _contracts_panel
 	_upgrades_open = panel == _upgrades_panel
 	_settings_open = panel == _settings_panel

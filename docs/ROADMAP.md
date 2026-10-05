@@ -604,6 +604,24 @@ Test checks:
 
 ---
 
+## Post-roadmap — v0.35.0 "The morning paper" — SHIPPED
+
+- [x] New "Today" menu panel (button between Log and Quit, focus chain
+      wired): yesterday's recap (banked take + log-kind counts for the
+      prior day), today's event/season/risk modifiers, and TOMORROW'S
+      FORECAST — event name plus a strategy hint per event id
+      (Events.FORECAST_HINT), with week-roll announcing the incoming
+      season
+- [x] Events.forecast_hint(day) maps every event id to one strategy line
+
+Test checks:
+- [x] 12 new checks in v035_test (panel build/open, day-1 placeholder,
+      today/forecast naming, forecast sweep across days, week roll,
+      recap earnings + log kinds, focus chain position)
+- [x] all 47 suites + playtest bot + pytest green
+
+---
+
 ## Definition of done (every slice)
 
 - [ ] Feature checks above all ticked

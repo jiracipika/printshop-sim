@@ -101,6 +101,22 @@ const CALM_SEASON := {
 }
 
 
+## Tomorrow-forecast hints (v0.35.0) — one strategy line per event id.
+const FORECAST_HINT := {
+	"quiet": "A calm day. Good for long prints.",
+	"filament_sale": "Spools are $8 — stock up.",
+	"rush_week": "Payouts +25% — chase the board.",
+	"power_hiccup": "Prints riskier today — calm orientations.",
+	"rent_holiday": "No rent! Take the big jobs.",
+	"surplus_stock": "Spools only $6 — cheapest of the month.",
+	"steady_hands": "Prints behave — a great day for hard jobs.",
+}
+
+
+static func forecast_hint(day: int) -> String:
+	return FORECAST_HINT.get(_by_id(for_day(day).id).id, "A calm day.")
+
+
 static func season_for_week(week: int) -> Dictionary:
 	var w := maxi(week, 1)
 	if w == 1:
