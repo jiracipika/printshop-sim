@@ -1,4 +1,34 @@
-# Current handoff — regulars (v0.31.0)
+# Current handoff — loyalty & calm (v0.32.0)
+
+## Current active work
+
+Loyalty pays. Main._loyalty_mult(client) = 1 + 0.05 x min(prior orders, 3)
+— applied to the order base in _try_pack_held BEFORE the reputation chain
+(so the documented payout order is now grade x loyalty -> rep -> season ->
+event -> late -> tip), counting orders completed BEFORE the current one.
+The bonus appears on ALL THREE delivery prompt branches ("returning client
+x1.05") — the first cut only tagged the plain branch and same-day
+deliveries (the common case) never showed it. New daily event
+steady_hands (failure_delta -0.10, existing v0.7 plumbing) joined the
+rotation — pool is 10 entries now, which shifts every day's rolled event
+and moved v023's surplus-stock probe day past week 1 (its chalkboard-week
+assertion is week-agnostic now).
+
+Playtest bot re-verified: the deterministic curve is now 18 deliveries /
+$1,884 / rep 4.7 / zero debt by day 8 (loyalty nudges the total; floors
+unchanged).
+
+TEST BUG PATTERN worth remembering: tests that hand-set state for math
+checks (client_orders = 1..5) must not then run e2e loops over the SAME
+keys — use a distinct client name for the loop or the assertions fight
+the pollution.
+
+Local verification: all 45 suites + playtest bot + pytest green (9 new
+checks in tests/v032_test.gd).
+
+---
+
+# Previous handoff — regulars (v0.31.0)
 
 ## Current active work
 

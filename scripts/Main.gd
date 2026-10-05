@@ -318,6 +318,11 @@ func _on_menu_log() -> void:
 		lines.append("Day %d · [%s] %s" % [int(e.day), str(e.kind), str(e.text)])
 	main_menu.show_log(lines)
 
+## Loyalty bonus (v0.32.0): +5% per prior completed order from the same
+## client, capped at +15%. Applied to the order base before reputation.
+func _loyalty_mult(client: String) -> float:
+	return 1.0 + 0.05 * clampi(int(client_orders.get(client, 0)), 0, 3)
+
 ## Regulars (v0.31.0): clients with 3+ completed orders.
 func _regulars_count() -> int:
 	var n := 0
@@ -3089,7 +3094,11 @@ func _try_pack_held() -> bool:
 	# Final copy: aggregate the order grade and pay out exactly once.
 	var final_grade: String = Contract.aggregate_grades(c.copy_grades)
 	var multitag := " ×%d" % c.parts_total if c.is_multi_part() else ""
-	var eff_payout: int = roundi(c.order_payout_cents() * QualityCheck.quality_multiplier(final_grade))
+	# Loyalty (v0.32.0): returning clients pay a little better. Counts the
+	# orders completed BEFORE this one.
+	var loyalty := _loyalty_mult(c.client)
+	var eff_payout: int = roundi(c.order_payout_cents()
+		* QualityCheck.quality_multiplier(final_grade) * loyalty)
 	if not _advance(c, Contract.State.PACKED):
 		return true
 	if not _advance(c, Contract.State.DELIVERED):
@@ -3127,15 +3136,18 @@ func _try_pack_held() -> bool:
 	sfx.play("cash")
 	_rumble(0.25, 0.5, 0.25)
 	var tip: int = payout - roundi(float(payout) / 1.10)
+	var loyal_tag := " · returning client x%.2f" % loyalty if loyalty > 1.0 \
+		else ""
 	if late:
-		_set_prompt("Delivered LATE %s%s (%s) — $%s · rep down" % [c.model_name,
-			multitag, final_grade, _cents_str(payout)])
+		_set_prompt("Delivered LATE %s%s (%s) — $%s · rep down%s" % [c.model_name,
+			multitag, final_grade, _cents_str(payout), loyal_tag])
 	elif same_day:
-		_set_prompt("Same-day tip! Delivered %s%s (%s) — $%s incl. $%s tip" % [c.model_name,
-			multitag, final_grade, _cents_str(payout), _cents_str(tip)])
+		_set_prompt("Same-day tip! Delivered %s%s (%s) — $%s incl. $%s tip%s" % [
+			c.model_name, multitag, final_grade, _cents_str(payout),
+			_cents_str(tip), loyal_tag])
 	else:
-		_set_prompt("Delivered %s%s (%s) — $%s · rep up" % [c.model_name,
-			multitag, final_grade, _cents_str(payout)])
+		_set_prompt("Delivered %s%s (%s) — $%s%s · rep up" % [c.model_name,
+			multitag, final_grade, _cents_str(payout), loyal_tag])
 	return true
 
 ## A wrong spool color caps the grade at B (the part still ships).
@@ -3461,7 +3473,8 @@ func reputation_multiplier() -> float:
 	return 0.8 + (reputation / 5.0) * 0.4
 
 ## Single source of truth for what a delivery actually pays: station grade
-## base -> reputation -> season -> daily event -> late half -> same-day tip.
+## x client loyalty (v0.32.0) -> reputation -> season -> daily event ->
+## late half -> same-day tip.
 ## Tests pass the PRE-delivery reputation (the delivery bumps it afterwards).
 func _finalize_payout(base: int, late: bool, m: Dictionary, rep := -1.0) -> int:
 	var mult := reputation_multiplier() if rep < 0.0 else rep

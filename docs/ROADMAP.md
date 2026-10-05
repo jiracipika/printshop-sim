@@ -528,6 +528,28 @@ Test checks:
 
 ---
 
+## Post-roadmap — v0.32.0 "Loyalty & calm" — SHIPPED
+
+- [x] Loyalty bonus: returning clients pay +5% per prior completed order,
+      capped +15% (4th+ order) — applied inside the order base before
+      reputation, surfaced on every delivery prompt branch as
+      "returning client x1.05"; uses orders completed BEFORE the current
+      one. The playtest bot's curve shifts slightly ($1,923 -> $1,884 with
+      the deterministic re-roll) and stays healthy
+- [x] New daily event "Steady hands": failure risk -0.10 for the day
+      (rides the existing failure_delta plumbing), joins the rotation
+      (now 10 entries)
+
+Test checks:
+- [x] 9 new checks in v032_test (multiplier table 1.0..1.15 with the cap,
+      end-to-end second-delivery payout through the documented chain,
+      prompt naming the bonus, before-count semantics, event rotation +
+      delta)
+- [x] all 45 suites + playtest bot + pytest green (v023's chalkboard-week
+      assertion made week-agnostic after the pool shift)
+
+---
+
 ## Definition of done (every slice)
 
 - [ ] Feature checks above all ticked

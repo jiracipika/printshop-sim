@@ -136,11 +136,13 @@ func _test_operations() -> void:
 		_ok(main3._chalk_label.text.contains("Week ")
 			and main3._chalk_label.text.contains("☃"),
 			"chalkboard names the week and season icon")
-		# Calm weeks keep no trailing space after the week number.
+		# Calm weeks keep no trailing space after the week number
+		# (week-agnostic: the event pool shift moved the probe day).
 		main3.season = Events.CALM_SEASON.duplicate(true)
 		main3._update_chalkboard()
-		_ok(main3._chalk_label.text.contains("· Week 1\n")
-			and not main3._chalk_label.text.contains("Week 1 \n"),
+		var wk := int((main3.day_cycle.day - 1) / 7.0) + 1
+		_ok(main3._chalk_label.text.contains("· Week %d\n" % wk)
+			and not main3._chalk_label.text.contains("Week %d \n" % wk),
 			"calm chalkboard line has no trailing space")
 		main3.queue_free()
 		await physics_frame

@@ -22,13 +22,21 @@ static func for_day(day: int) -> Dictionary:
 	if d == 1:
 		return QUIET.duplicate(true)
 	var pool := ["quiet", "filament_sale", "quiet", "rush_week",
-		"power_hiccup", "rent_holiday", "quiet", "surplus_stock"]
+		"power_hiccup", "rent_holiday", "quiet", "surplus_stock",
+		"quiet", "steady_hands"]
 	var pick: String = pool[absi(hash("printshop-event-%d" % d)) % pool.size()]
 	return _by_id(pick).duplicate(true)
 
 
 static func _by_id(id: String) -> Dictionary:
 	match id:
+		"steady_hands":
+			return {"id": id,
+				"name": "Steady hands — prints behave today (risk -0.10)",
+				"spool_price_cents": 1200,
+				"payout_mult": 1.0,
+				"failure_delta": -0.10,
+				"rent_free": false}
 		"surplus_stock":
 			return {"id": id,
 				"name": "Surplus stock — spools $6 today",
