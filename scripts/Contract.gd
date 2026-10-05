@@ -62,6 +62,9 @@ const VALID_COLORS: Array[String] = ["Clay", "Sage", "Honey"]
 ## payout_cents and material_cost_cents stay PER COPY; the whole order pays
 ## out once, when the last copy is packed. Fixture jobs stay single-part.
 @export var parts_total: int = 1
+## Customer voice (v0.30.0): a short handwritten request on the order
+## card. Flavor only — never affects grading or payouts. "" = no note.
+@export var note: String = ""
 ## Copies packed so far (packed parts stack on the packing table).
 @export var parts_packed: int = 0
 ## Per-copy delivery grades recorded at pack time, in pack order. The order
@@ -207,6 +210,7 @@ static func make_fixture_jobs() -> Array:
 	planter.color = "Clay"
 	planter.layers = 210
 	planter.deadline_days = 2
+	planter.note = "The cuttings are ready — don't keep them waiting."
 	jobs.append(planter)
 
 	var clips := new()
@@ -273,6 +277,7 @@ static func make_fixture_jobs() -> Array:
 	bike.color = "Honey"
 	bike.layers = 440
 	bike.deadline_days = 6
+	bike.note = "Track day on the 14th — we're counting on it."
 	jobs.append(bike)
 
 	var ramen := new()
@@ -334,6 +339,22 @@ const GEN_MODELS: Array[String] = [
 ]
 const GEN_BASE_PAYOUT: Array[int] = [4200, 6400, 8750, 9800, 9000]
 
+## Handwritten client notes (v0.30.0) — flavor only.
+const GEN_NOTES: Array[String] = [
+	"Make it sturdy — it gets dropped.",
+	"Needed for a market stall this weekend.",
+	"My old one finally snapped in half.",
+	"The dog ate the last one. Long story.",
+	"Color matters more than you'd think.",
+	"It's a gift — no logos, please.",
+	"Our last supplier ghosted us.",
+	"Second order this month — you're reliable.",
+	"Boss's orders. Don't ask.",
+	"If it rattles, we send it back.",
+	"The kids will destroy this. Fair warning.",
+	"Lighter is better — it travels.",
+]
+
 
 ## Deterministic contract for shop `day`, board slot `index`. Same inputs ->
 ## same contract, forever. `day >= 1` also bumps difficulty odds slightly so
@@ -389,4 +410,8 @@ static func generate(day: int, index: int, max_difficulty := 5) -> Contract:
 	# never move. payout_cents stays per copy; the order pays parts_total x.
 	if rng.randf() < 0.25:
 		c.parts_total = 3 if rng.randf() < 0.4 else 2
+	# Customer voice (v0.30.0): some clients add a handwritten note. This is
+	# the new last draw — everything pinned above keeps its value.
+	if rng.randf() < 0.45:
+		c.note = GEN_NOTES[rng.randi_range(0, GEN_NOTES.size() - 1)]
 	return c

@@ -1,4 +1,26 @@
-# Current handoff — atmosphere & onboarding (v0.29.0)
+# Current handoff — customer voices & shop history (v0.30.0)
+
+## Current active work
+
+Post-roadmap flavor drop. Contracts carry a `note` (flavor only): ~45% of
+generated jobs draw from Contract.GEN_NOTES (the NEW last generator draw —
+everything pinned above keeps its value), two fixture jobs are hand-written,
+cards show the note in quotes via a NoteTag label, and the field rides
+available_summaries + snapshot/restore (optional key in _contract_from —
+pre-v0.30 payloads restore with ""). The chalkboard gains an earnings
+sparkline: daily_earned (last 7 days) + day_earned_today persist (validators
+reject negatives/fractions/over-cap), _on_day_changed banks the running
+total into the window, and _earnings_sparkline renders one block glyph per
+day scaled against the best day (zero days are dots; empty history shows a
+placeholder line).
+
+Local verification: all 43 suites + playtest bot + pytest green (18 new
+checks in tests/v030_test.gd). Screenshot confirmed the sparkline glyphs
+render on the chalkboard.
+
+---
+
+# Previous handoff — atmosphere & onboarding (v0.29.0)
 
 ## Current active work
 

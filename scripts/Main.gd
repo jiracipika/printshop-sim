@@ -181,6 +181,11 @@ var _current_sky_month := -1
 var _season_energy := 1.2
 ## Last five delivery grades, oldest first (v0.23.0) — feeds Perfectionist.
 var recent_grades: Array[String] = []
+## Daily earnings history (v0.30.0): the last 7 days' take, plus the running
+## total for the day in progress; both persist. The chalkboard renders a
+## sparkline from the history.
+var daily_earned: Array[int] = []
+var day_earned_today: int = 0
 ## False until _ready finishes: boot-time station marks happen before the
 ## save loads, and saving there would clobber the player's file.
 var _boot_ready := false
@@ -624,6 +629,14 @@ func _load_save() -> void:
 		for g in payload.recent_grades:
 			if g is String and g in ["A", "B", "C", "D", "F"]:
 				recent_grades.append(g)
+	if payload.has("daily_earned") and typeof(payload.daily_earned) == TYPE_ARRAY:
+		daily_earned.clear()
+		for v in payload.daily_earned:
+			daily_earned.append(maxi(int(v), 0))
+		if daily_earned.size() > 7:
+			daily_earned = daily_earned.slice(daily_earned.size() - 7)
+	if payload.has("day_earned_today"):
+		day_earned_today = maxi(int(payload.day_earned_today), 0)
 	# Silently adopt anything already earned at load time (a persisted set
 	# can lag the save — the check only runs while the HUD renders): a boot
 	# must never toast old news.
@@ -684,6 +697,8 @@ func _save_game() -> void:
 			"achv_toasted": _achv_toasted,
 			"stations_heard": _stations_heard,
 			"recent_grades": recent_grades,
+			"daily_earned": daily_earned,
+			"day_earned_today": day_earned_today,
 		})
 	var ok: bool = load("res://scripts/BrowserSave.gd").save_payload(payload)
 	save_status_line = "%s at %s" % ["saved ok" if ok else "save FAILED",
@@ -3082,6 +3097,7 @@ func _try_pack_held() -> bool:
 		_rep_event(0.2)
 	stats.delivered += 1
 	stats.earned_cents += payout
+	day_earned_today += payout
 	_guide("delivered")
 	if reputation >= 4.0:
 		_guide("stars")
@@ -3361,6 +3377,12 @@ func _on_day_changed(new_day: int) -> void:
 		Events.tier_max_difficulty(tier), Events.tier_rush_mult(tier))
 	_refresh_event()
 	_morning_bell()
+	# Shop history (v0.30.0): bank yesterday's take onto the chalkboard
+	# sparkline, newest last, keep a week.
+	daily_earned.append(day_earned_today)
+	if daily_earned.size() > 7:
+		daily_earned = daily_earned.slice(daily_earned.size() - 7)
+	day_earned_today = 0
 	var missed_note := ""
 	if not expired.is_empty():
 		stats.missed += expired.size()
@@ -3800,6 +3822,23 @@ func _update_hud() -> void:
 	_check_milestone_toasts()
 	_update_chalkboard()
 
+## Chalkboard sparkline (v0.30.0): one block glyph per stored day, scaled
+## against the best day; quiet days stay dots.
+func _earnings_sparkline() -> String:
+	if daily_earned.is_empty():
+		return "No history yet — deliver something."
+	var top := 1
+	for v in daily_earned:
+		top = maxi(top, int(v))
+	const RAMP := "▁▂▃▄▅▆▇█"
+	var out := "Last days: "
+	for v in daily_earned:
+		if int(v) <= 0:
+			out += "·"
+		else:
+			out += RAMP[clampi(int(float(v) / float(top) * 7.0), 0, 7)]
+	return out
+
 func _update_chalkboard() -> void:
 	if _chalk_label == null:
 		return
@@ -3809,10 +3848,11 @@ func _update_chalkboard() -> void:
 	var week := int((day_cycle.day - 1) / 7.0) + 1
 	var icon := _season_icon(str(season.get("id", "calm")))
 	var week_line := "Week %d %s" % [week, icon] if icon != "" else "Week %d" % week
-	var text := "SHOP LEDGER\nDay %d · %s\nDelivered: %d\nMissed: %d\nEarned: $%s\nRep %s %.1f" % [
+	var text := "SHOP LEDGER\nDay %d · %s\nDelivered: %d\nMissed: %d\nEarned: $%s\n%s\nRep %s %.1f" % [
 		day_cycle.day, week_line,
 		int(stats.delivered), int(stats.missed),
 		_cents_str(int(stats.earned_cents)),
+		_earnings_sparkline(),
 		stars, reputation]
 	if text != _chalk_cache:
 		_chalk_cache = text

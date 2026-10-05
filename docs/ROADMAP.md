@@ -484,6 +484,28 @@ Test checks:
 
 ---
 
+## Post-roadmap — v0.30.0 "Customer voices & shop history" — SHIPPED
+
+- [x] Client notes on job cards: ~45% of generated orders carry a
+      deterministic handwritten flavor note (GEN_NOTES, the new last
+      generator draw — every pinned (day, slot) field untouched); two
+      fixture jobs carry hand-written notes; cards render the note in
+      quotes under the title; notes ride summaries, board payloads
+      (optional key — pre-v0.30 saves restore bare) and never affect
+      gameplay
+- [x] Chalkboard earnings history: the last 7 days' take persist
+      (daily_earned + day_earned_today, validated), rollover banks the
+      running day total, and the chalkboard renders a unicode-block
+      sparkline scaled against the best day ("Last days: ▁▄▅█")
+
+Test checks:
+- [x] 18 new checks in v030_test (determinism, flavor-table membership,
+      ~45% rate, fixture notes, summaries/JSON/old-save paths, card
+      rendering, banking/cap/persistence/sparkline, validator rejects)
+- [x] all 43 suites + playtest bot + pytest green
+
+---
+
 ## Definition of done (every slice)
 
 - [ ] Feature checks above all ticked

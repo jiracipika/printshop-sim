@@ -112,6 +112,10 @@ static func validate(payload: Variant) -> Dictionary:
 		return {}
 	if not _recent_grades_valid(p):
 		return {}
+	if not _daily_earned_valid(p):
+		return {}
+	if not _day_earned_valid(p):
+		return {}
 
 	var out: Dictionary = p.duplicate(true)
 	out["version"] = int(p["version"])
@@ -182,6 +186,37 @@ static func _settings_valid(p: Dictionary) -> bool:
 		if rs != floorf(rs) or rs < 0.0 or rs > 2.0:
 			return false
 	return true
+
+
+## Optional "daily_earned" key (v0.30.0): absent = fine; present must be an
+## array of at most 7 non-negative whole ints.
+static func _daily_earned_valid(p: Dictionary) -> bool:
+	if not p.has("daily_earned"):
+		return true
+	if typeof(p["daily_earned"]) != TYPE_ARRAY:
+		return false
+	if p["daily_earned"].size() > 7:
+		return false
+	for v in p["daily_earned"]:
+		var t := typeof(v)
+		if t != TYPE_INT and t != TYPE_FLOAT:
+			return false
+		var f := float(v)
+		if f != floorf(f) or f < 0.0:
+			return false
+	return true
+
+
+## Optional "day_earned_today" key (v0.30.0): absent = fine; present must be
+## a non-negative whole int.
+static func _day_earned_valid(p: Dictionary) -> bool:
+	if not p.has("day_earned_today"):
+		return true
+	var t := typeof(p["day_earned_today"])
+	if t != TYPE_INT and t != TYPE_FLOAT:
+		return false
+	var f := float(p["day_earned_today"])
+	return f == floorf(f) and f >= 0.0
 
 
 ## Optional "recent_grades" key (v0.23.0): absent = fine; present must be an

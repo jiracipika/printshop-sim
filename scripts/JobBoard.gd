@@ -165,6 +165,7 @@ func available_summaries() -> Array[Dictionary]:
 			"color": c.color,
 			"competing": c.competing,
 			"parts_total": c.parts_total,
+			"note": c.note,
 		})
 	return out
 
@@ -192,6 +193,7 @@ func snapshot_payload() -> Dictionary:
 			"offered_day": c.offered_day,
 			"color": c.color,
 			"parts_total": c.parts_total,
+			"note": c.note,
 		})
 	return {"day": _gen_day, "cycle": _fixture_cycle, "jobs": jobs}
 
@@ -263,6 +265,12 @@ static func _contract_from(j: Variant) -> Contract:
 		parts = int(d["parts_total"])
 		if parts < 1 or parts > 3:
 			return null
+	# notes arrived with v0.30.0 — older saves omit it (optional, plain str).
+	var note := ""
+	if d.has("note"):
+		if not (d["note"] is String):
+			return null
+		note = d["note"]
 	var flags: Array[String] = []
 	for f in d["risk_flags"]:
 		if not (f is String) or not (f as String in Contract.VALID_RISK_FLAGS):
@@ -283,6 +291,7 @@ static func _contract_from(j: Variant) -> Contract:
 	c.offered_day = int(d["offered_day"])
 	c.color = d["color"]
 	c.parts_total = parts
+	c.note = note
 	c.state = Contract.State.OFFERED
 	return c
 

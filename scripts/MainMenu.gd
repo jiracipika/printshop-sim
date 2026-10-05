@@ -1058,6 +1058,17 @@ func _make_card(s: Dictionary) -> PanelContainer:
 		comp_tag.add_theme_color_override("font_color", COLOR_TERRA)
 		comp_tag.add_theme_font_size_override("font_size", 12)
 		meta.add_child(comp_tag)
+	# Customer voice (v0.30.0): the client's handwritten note, if any.
+	var note_text := str(s.get("note", ""))
+	if note_text != "":
+		var note := Label.new()
+		note.name = "NoteTag"
+		note.text = "\u201C%s\u201D" % note_text
+		note.add_theme_color_override("font_color", COLOR_MUTED)
+		note.add_theme_font_size_override("font_size", 13)
+		note.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		note.custom_minimum_size = Vector2(0, 0)
+		v.add_child(note)
 	# Multi-part orders (v0.18.0): the payout shown is per copy.
 	if int(s.get("parts_total", 1)) > 1:
 		var parts_tag := Label.new()
