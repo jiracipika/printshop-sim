@@ -1,4 +1,43 @@
-# Current handoff — the long game (v0.33.0)
+# Current handoff — Print Shop 2.0 overhaul (v0.34.0)
+
+## Current active work
+
+Overhaul built by TWO CONCURRENT SUBAGENTS in isolated clones
+(psim-station-a, psim-window-b), merged centrally. Slice A delivered
+scripts/FinishingStation.gd + tests/v034_station_test.gd (48 checks);
+slice B delivered scripts/WindowLife.gd + tests/v034_windowlife_test.gd
+(31 checks). Neither touched existing files — integration happened only
+in Main.gd afterwards. Clone-isolation is the house way to parallelize:
+brief = API contract + hazards + "new files only", merge = copy the new
+files, wire Main.gd, integration-test.
+
+FINISHING STATION: bench at (3.0, 0, 2.35) rotated 225 deg — RELOCATED
+from (0.5, 0, 2.15) because its collider sat in grab_test's placement
+corridor along x~0 (5 grab_test failures; relocating fixed all). E with a
+carried part within 1.25 m (_near_finishing) -> _try_finish_held: reads
+the RAW grade via QualityCheck.grade on the machine's grade_snapshot, F is
+refused, FinishingStation.try_finish bumps one letter, m["finished"] set
+(one pass per part; cleared on fresh collect), applied at pack time
+BEFORE _cap_grade_for_color (wrong-color still capped). Log kind
+"finished". WINDOW LIFE: birds + van self-animated; Main hooks
+set_weather(id) in _apply_season_visuals and set_nightness(nightness) in
+_apply_daylight. Actors sit IN FRONT of the panes (z -2.841/-2.842) —
+nothing behind the opaque window is visible; consts BIRD_Z/VAN_Z in
+WindowLife.gd flip if the glass ever becomes real.
+
+v028 FLAKE FIXED (both subagents independently proved it pre-existing):
+the input tests now use a poll-wait pattern (_wait_until(cond, frames))
+and — critically — RELEASE simulated buttons before polling
+(BaseButton activates on release; holding the button through the poll
+starved the activation). 6/6 stable runs after; the settle-frame rule
+remains for focus grabs.
+
+Local verification: all 46 suites + both harnesses + pytest green, ladder
+run twice clean; both slice suites stable 3+ runs; v028 stable 6 runs.
+
+---
+
+# Previous handoff — the long game (v0.33.0)
 
 ## Current active work
 
