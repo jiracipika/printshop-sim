@@ -506,6 +506,28 @@ Test checks:
 
 ---
 
+## Post-roadmap — v0.31.0 "Regulars" — SHIPPED
+
+- [x] Client memory: completed orders count per client (client_orders,
+      persisted + validated); deliveries build relationships
+- [x] Loyalty notes: from their 2nd completed order on, a returning
+      client's freshly dealt jobs carry deterministic loyalty lines
+      (LOYALTY_NOTES, hash-pinned per job id, stamped at deal time so the
+      persisted queue never flickers); 3+ orders = a "regular" in Stats
+- [x] Stats panel counts regulars; new milestone "Neighborhood favorite"
+      (serve 5 clients 3+ times each)
+- [x] Flavor only — payouts, deadlines and grading untouched (the
+      playtest bot's reference curve replays exactly)
+
+Test checks:
+- [x] 13 new checks in v031_test (memory increments per delivery, regular
+      thresholds, loyalty stamping on a real dealt board vs generic pool,
+      per-job-id determinism, persistence + reload incl. board regulars,
+      validator rejects, stats + milestone thresholds)
+- [x] all 44 suites + playtest bot + pytest green
+
+---
+
 ## Definition of done (every slice)
 
 - [ ] Feature checks above all ticked

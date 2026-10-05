@@ -1,4 +1,26 @@
-# Current handoff — customer voices & shop history (v0.30.0)
+# Current handoff — regulars (v0.31.0)
+
+## Current active work
+
+Customer memory. Main.client_orders (client name -> completed orders)
+increments on every final delivery, persists (save key client_orders,
+validator: <= 40 non-empty string keys, whole counts 1..999) and is pushed
+into job_board.regulars before every morning deal (and after a save
+restore). JobBoard._refill stamps LOYALTY_NOTES onto freshly generated
+jobs whose client has 2+ completed orders — hash-pinned per job id so
+re-deals reproduce the exact note, and the persisted queue means notes
+never flicker mid-day. Regulars = clients with 3+ orders; the Stats panel
+gains a "Regulars: N" line and the milestone "Neighborhood favorite" (5
+regulars) joins the list. Strictly flavor: no payout/deadline/grade
+changes, so the playtest bot's deterministic curve is unchanged.
+
+Local verification: all 44 suites + playtest bot + pytest green (13 new
+checks in tests/v031_test.gd). Screenshot confirmed a regular's loyalty
+note in quotes next to a generic-pool note.
+
+---
+
+# Previous handoff — customer voices & shop history (v0.30.0)
 
 ## Current active work
 

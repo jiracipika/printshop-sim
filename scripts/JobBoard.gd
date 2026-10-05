@@ -34,6 +34,19 @@ var _capacity := 0  # cached fixture-pool size (set on first fill)
 ## difficulty and scale rush payouts. Defaults reproduce the uncapped board.
 var _deal_cap := 5
 var _deal_rush_mult := 1.0
+## Regulars (v0.31.0): client name -> completed orders, set by Main before
+## each deal. Clients with 2+ deliveries write loyalty notes instead of
+## drawing from the generic pool.
+var regulars: Dictionary = {}
+
+## Handwritten loyalty lines (v0.31.0) — deterministic per job id.
+const LOYALTY_NOTES: Array[String] = [
+	"Welcome back — same quality, please.",
+	"You never disappoint.",
+	"Telling my friends about you.",
+	"Consider this a standing order.",
+	"Third order in — you're our printer now.",
+]
 
 
 ## Fresh morning deal (v0.19.0, boot path): clear and deal a full board at
@@ -88,6 +101,11 @@ func _refill() -> void:
 		# Contract.generate values stay untouched.
 		if g.rush and _deal_rush_mult > 1.0:
 			g.payout_cents = mini(roundi(float(g.payout_cents) * _deal_rush_mult), 9500)
+		# Regulars (v0.31.0): repeat clients write loyalty notes at deal
+		# time — deterministic per job id, and the queue persists wholesale
+		# so the note never flickers between reloads.
+		if regulars.has(g.client) and int(regulars[g.client]) >= 2:
+			g.note = LOYALTY_NOTES[absi(hash("loyal-" + g.id)) % LOYALTY_NOTES.size()]
 		_queue.append(g)
 		_fixture_cycle += 1
 		return

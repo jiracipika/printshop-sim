@@ -186,6 +186,9 @@ var recent_grades: Array[String] = []
 ## sparkline from the history.
 var daily_earned: Array[int] = []
 var day_earned_today: int = 0
+## Regulars (v0.31.0): client name -> completed orders. Feeds the loyalty
+## notes on freshly dealt board jobs and the Stats regulars line.
+var client_orders: Dictionary = {}
 ## False until _ready finishes: boot-time station marks happen before the
 ## save loads, and saving there would clobber the player's file.
 var _boot_ready := false
@@ -282,6 +285,7 @@ func _on_menu_stats() -> void:
 		"Parts delivered: %d  (%d late, %d scrapped, %d cancelled)" % [
 			int(stats.delivered), int(stats.late), int(stats.scrapped), int(stats.cancelled)],
 		"Board offers missed: %d" % int(stats.missed),
+		"Regulars: %d (clients with 3+ orders)" % _regulars_count(),
 		"Lifetime earnings: $%s" % _cents_str(int(stats.earned_cents)),
 		"Reputation: %s %.1f / 5  (payout x%.2f)" % [stars, reputation, reputation_multiplier()],
 		"",
@@ -314,6 +318,14 @@ func _on_menu_log() -> void:
 		lines.append("Day %d · [%s] %s" % [int(e.day), str(e.kind), str(e.text)])
 	main_menu.show_log(lines)
 
+## Regulars (v0.31.0): clients with 3+ completed orders.
+func _regulars_count() -> int:
+	var n := 0
+	for k in client_orders:
+		if int(client_orders[k]) >= 3:
+			n += 1
+	return n
+
 ## Full house (v0.23.0): every machine on the floor is mid-print.
 func _full_house() -> bool:
 	if machines.size() < 4:
@@ -345,6 +357,8 @@ func _achievements() -> Array[Dictionary]:
 			"done": recent_grades.size() >= 5
 				and not recent_grades.has("B") and not recent_grades.has("C")
 				and not recent_grades.has("D") and not recent_grades.has("F")},
+		{"name": "Neighborhood favorite", "hint": "serve 5 clients 3+ times each",
+			"done": _regulars_count() >= 5},
 		{"name": "Fully kitted", "hint": "own all 8 upgrades",
 			"done": upgrades.owned_count() == 8},
 		{"name": "Week one", "hint": "keep the shop open past day 7",
@@ -637,6 +651,12 @@ func _load_save() -> void:
 			daily_earned = daily_earned.slice(daily_earned.size() - 7)
 	if payload.has("day_earned_today"):
 		day_earned_today = maxi(int(payload.day_earned_today), 0)
+	if payload.has("client_orders") and typeof(payload.client_orders) == TYPE_DICTIONARY:
+		client_orders.clear()
+		for k in payload.client_orders:
+			if k is String and not (k as String).is_empty():
+				client_orders[k] = clampi(int(payload.client_orders[k]), 1, 999)
+	job_board.regulars = client_orders
 	# Silently adopt anything already earned at load time (a persisted set
 	# can lag the save — the check only runs while the HUD renders): a boot
 	# must never toast old news.
@@ -699,6 +719,7 @@ func _save_game() -> void:
 			"recent_grades": recent_grades,
 			"daily_earned": daily_earned,
 			"day_earned_today": day_earned_today,
+			"client_orders": client_orders,
 		})
 	var ok: bool = load("res://scripts/BrowserSave.gd").save_payload(payload)
 	save_status_line = "%s at %s" % ["saved ok" if ok else "save FAILED",
@@ -3098,6 +3119,7 @@ func _try_pack_held() -> bool:
 	stats.delivered += 1
 	stats.earned_cents += payout
 	day_earned_today += payout
+	client_orders[c.client] = int(client_orders.get(c.client, 0)) + 1
 	_guide("delivered")
 	if reputation >= 4.0:
 		_guide("stars")
@@ -3371,6 +3393,8 @@ func _is_cancelled() -> bool:
 ## Day rollover: first come, first served — overnight offers expire (rep hit),
 ## then rent comes due, then overdue contracts are cancelled.
 func _on_day_changed(new_day: int) -> void:
+	# Regulars (v0.31.0) ride every morning deal.
+	job_board.regulars = client_orders
 	# The morning board deals at the current reputation tier (v0.19.0).
 	var tier := Events.tier_for_rep(reputation)
 	var expired: Array = job_board.rotate_day(new_day, true,
