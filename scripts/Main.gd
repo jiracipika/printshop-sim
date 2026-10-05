@@ -31,6 +31,9 @@ const CRATE_POS := Vector3(-3.0, 0.0, 1.4)  # supplies corner, clear of the prin
 ## The shop radio sits on the lower spool shelf (v0.16.0). Hardcoded
 ## (-ROOM_W / 2 + 0.2) because consts can't forward-reference ROOM_W here.
 const RADIO_POS := Vector3(-3.3, 1.58, -1.0)
+const SHELF_POS := Vector3(2.7, 1.62, -2.6)
+const SHELF_BONUS_PER := 0.02
+const SHELF_BONUS_MAX_SLOTS := 3
 
 ## Season visuals (v0.17.0): per-season look for the window pane, fog and sun
 ## tint. The calm entry reproduces the pre-v0.17 look exactly.
@@ -177,6 +180,12 @@ var _moonlight: OmniLight3D
 ## the window (birds + delivery van).
 var _finishing: Node3D
 var _window_life: Node3D
+## Display shelf (v0.37.0): finished parts shown by the window add +2%
+## payout each (max +6%). Shelf slots hold model names; duplicates count
+## once. Persisted.
+var _shelf: Node3D
+var _shelf_models: Array[String] = []
+var _shelf_parts: Array[Node3D] = []
 ## Clock-driven cloud opacity; _animate_clouds applies the edge fade on top.
 var _cloud_base_alpha := 0.3
 var _current_sky_month := -1
@@ -700,6 +709,13 @@ func _load_save() -> void:
 			daily_earned = daily_earned.slice(daily_earned.size() - 7)
 	if payload.has("day_earned_today"):
 		day_earned_today = maxi(int(payload.day_earned_today), 0)
+	if payload.has("shelf_models") and typeof(payload.shelf_models) == TYPE_ARRAY:
+		_shelf_models.clear()
+		for mname in payload.shelf_models:
+			if mname is String and mname != "" and not _shelf_models.has(mname) \
+					and _shelf_models.size() < SHELF_BONUS_MAX_SLOTS:
+				_shelf_models.append(mname)
+	_refresh_shelf_slots()
 	if payload.has("client_orders") and typeof(payload.client_orders) == TYPE_DICTIONARY:
 		client_orders.clear()
 		for k in payload.client_orders:
@@ -771,6 +787,7 @@ func _save_game() -> void:
 			"daily_earned": daily_earned,
 			"day_earned_today": day_earned_today,
 			"client_orders": client_orders,
+			"shelf_models": _shelf_models,
 		})
 	var ok: bool = load("res://scripts/BrowserSave.gd").save_payload(payload)
 	save_status_line = "%s at %s" % ["saved ok" if ok else "save FAILED",
@@ -1261,6 +1278,39 @@ func _build_environment() -> void:
 	# Window life (v0.34.0): birds + delivery van outside the glass.
 	_window_life = load("res://scripts/WindowLife.gd").new()
 	add_child(_window_life)
+
+	# Display shelf (v0.37.0): a honey shelf by the window with 3 slots.
+	var shelf_board := MeshInstance3D.new()
+	var shelf_box := BoxMesh.new()
+	shelf_box.size = Vector3(1.0, 0.05, 0.3)
+	shelf_board.mesh = shelf_box
+	shelf_board.material_override = world.honey
+	shelf_board.position = SHELF_POS
+	shelf_board.add_to_group("props")
+	add_child(shelf_board)
+	var shelf_sign := Label3D.new()
+	shelf_sign.text = "SHOWCASE  ·  E"
+	shelf_sign.font_size = 34
+	shelf_sign.pixel_size = 0.0022
+	shelf_sign.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	shelf_sign.modulate = Color("#EEE5D3")
+	shelf_sign.outline_modulate = Color("#202B2B")
+	shelf_sign.outline_size = 4
+	shelf_sign.position = SHELF_POS + Vector3(0, 0.28, 0)
+	add_child(shelf_sign)
+	for i in range(SHELF_BONUS_MAX_SLOTS):
+		var slot := MeshInstance3D.new()
+		var sb := BoxMesh.new()
+		sb.size = Vector3(0.14, 0.12, 0.12)
+		slot.mesh = sb
+		var sm := StandardMaterial3D.new()
+		sm.albedo_color = Color("#DA623A")
+		sm.roughness = 0.55
+		slot.material_override = sm
+		slot.position = SHELF_POS + Vector3(-0.3 + 0.3 * i, 0.09, 0)
+		slot.visible = false
+		add_child(slot)
+		_shelf_parts.append(slot)
 
 	# Rain streaks (v0.17.0): thin unshaded quads sliding down the glass on
 	# humid weeks — window-only, no room-wide particles. Hidden by default.
@@ -2704,6 +2754,48 @@ func _near_finishing() -> bool:
 	return _player != null and _finishing != null \
 		and _player.global_position.distance_to(_finishing.position) <= 1.25
 
+## Near the display shelf (v0.37.0). Horizontal distance only — the shelf
+## sits at window height above head level (same pattern as _near_radio).
+func _near_shelf() -> bool:
+	if _player == null:
+		return false
+	var p := _player.global_position
+	return Vector2(p.x, p.z).distance_to(Vector2(SHELF_POS.x, SHELF_POS.z)) <= 1.3
+
+## Showcase the held part (v0.37.0): its model joins the shelf (unique,
+## max 3) and every future delivery pays +2% per displayed model. The
+## part is consumed into a static display piece.
+func _try_display_held(mi: int) -> bool:
+	var m := _machine(mi)
+	var c: Contract = m.get("contract")
+	if c == null or c.state != Contract.State.INSPECTION:
+		return false
+	if _shelf_models.has(c.model_name):
+		_set_prompt("%s is already on display" % c.model_name)
+		sfx.play("click")
+		return true
+	if _shelf_models.size() >= SHELF_BONUS_MAX_SLOTS:
+		_set_prompt("The showcase is full (%d models)" % SHELF_BONUS_MAX_SLOTS)
+		sfx.play("buzz")
+		return true
+	_shelf_models.append(c.model_name)
+	# The original stays in hand: the bench makes a display copy — the
+	# player still packs and ships the real part (v0.37.0 fix; consuming
+	# the part stranded the contract at INSPECTION forever).
+	_refresh_shelf_slots()
+	_log_event("display", "%s added to the showcase (+%d%% payouts)" % [
+		c.model_name, int(SHELF_BONUS_PER * 100.0)])
+	_save_game()
+	sfx.play("chime")
+	_set_prompt("Showcased %s — payouts +%.0f%% while displayed. Ship the original" % [
+		c.model_name, SHELF_BONUS_PER * 100.0 * _shelf_models.size()])
+	return true
+
+## Sync the static display pieces with the model list (boot + changes).
+func _refresh_shelf_slots() -> void:
+	for i in range(_shelf_parts.size()):
+		_shelf_parts[i].visible = i < _shelf_models.size()
+
 ## One-letter grade bump from a finishing pass (v0.34.0). A stays A.
 func _bump_grade(grade: String) -> String:
 	match grade:
@@ -3596,7 +3688,7 @@ func reputation_multiplier() -> float:
 
 ## Single source of truth for what a delivery actually pays: station grade
 ## x client loyalty (v0.32.0) -> reputation -> season -> daily event ->
-## late half -> same-day tip.
+## late half -> same-day tip -> showcase bonus (v0.37.0).
 ## Tests pass the PRE-delivery reputation (the delivery bumps it afterwards).
 func _finalize_payout(base: int, late: bool, m: Dictionary, rep := -1.0) -> int:
 	var mult := reputation_multiplier() if rep < 0.0 else rep
@@ -3607,6 +3699,8 @@ func _finalize_payout(base: int, late: bool, m: Dictionary, rep := -1.0) -> int:
 		payout = roundi(float(payout) * LATE_PAYOUT_FACTOR)
 	if _days_taken_for(m) <= 0:
 		payout += roundi(float(payout) * 0.10)
+	if _shelf_models.size() > 0:
+		payout = roundi(float(payout) * (1.0 + SHELF_BONUS_PER * _shelf_models.size()))
 	return payout
 
 func _rep_event(delta: float) -> void:
@@ -3642,6 +3736,13 @@ func _try_interact() -> void:
 	# pass per part, bumping its grade one letter before it is packed.
 	if held != null and _is_held_part() and _near_finishing():
 		_try_finish_held()
+		return
+	# Holding a part at the display shelf (v0.37.0): showcase it for a
+	# shop-wide payout bonus. Duplicate models are refused politely.
+	if held != null and _is_held_part() and _near_shelf():
+		var mi2 := _machine_for_part(held)
+		if mi2 >= 0:
+			_try_display_held(mi2)
 		return
 	# Holding the printed part at the packing table delivers (or scraps) it —
 	# this beats the generic place action so E never drops the part at the

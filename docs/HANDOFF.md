@@ -1,4 +1,26 @@
-# Current handoff — feedback & haptics (v0.36.0)
+# Current handoff — the display shelf (v0.37.0)
+
+## Current active work
+
+Showcase system: a honey shelf by the window (SHELF_POS (2.7, 1.62, -2.6),
+3 slots, "SHOWCASE - E" sign). E with a carried part within 1.3 m
+HORIZONTAL (_near_shelf — the shelf sits above head height, same pattern
+as _near_radio) displays a COPY of the model: _shelf_models (unique,
+max SHELF_BONUS_MAX_SLOTS = 3, persisted as shelf_models) grows by one,
+a static slot piece lights, and the ORIGINAL part stays in hand to be
+packed — the first cut consumed the part, stranding the contract at
+INSPECTION forever (copy-not-consume fix). Duplicates and overflow are
+refused with prompts. Payout: _finalize_payout applies +2% per displayed
+model AFTER the same-day tip (inside the function — callers/tests must
+NOT pre-multiply the base). The playtest bot displayed a model in its
+run: reference curve is now 18 deliveries / $1,935 / rep 4.7 by day 8.
+
+Local verification: all 49 suites + playtest bot + pytest green (13 new
+checks in tests/v037_test.gd).
+
+---
+
+# Previous handoff — feedback & haptics (v0.36.0)
 
 ## Current active work
 

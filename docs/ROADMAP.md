@@ -638,6 +638,28 @@ Test checks:
 
 ---
 
+## Post-roadmap — v0.37.0 "The display shelf" — SHIPPED
+
+- [x] Showcase shelf by the window (3 slots, "SHOWCASE - E" sign): E with
+      a carried part displays a COPY of its model (the original ships
+      normally — the first cut consumed the part and stranded its contract
+      at INSPECTION forever, fixed to copy-not-consume)
+- [x] Unique models only (duplicates refused politely), cap of 3
+      (overflow refused), slots light as filled
+- [x] Shop-wide payout bonus: +2% per displayed model (max +6%) applied
+      inside _finalize_payout after the same-day tip — the playtest bot
+      picked up a display and the curve shifted to $1,935/18 deliveries,
+      still healthy
+- [x] Persisted (shelf_models, unique strings, restore lights the slots)
+
+Test checks:
+- [x] 13 new checks in v037_test (build, reachability at window height,
+      display/copy flow, duplicate + cap refusals, documented-chain payout
+      with the bonus, persistence + slot restore)
+- [x] all 49 suites + playtest bot + pytest green
+
+---
+
 ## Definition of done (every slice)
 
 - [ ] Feature checks above all ticked
