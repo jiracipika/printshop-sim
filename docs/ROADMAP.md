@@ -550,6 +550,25 @@ Test checks:
 
 ---
 
+## Post-roadmap — v0.33.0 "The long game" — SHIPPED
+
+- [x] tests/sim_lategame.gd grows the shop from one printer to the full
+      four-printer farm over ~14 in-game days, buying the Pro machine and
+      both farm kits through the REAL upgrade path (_on_menu_upgrade_buy),
+      with the farm door swing asserted
+- [x] All four printers run in parallel under one pair of hands (the real
+      bottleneck): collect/clear/confirm/reprint/pack across machines,
+      crate refills, best-paying job on the board (difficulty-agnostic at
+      tier 4 — a conservative filter starved the shop after day 9 in the
+      first calibration run, now documented in the picker)
+- [x] Deterministic reference: 159 deliveries / $19,294 / rep 5.0 by day
+      14; late-game verdict HEALTHY — the farm more than doubles
+      throughput and rent never threatens
+- [x] Survival asserts: upgrades owned, all 4 printers ran, >= 60
+      deliveries, >= $1,500 by day 14, rep floor 2.0, debt recoverable
+
+---
+
 ## Definition of done (every slice)
 
 - [ ] Feature checks above all ticked

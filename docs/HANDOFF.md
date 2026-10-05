@@ -1,4 +1,28 @@
-# Current handoff — loyalty & calm (v0.32.0)
+# Current handoff — the long game (v0.33.0)
+
+## Current active work
+
+Late-game playtest harness: tests/sim_lategame.gd grows the shop from one
+printer to the full farm over ~14 in-game days. Buys pro_machine,
+farm_kit_a, farm_kit_b (+ heated_bed) through the REAL purchase path
+(_on_menu_upgrade_buy), asserts the farm door swing, then runs ALL FOUR
+printers in parallel — one pair of hands round-robining collect/clear/
+confirm/reprint/pack across machines, crate refills per machine, and the
+best-paying job on the board (difficulty-agnostic at tier 4: the first
+calibration run used the early-game "difficulty <= 3" filter and STARVED
+after day 9 — at tier 4 the board deals hard jobs and the bot sat idle
+for six days; documented in the picker). Deterministic reference curve:
+159 deliveries / $19,294 / rep 5.0 / zero debt by day 14. Late-game
+verdict: HEALTHY — the farm scales and rent never threatens. Survival
+asserts: all upgrades owned, all four printers ran, >= 60 deliveries,
+>= $1,500 by day 14, rep floor 2.0.
+
+Local verification: harness green 16/16 twice (deterministic). All 45
+unit suites + sim_playtest + pytest unaffected.
+
+---
+
+# Previous handoff — loyalty & calm (v0.32.0)
 
 ## Current active work
 
