@@ -660,6 +660,23 @@ Test checks:
 
 ---
 
+## Post-roadmap — v0.38.0 "The customers remember" — SHIPPED
+
+- [x] Grade memory: client_last_grade (client -> last DELIVERED grade,
+      persisted + validated — F never delivered so F rejected)
+- [x] Reaction notes: a remembered client's fresh jobs carry a reaction
+      to their last grade — praise after A, neutral after B/C, worry
+      after D — deterministic per job id; loyalty notes (regulars 2+)
+      still win precedence; pools distinct from the generic notes
+
+Test checks:
+- [x] 11 new checks in v038_test (pools stocked + disjoint, pool
+      correctness per grade incl. loyalty precedence, e2e C-grade
+      delivery -> memory -> reacting follow-up, persistence + validator)
+- [x] all 50 suites + playtest bot + pytest green
+
+---
+
 ## Definition of done (every slice)
 
 - [ ] Feature checks above all ticked

@@ -38,6 +38,27 @@ var _deal_rush_mult := 1.0
 ## each deal. Clients with 2+ deliveries write loyalty notes instead of
 ## drawing from the generic pool.
 var regulars: Dictionary = {}
+## The customers remember (v0.38.0): client name -> last grade received.
+## Their fresh jobs carry reaction notes about it (below loyalty notes).
+var client_grades: Dictionary = {}
+
+## Reaction pools (v0.38.0): praise after an A, neutral after B/C, worry
+## after D. Deterministic per job id within the pool.
+const REACTION_PRAISE: Array[String] = [
+	"The last batch was perfect.",
+	"Exactly the quality we hoped for.",
+	"You've earned this repeat order.",
+]
+const REACTION_NEUTRAL: Array[String] = [
+	"Last one was fine. Keep it up.",
+	"Same as before, please.",
+	"No complaints this time.",
+]
+const REACTION_WORRIED: Array[String] = [
+	"The last one warped a little — straight this time?",
+	"Quality slipped last order. We're watching.",
+	"Please double-check this one.",
+]
 
 ## Handwritten loyalty lines (v0.31.0) — deterministic per job id.
 const LOYALTY_NOTES: Array[String] = [
@@ -106,6 +127,15 @@ func _refill() -> void:
 		# so the note never flickers between reloads.
 		if regulars.has(g.client) and int(regulars[g.client]) >= 2:
 			g.note = LOYALTY_NOTES[absi(hash("loyal-" + g.id)) % LOYALTY_NOTES.size()]
+		# The customers remember (v0.38.0): a returning client writes a
+		# reaction to their last grade — praise after an A, neutral after
+		# B/C, worry after D (loyalty wins for established regulars).
+		elif client_grades.has(g.client):
+			var last := str(client_grades[g.client])
+			var pool: Array[String] = REACTION_PRAISE if last == "A" \
+				else REACTION_WORRIED if last in ["D", "F"] \
+				else REACTION_NEUTRAL
+			g.note = pool[absi(hash("react-" + g.id)) % pool.size()]
 		_queue.append(g)
 		_fixture_cycle += 1
 		return

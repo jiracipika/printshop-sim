@@ -202,6 +202,9 @@ var day_earned_today: int = 0
 ## Regulars (v0.31.0): client name -> completed orders. Feeds the loyalty
 ## notes on freshly dealt board jobs and the Stats regulars line.
 var client_orders: Dictionary = {}
+## The customers remember (v0.38.0): client name -> last grade received.
+## Fresh jobs from that client carry a reaction note about it.
+var client_last_grade: Dictionary = {}
 ## False until _ready finishes: boot-time station marks happen before the
 ## save loads, and saving there would clobber the player's file.
 var _boot_ready := false
@@ -721,7 +724,13 @@ func _load_save() -> void:
 		for k in payload.client_orders:
 			if k is String and not (k as String).is_empty():
 				client_orders[k] = clampi(int(payload.client_orders[k]), 1, 999)
+	if payload.has("client_last_grade") and typeof(payload.client_last_grade) == TYPE_DICTIONARY:
+		client_last_grade.clear()
+		for k in payload.client_last_grade:
+			if k is String and str(payload.client_last_grade[k]) in ["A", "B", "C", "D"]:
+				client_last_grade[k] = str(payload.client_last_grade[k])
 	job_board.regulars = client_orders
+	job_board.client_grades = client_last_grade
 	# Silently adopt anything already earned at load time (a persisted set
 	# can lag the save — the check only runs while the HUD renders): a boot
 	# must never toast old news.
@@ -787,6 +796,7 @@ func _save_game() -> void:
 			"daily_earned": daily_earned,
 			"day_earned_today": day_earned_today,
 			"client_orders": client_orders,
+			"client_last_grade": client_last_grade,
 			"shelf_models": _shelf_models,
 		})
 	var ok: bool = load("res://scripts/BrowserSave.gd").save_payload(payload)
@@ -3343,6 +3353,7 @@ func _try_pack_held() -> bool:
 	stats.earned_cents += payout
 	day_earned_today += payout
 	client_orders[c.client] = int(client_orders.get(c.client, 0)) + 1
+	client_last_grade[c.client] = final_grade
 	_guide("delivered")
 	if reputation >= 4.0:
 		_guide("stars")
@@ -3619,8 +3630,9 @@ func _is_cancelled() -> bool:
 ## Day rollover: first come, first served — overnight offers expire (rep hit),
 ## then rent comes due, then overdue contracts are cancelled.
 func _on_day_changed(new_day: int) -> void:
-	# Regulars (v0.31.0) ride every morning deal.
+	# Regulars (v0.31.0) + grade memory (v0.38.0) ride every morning deal.
 	job_board.regulars = client_orders
+	job_board.client_grades = client_last_grade
 	# The morning board deals at the current reputation tier (v0.19.0).
 	var tier := Events.tier_for_rep(reputation)
 	var expired: Array = job_board.rotate_day(new_day, true,

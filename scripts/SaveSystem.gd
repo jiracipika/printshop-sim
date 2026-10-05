@@ -116,6 +116,8 @@ static func validate(payload: Variant) -> Dictionary:
 		return {}
 	if not _client_orders_valid(p):
 		return {}
+	if not _client_grades_valid(p):
+		return {}
 	if not _day_earned_valid(p):
 		return {}
 
@@ -221,6 +223,24 @@ static func _day_earned_valid(p: Dictionary) -> bool:
 		return false
 	var f := float(p["day_earned_today"])
 	return f == floorf(f) and f >= 0.0
+
+
+## Optional "client_last_grade" key (v0.38.0): absent = fine; present must
+## be a dictionary of non-empty names -> grade letters (no F: failed parts
+## were never delivered).
+static func _client_grades_valid(p: Dictionary) -> bool:
+	if not p.has("client_last_grade"):
+		return true
+	if typeof(p["client_last_grade"]) != TYPE_DICTIONARY:
+		return false
+	if p["client_last_grade"].size() > 40:
+		return false
+	for k in p["client_last_grade"]:
+		if not (k is String) or (k as String).is_empty():
+			return false
+		if not (str(p["client_last_grade"][k]) in ["A", "B", "C", "D"]):
+			return false
+	return true
 
 
 ## Optional "client_orders" key (v0.31.0): absent = fine; present must be a

@@ -1,4 +1,26 @@
-# Current handoff — the display shelf (v0.37.0)
+# Current handoff — the customers remember (v0.38.0)
+
+## Current active work
+
+Reaction notes. Main.client_last_grade (client -> last delivered grade,
+persisted + validated, F impossible) is pushed into
+job_board.client_grades before each deal; JobBoard._refill stamps a
+reaction pool note (REACTION_PRAISE / REACTION_NEUTRAL /
+REACTION_WORRIED — distinct from Contract.GEN_NOTES) on fresh jobs of a
+remembered client, deterministic per job id, LOYALTY takes precedence for
+regulars. TEST GOTCHAS that cost the slice an hour: (1) the boot menu —
+if a suite never sets main.paused=false + captured=true, EVERY E press
+silently gates on `if paused: return` with an EMPTY prompt (symptom:
+accept fails, prompt ''); (2) teleporting near the design computer with a
+stale camera aim opens the studio (also pauses) — set yaw/pitch/camera
+explicitly after teleports (yaw -0.6 from printer A aims away).
+
+Local verification: all 50 suites + playtest bot + pytest green (11 new
+checks in tests/v038_test.gd).
+
+---
+
+# Previous handoff — the display shelf (v0.37.0)
 
 ## Current active work
 
