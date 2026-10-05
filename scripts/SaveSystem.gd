@@ -180,6 +180,8 @@ static func _settings_valid(p: Dictionary) -> bool:
 		return false
 	if s.has("quality_preset") and not (s["quality_preset"] in ["Low", "Standard", "High"]):
 		return false
+	if s.has("haptics") and not (s["haptics"] is bool):
+		return false
 	if s.has("radio_station"):
 		var t2 := typeof(s["radio_station"])
 		if t2 != TYPE_INT and t2 != TYPE_FLOAT:

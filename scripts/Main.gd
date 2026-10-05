@@ -138,7 +138,7 @@ var active_part: Grabbable:
 
 var settings := {"mouse_sens_scale": 1.0, "sfx_volume": 0.8, "invert_y": false, "shadows": true,
 	"music_enabled": true, "music_volume": 0.35, "quality_preset": "Standard",
-	"radio_station": 0}
+	"radio_station": 0, "haptics": true}
 var _settings_dirty := false
 var sfx: Sfx
 var _hum: AudioStreamPlayer3D
@@ -628,7 +628,8 @@ func _load_save() -> void:
 	if payload.has("settings"):
 		var s: Dictionary = payload.settings
 		for key in ["mouse_sens_scale", "sfx_volume", "invert_y", "shadows",
-				"music_enabled", "music_volume", "quality_preset", "radio_station"]:
+				"music_enabled", "music_volume", "quality_preset",
+				"radio_station", "haptics"]:
 			if s.has(key):
 				apply_setting(key, s[key], false)
 	_update_music_state()
@@ -729,6 +730,8 @@ func apply_setting(key: String, value, persist := true) -> void:
 			_apply_quality()
 		"radio_station":
 			_update_music_state()
+		"haptics":
+			pass  # read live by _rumble
 		# mouse_sens_scale / invert_y are read live by the look paths.
 	if persist:
 		_save_game()
@@ -2842,6 +2845,8 @@ func _apply_gamepad_look(delta: float) -> void:
 ## Gamepad rumble (v0.27.0): soft pulse on delivery, harsher on failure.
 ## A no-op wherever no pad is connected (headless included).
 func _rumble(low: float, high: float, seconds: float) -> void:
+	if not bool(settings.get("haptics", true)):
+		return
 	for pad in Input.get_connected_joypads():
 		Input.start_joy_vibration(pad, low, high, seconds)
 
@@ -3180,7 +3185,7 @@ func _try_pack_held() -> bool:
 				_log_event("scrap", "second F — %s order failed" % c.model_name)
 				_save_game()
 				sfx.play("buzz")
-				_rumble(0.7, 0.2, 0.4)
+				_rumble(0.55, 0.15, 0.35)
 				_set_prompt("Second F — the %s order is dead. No payout, rep hit." % c.model_name)
 				return true
 			m["scrap"] = true
@@ -3251,7 +3256,7 @@ func _try_pack_held() -> bool:
 		_guide("stars")
 	_save_game()
 	sfx.play("cash")
-	_rumble(0.25, 0.5, 0.25)
+	_rumble(0.18, 0.4, 0.22)
 	var tip: int = payout - roundi(float(payout) / 1.10)
 	var loyal_tag := " · returning client x%.2f" % loyalty if loyalty > 1.0 \
 		else ""

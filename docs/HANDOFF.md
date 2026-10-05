@@ -1,4 +1,20 @@
-# Current handoff — the morning paper (v0.35.0)
+# Current handoff — feedback & haptics (v0.36.0)
+
+## Current active work
+
+Juice pass. settings.haptics (checkbox, persisted, validator bool) gates
+_rumble entirely; delivery/failure rumble softened. MainMenu owns a
+_focus_sfx AudioStreamPlayer (Sfx.stream("click") at -18 dB) hooked to
+each menu row button's focus_entered — moving menu focus ticks. Test
+note: blip.playing reads true right after grab_focus (headless audio
+still tracks playing state).
+
+Local verification: all 48 suites + playtest bot + pytest green (8 new
+checks in tests/v036_test.gd).
+
+---
+
+# Previous handoff — the morning paper (v0.35.0)
 
 ## Current active work
 

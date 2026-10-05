@@ -43,6 +43,7 @@ var _today_panel: Control
 var _settings_applying := false
 ## Couch menus (v0.28.0): the Play button, focused whenever the menu opens.
 var _play_button: Button
+var _focus_sfx: AudioStreamPlayer
 var _open := false
 var _contracts_open := false
 var _upgrades_open := false
@@ -243,6 +244,14 @@ func _build() -> void:
 		row[i].focus_neighbor_right = row[(i + 1) % row.size()].get_path()
 		row[i].focus_neighbor_top = row[0].get_path()
 		row[i].focus_neighbor_bottom = row[0].get_path()
+
+	# Couch menus (v0.36.0): a soft tick whenever menu focus moves.
+	_focus_sfx = AudioStreamPlayer.new()
+	_focus_sfx.stream = Sfx.stream("click")
+	_focus_sfx.volume_db = -18.0
+	add_child(_focus_sfx)
+	for b in row:
+		b.focus_entered.connect(func() -> void: _focus_sfx.play())
 
 	var version := Label.new()
 	version.name = "Version"
@@ -588,6 +597,16 @@ func _build_settings_panel() -> void:
 
 	# Quality preset (v0.20.0): one dropdown driving shadows + glow; the
 	# shadows checkbox above stays in sync (checked = Standard, off = Low).
+	var haptics := CheckBox.new()
+	haptics.name = "HapticsCheck"
+	haptics.text = "Gamepad rumble (haptics)"
+	haptics.add_theme_color_override("font_color", COLOR_PAPER)
+	haptics.add_theme_font_size_override("font_size", 16)
+	haptics.toggled.connect(func(on: bool) -> void:
+		if not _settings_applying:
+			settings_changed.emit("haptics", on))
+	sv.add_child(haptics)
+
 	var quality_row := HBoxContainer.new()
 	quality_row.name = "QualityRow"
 	var quality_label := Label.new()
@@ -678,6 +697,8 @@ func show_settings(current: Dictionary) -> void:
 	invert.set_pressed_no_signal(bool(current.get("invert_y", false)))
 	shadows.set_pressed_no_signal(bool(current.get("shadows", true)))
 	music.set_pressed_no_signal(bool(current.get("music_enabled", true)))
+	(_settings_panel.get_node("Sheet/SheetBox/HapticsCheck") as CheckBox) \
+		.set_pressed_no_signal(bool(current.get("haptics", true)))
 	var preset: String = str(current.get("quality_preset", "Standard"))
 	var qidx := ["Low", "Standard", "High"].find(preset)
 	(_settings_panel.get_node("Sheet/SheetBox/QualityRow/QualityOption") as OptionButton) \

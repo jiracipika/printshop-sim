@@ -622,6 +622,22 @@ Test checks:
 
 ---
 
+## Post-roadmap — v0.36.0 "Feedback & haptics" — SHIPPED
+
+- [x] Haptics setting (checkbox, default on, persisted): gates every
+      gamepad rumble call
+- [x] Delivery + failure rumble softened (0.25/0.5/0.25s -> 0.18/0.4/0.22s;
+      0.7/0.2/0.4s -> 0.55/0.15/0.35s)
+- [x] Menu focus tick: moving focus between menu buttons plays a quiet
+      (-18 dB) click blip
+
+Test checks:
+- [x] 8 new checks in v036_test (default, persistence, reload, gate
+      safety both states, tuned values, blip wiring/plays/volume)
+- [x] all 48 suites + playtest bot + pytest green
+
+---
+
 ## Definition of done (every slice)
 
 - [ ] Feature checks above all ticked
