@@ -22,6 +22,16 @@ func _init() -> void:
 	root.ready.connect(_run)
 
 
+## Wait up to `frames` process frames for `cond` to become true — input
+## events flush at frame boundaries and can land a frame or two late under
+## load. Returns the final condition value.
+func _wait_until(cond: Callable, frames: int) -> bool:
+	for i in range(frames):
+		if cond.call():
+			return true
+		await process_frame
+	return cond.call()
+
 func _pad_button(idx: int, down: bool) -> void:
 	var e := InputEventJoypadButton.new()
 	e.button_index = idx
@@ -51,8 +61,8 @@ func _run() -> void:
 	_ok(focus != null and focus.name == "Play",
 		"boot focuses the Play button")
 	_pad_button(JOY_BUTTON_A, true)
-	await physics_frame
-	await physics_frame
+	for i in range(3):
+		await process_frame
 	_pad_button(JOY_BUTTON_A, false)
 	await physics_frame
 	_ok(not main.main_menu.is_open() and not main.paused,
@@ -66,48 +76,51 @@ func _run() -> void:
 	# The menu row is horizontal: d-pad right moves focus to Contracts.
 	_pad_button(JOY_BUTTON_DPAD_RIGHT, true)
 	await physics_frame
-	await physics_frame
 	_pad_button(JOY_BUTTON_DPAD_RIGHT, false)
-	await physics_frame
-	focus = main.get_viewport().gui_get_focus_owner()
-	_ok(focus != null and focus.name == "Contracts",
-		"dpad right moves focus to Contracts (got %s)" % (focus.name if focus else "nil"))
+	var moved := await _wait_until(func() -> bool:
+		var f: Control = main.get_viewport().gui_get_focus_owner()
+		return f != null and f.name == "Contracts", 8)
+	_ok(moved, "dpad right moves focus to Contracts")
 
 	# A activates the focused button: the Contracts panel opens and its
 	# first button takes focus.
+	# Buttons activate on RELEASE (BaseButton default): press, flush, then
+	# release before polling.
 	_pad_button(JOY_BUTTON_A, true)
-	await physics_frame
-	await physics_frame
+	await process_frame
 	_pad_button(JOY_BUTTON_A, false)
+	var opened := await _wait_until(func() -> bool:
+		return main.main_menu.subpanel_open(), 8)
 	await physics_frame
-	_ok(main.main_menu.subpanel_open(), "A opens the focused panel")
+	_ok(opened, "A opens the focused panel")
 	focus = main.get_viewport().gui_get_focus_owner()
 	_ok(focus != null, "the panel focuses its first control")
 
 	# Back out (B), then the Settings panel: a slider focused, and the
-	# stick adjusts it.
+	# stick adjusts it. Settle frames: the BFS focus grab lands a frame
+	# late, and under ladder load the read can race it.
 	_pad_button(JOY_BUTTON_B, true)
 	await physics_frame
 	_pad_button(JOY_BUTTON_B, false)
 	await physics_frame
 	main.main_menu.show_settings(main.settings)
-	await physics_frame
+	var slider_in := await _wait_until(func() -> bool:
+		var f: Control = main.get_viewport().gui_get_focus_owner()
+		return f is HSlider, 12)
 	focus = main.get_viewport().gui_get_focus_owner()
-	_ok(focus is HSlider, "settings focuses a slider (got %s)" %
+	_ok(slider_in, "settings focuses a slider (got %s)" %
 		(focus.name if focus else "nil"))
-	if focus is HSlider:
+	if slider_in:
 		var slider := focus as HSlider
 		var before: float = slider.value
-		for i in range(3):
-			await process_frame
-		# Sliders step on d-pad presses; the stick drives continuous drag.
 		_pad_button(JOY_BUTTON_DPAD_LEFT, true)
-		await physics_frame
-		await physics_frame
+		await process_frame
 		_pad_button(JOY_BUTTON_DPAD_LEFT, false)
+		var lowered := await _wait_until(func() -> bool:
+			return slider.value < before, 8)
 		await physics_frame
-		_ok(slider.value < before,
-			"d-pad left lowers the focused slider (%.2f < %.2f)" % [slider.value, before])
+		_ok(lowered, "d-pad left lowers the focused slider (%.2f < %.2f)" % [
+			slider.value, before])
 
 	# Closing the menu releases focus (no ghost focus while playing).
 	main.main_menu.close_menu()
@@ -117,14 +130,15 @@ func _run() -> void:
 
 	# START reopens the menu from play, focusing Play again.
 	_pad_button(JOY_BUTTON_START, true)
-	await physics_frame
+	var reopened := await _wait_until(func() -> bool:
+		var f: Control = main.get_viewport().gui_get_focus_owner()
+		return f != null and f.name == "Play", 8)
 	_pad_button(JOY_BUTTON_START, false)
 	await physics_frame
-	focus = main.get_viewport().gui_get_focus_owner()
-	_ok(focus != null and focus.name == "Play", "reopened menu focuses Play")
+	_ok(reopened, "reopened menu focuses Play")
 	_pad_button(JOY_BUTTON_A, true)
-	await physics_frame
-	await physics_frame
+	for i in range(3):
+		await process_frame
 	_pad_button(JOY_BUTTON_A, false)
 	await physics_frame
 	_ok(not main.main_menu.is_open(),

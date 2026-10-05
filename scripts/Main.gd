@@ -173,6 +173,10 @@ var _cloud_speeds: Array[float] = []
 var _snow: Node3D
 var _snow_phases: Array[float] = []
 var _moonlight: OmniLight3D
+## Print Shop 2.0 (v0.34.0): the vapor-smoothing bench and the life outside
+## the window (birds + delivery van).
+var _finishing: Node3D
+var _window_life: Node3D
 ## Clock-driven cloud opacity; _animate_clouds applies the edge fade on top.
 var _cloud_base_alpha := 0.3
 var _current_sky_month := -1
@@ -994,6 +998,8 @@ func _apply_season_visuals() -> void:
 		_frost.visible = fx and id == "cold_snap"
 	if _snow != null:
 		_snow.visible = fx and id == "cold_snap"
+	if _window_life != null and _window_life.has_method("set_weather"):
+		_window_life.set_weather(id)
 
 func _refresh_crate_label() -> void:
 	if _crate_label != null:
@@ -1034,6 +1040,8 @@ func _apply_daylight() -> void:
 	_cloud_base_alpha = 0.3 - 0.12 * nightness
 	if _moonlight != null:
 		_moonlight.light_energy = 0.55 * nightness
+	if _window_life != null and _window_life.has_method("set_nightness"):
+		_window_life.set_nightness(nightness)
 
 ## Per-printer display name + lock tag follow the unlock upgrades, and the
 ## farm door opens once any farm kit is owned.
@@ -1198,6 +1206,19 @@ func _build_environment() -> void:
 	moon.shadow_enabled = false
 	add_child(moon)
 	_moonlight = moon
+
+	# Finishing station (v0.34.0): vapor-smoothing bench near the packing
+	# table — one grade bump per part, wired in _try_interact.
+	_finishing = load("res://scripts/FinishingStation.gd").new()
+	# Front-right corner: clear of the packing table's aisle, the doormat,
+	# and grab_test's placement corridor along x~0.
+	_finishing.position = Vector3(3.0, 0, 2.35)
+	_finishing.rotation_degrees = Vector3(0, 225, 0)
+	add_child(_finishing)
+
+	# Window life (v0.34.0): birds + delivery van outside the glass.
+	_window_life = load("res://scripts/WindowLife.gd").new()
+	add_child(_window_life)
 
 	# Rain streaks (v0.17.0): thin unshaded quads sliding down the glass on
 	# humid weeks — window-only, no room-wide particles. Hidden by default.
@@ -2634,6 +2655,20 @@ func _nearest_printer() -> Node3D:
 func _is_held_part() -> bool:
 	return held != null and str(held.get_meta("part_contract", "")) != ""
 
+## Near the finishing bench (v0.34.0) — its own radius so E there never
+## collides with the packing table across the aisle.
+func _near_finishing() -> bool:
+	return _player != null and _finishing != null \
+		and _player.global_position.distance_to(_finishing.position) <= 1.25
+
+## One-letter grade bump from a finishing pass (v0.34.0). A stays A.
+func _bump_grade(grade: String) -> String:
+	match grade:
+		"B": return "A"
+		"C": return "B"
+		"D": return "C"
+	return grade
+
 func _near_packing_station() -> bool:
 	return packing_station != null and _player != null \
 		and _player.global_position.distance_to(packing_station.global_position) <= INTERACT_RANGE
@@ -2959,6 +2994,7 @@ func _collect_on(idx: int) -> bool:
 			"stability_risk": sim.stability_risk,
 		},
 	}
+	m["finished"] = false  # a fresh part starts unfinished (v0.34.0)
 	if sim.state == PrintSim.State.DONE_OK:
 		sim.reset()
 	_guide("collected")
@@ -3031,6 +3067,43 @@ func _discard_part() -> void:
 
 ## Pack the held part at the packing table: the part's contract id selects the
 ## machine (both can finish in parallel). Grade via QualityCheck, scale the
+## Vapor-smooth the held part (v0.34.0): grade one letter better, once per
+## part. The raw grade comes from the same QualityCheck call the packing
+## station makes; the bump is stored on the machine and applied at pack
+## time BEFORE the color cap (wrong-color parts still get capped).
+func _try_finish_held() -> bool:
+	var mi := _machine_for_part(held)
+	if mi < 0:
+		return false
+	var m := _machine(mi)
+	var c: Contract = m.get("contract")
+	if c == null or c.state != Contract.State.INSPECTION:
+		return false
+	if bool(m.get("finished")):
+		_set_prompt("Already vapor-smoothed — one pass per part")
+		sfx.play("click")
+		return true
+	var snap: Dictionary = m.get("grade_snapshot", {})
+	var raw := QualityCheck.grade(c, int(snap.get("final_layer", 0)),
+		int(snap.get("total_layers", 0)), snap.get("risks", {}))
+	if raw == "F":
+		_set_prompt("A failed part can't be saved — scrap or pack it")
+		sfx.play("buzz")
+		return true
+	var res: Dictionary = _finishing.try_finish(raw)
+	if not bool(res.get("finished", false)):
+		_set_prompt("The bench refuses the part (%s)" % raw)
+		return true
+	m["finished"] = true
+	_finishing.set_active(true)
+	_log_event("finished", "%s vapor-smoothed: %s -> %s" % [
+		c.model_name, raw, str(res.grade)])
+	_save_game()
+	sfx.play("upgrade")
+	_set_prompt("Vapor-smoothed: grade %s -> %s. Pack it when ready" % [
+		raw, str(res.grade)])
+	return true
+
 ## payout, advance INSPECTION -> PACKED -> DELIVERED, pay exactly once.
 func _try_pack_held() -> bool:
 	if not _is_held_part():
@@ -3076,7 +3149,11 @@ func _try_pack_held() -> bool:
 			_set_prompt("Pack refused: %s" % result.get("reason", "?"))
 		return true
 	# Non-F copy: record the (color-capped) grade and stack the part.
-	var eff_grade: String = _cap_grade_for_color(result.grade, c, m)
+	var raw_grade: String = result.grade
+	if bool(m.get("finished")):
+		raw_grade = _bump_grade(raw_grade)
+		m["finished"] = false
+	var eff_grade: String = _cap_grade_for_color(raw_grade, c, m)
 	c.copy_grades.append(eff_grade)
 	c.parts_packed += 1
 	_discard_part_for(m)
@@ -3515,6 +3592,11 @@ func _try_interact() -> void:
 	# Desktop requires pointer lock; mobile requires touch motion active
 	# (resume state). Either gameplay-active path may interact.
 	if not get_mouse_locked() and not touch_controls.is_motion_enabled():
+		return
+	# Holding a part at the finishing bench (v0.34.0): one vapor-smooth
+	# pass per part, bumping its grade one letter before it is packed.
+	if held != null and _is_held_part() and _near_finishing():
+		_try_finish_held()
 		return
 	# Holding the printed part at the packing table delivers (or scraps) it —
 	# this beats the generic place action so E never drops the part at the

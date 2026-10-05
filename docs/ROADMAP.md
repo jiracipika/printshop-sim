@@ -569,6 +569,41 @@ Test checks:
 
 ---
 
+## Post-roadmap — v0.34.0 "Print Shop 2.0" overhaul — SHIPPED
+
+Built with TWO SUBAGENTS working concurrently in isolated clones
+(psim-station-a, psim-window-b), merged by the integrator — zero file
+conflicts by construction (each slice delivered only new files against a
+documented API; Main.gd integration done centrally afterwards).
+
+- [x] Finishing station (slice A): a vapor-smoothing bench beside the
+      packing table — E with a carried part grades it one letter better
+      (B->A, C->B, D->C), once per part, F refused; applied at pack time
+      BEFORE the color cap (wrong-color parts still capped); log entry +
+      prompt + glowing active state
+- [x] Window life (slice B): birds cross the sky outside the glass
+      (staggered spawns, 5-12 s ground delays) and a delivery van rumbles
+      past every ~1 minute with a headlight; birds ground during rain and
+      snow; silhouettes darken and the headlamp brightens with nightness.
+      Slice B caught a flaw in the brief: nothing behind the opaque window
+      pane can be visible — actors live in the front unshaded layer with
+      all other weather
+- [x] Integration: interact branch + pack-time bump (Main), season/clock
+      hooks for window life; v034_test covers the full e2e (B-grade part
+      -> finish -> pack at grade A, one-pass-per-part, fresh-part reset,
+      weather grounding, nightness curve)
+
+Test checks:
+- [x] 48 (station) + 31 (window life) + 16 (integration) new checks;
+      both slice suites stable across 3+ runs each
+- [x] all 46 suites + BOTH playtest harnesses + pytest green, ladder run
+      twice
+- [x] Pre-existing v028 input-test flake (flagged independently by both
+      subagents) FIXED with a poll-wait pattern + release-before-poll
+      (BaseButton activates on release); 6/6 stable runs after
+
+---
+
 ## Definition of done (every slice)
 
 - [ ] Feature checks above all ticked
