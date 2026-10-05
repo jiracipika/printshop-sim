@@ -94,6 +94,8 @@ func _test_generation_caps() -> void:
 	# Rush payouts scale by exactly the tier multiplier; calm jobs unchanged.
 	var bump_ok := true
 	for c in board._queue:
+		if c.featured:
+			continue  # the featured pick carries its own +15% (v0.42)
 		var slot := int(str(c.id).get_slice("-", 2))
 		var base := Contract.generate(3, slot, 2)
 		if c.rush:

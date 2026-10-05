@@ -65,6 +65,15 @@ const VALID_COLORS: Array[String] = ["Clay", "Sage", "Honey"]
 ## Customer voice (v0.30.0): a short handwritten request on the order
 ## card. Flavor only — never affects grading or payouts. "" = no note.
 @export var note: String = ""
+## Featured order (v0.42.0): one job per day is the board's featured pick
+## and pays +15%. Deterministic per (day, slot) — derived, not stored.
+@export var featured: bool = false
+
+
+## Which slot of the day's board is the featured pick (v0.42.0): one per
+## day, hash-pinned. Slots 0..7 match the board's dealt order.
+static func featured_slot_for_day(day: int) -> int:
+	return absi(hash("printshop-featured-%d" % maxi(day, 1))) % 8
 ## Copies packed so far (packed parts stack on the packing table).
 @export var parts_packed: int = 0
 ## Per-copy delivery grades recorded at pack time, in pack order. The order
@@ -414,4 +423,6 @@ static func generate(day: int, index: int, max_difficulty := 5) -> Contract:
 	# the new last draw — everything pinned above keeps its value.
 	if rng.randf() < 0.45:
 		c.note = GEN_NOTES[rng.randi_range(0, GEN_NOTES.size() - 1)]
+	# Featured pick (v0.42.0): derived AFTER all rng draws — one slot per
+	# day (hash-pinned), never fixtures. Stamped by the board at deal time.
 	return c

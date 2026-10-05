@@ -1,4 +1,23 @@
-# Current handoff — save slots (v0.41.0)
+# Current handoff — featured orders (v0.42.1)
+
+## Current active work
+
+One generated job per day is the board's FEATURED pick: +15% payout
+(capped $95), hash-pinned per (day, slot) via
+Contract.featured_slot_for_day, stamped in JobBoard._refill AFTER the
+note chain (loyalty -> reaction -> generic), persisted in board payloads,
+and tagged "[FEATURED +15%]" on the card. CRITICAL LAYOUT RULE: the
+featured stamp must stay AFTER the note if/elif chain in _refill — an
+earlier edit landed it between the loyalty if and the reaction elif,
+breaking the chain (regulars got reaction praise instead of loyalty).
+
+Local verification: all 53 suites + playtest bot + pytest green (7 new
+checks in tests/v042_test.gd; v019's payout sweep and v038's loyalty
+check skip featured jobs).
+
+---
+
+# Previous handoff — save slots (v0.41.0)
 
 ## Current active work
 

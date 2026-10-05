@@ -124,20 +124,24 @@ func _refill() -> void:
 		# Contract.generate values stay untouched.
 		if g.rush and _deal_rush_mult > 1.0:
 			g.payout_cents = mini(roundi(float(g.payout_cents) * _deal_rush_mult), 9500)
-		# Regulars (v0.31.0): repeat clients write loyalty notes at deal
-		# time — deterministic per job id, and the queue persists wholesale
-		# so the note never flickers between reloads.
+		# Note stamping chain (v0.42.0): loyalty (regulars 2+) wins, then
+		# grade reactions (v0.38.0), then the 45% generic draw. All
+		# deterministic per job id; the queue persists wholesale so notes
+		# never flicker between reloads.
 		if regulars.has(g.client) and int(regulars[g.client]) >= 2:
 			g.note = LOYALTY_NOTES[absi(hash("loyal-" + g.id)) % LOYALTY_NOTES.size()]
-		# The customers remember (v0.38.0): a returning client writes a
-		# reaction to their last grade — praise after an A, neutral after
-		# B/C, worry after D (loyalty wins for established regulars).
 		elif client_grades.has(g.client):
 			var last := str(client_grades[g.client])
 			var pool: Array[String] = REACTION_PRAISE if last == "A" \
 				else REACTION_WORRIED if last in ["D", "F"] \
 				else REACTION_NEUTRAL
 			g.note = pool[absi(hash("react-" + g.id)) % pool.size()]
+		# Featured pick (v0.42.0): exactly one generated job per day pays
+		# +15%. Hash-pinned per (day, slot); stamped AFTER the note chain
+		# so a featured job keeps its note.
+		if g.featured_slot_for_day(_gen_day) == _fixture_cycle:
+			g.featured = true
+			g.payout_cents = mini(roundi(float(g.payout_cents) * 1.15), 9500)
 		_queue.append(g)
 		_fixture_cycle += 1
 		return
@@ -217,6 +221,7 @@ func available_summaries() -> Array[Dictionary]:
 			"competing": c.competing,
 			"parts_total": c.parts_total,
 			"note": c.note,
+			"featured": c.featured,
 		})
 	return out
 
@@ -245,6 +250,7 @@ func snapshot_payload() -> Dictionary:
 			"color": c.color,
 			"parts_total": c.parts_total,
 			"note": c.note,
+			"featured": c.featured,
 		})
 	return {"day": _gen_day, "cycle": _fixture_cycle, "jobs": jobs}
 
@@ -322,6 +328,11 @@ static func _contract_from(j: Variant) -> Contract:
 		if not (d["note"] is String):
 			return null
 		note = d["note"]
+	var featured := false
+	if d.has("featured"):
+		if not (d["featured"] is bool):
+			return null
+		featured = d["featured"]
 	var flags: Array[String] = []
 	for f in d["risk_flags"]:
 		if not (f is String) or not (f as String in Contract.VALID_RISK_FLAGS):
@@ -343,6 +354,7 @@ static func _contract_from(j: Variant) -> Contract:
 	c.color = d["color"]
 	c.parts_total = parts
 	c.note = note
+	c.featured = featured
 	c.state = Contract.State.OFFERED
 	return c
 

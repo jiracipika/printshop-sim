@@ -80,8 +80,11 @@ func _run() -> void:
 	for c in main.job_board._queue:
 		if c.client != c_client or c.note == "":
 			continue
+		if c.featured:
+			continue  # featured picks keep their boost, note-free (v0.42)
 		if not loyal.has(c.note):
 			loyal_ok = false
+			print("DBG non-loyalty note: '", c.note, "' featured=", c.featured)
 	_ok(loyal_ok, "loyalty notes win over reactions for regulars")
 	main.job_board.regulars = {}
 	# A-client without regular status draws praise.

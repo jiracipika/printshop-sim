@@ -736,6 +736,27 @@ Test checks:
 
 ---
 
+## Post-roadmap — v0.42.1 "Featured orders" — SHIPPED
+
+- [x] One generated job per day is the board's featured pick: +15% payout
+      (capped $95), hash-pinned per (day, slot), stamped at deal time,
+      persisted in the board payload, card tag "[FEATURED +15%]"
+- [x] v0.42.1 fix: the featured stamp initially landed between the
+      loyalty if and the reaction elif in JobBoard._refill, breaking the
+      note chain (regulars' jobs got reaction praise instead of loyalty);
+      the chain is restored — loyalty > reaction > generic, featured
+      orthogonal
+
+Test checks:
+- [x] 7 new checks in v042_test (exactly-one-per-board, boosted payout =
+      base x1.15 capped, re-deal determinism, slot variance across days,
+      accept-takes-featured e2e with delivery, payload persistence)
+- [x] cascades: v019's payout-scale sweep and v038's loyalty check now
+      skip featured jobs
+- [x] all 53 suites + playtest bot + pytest green
+
+---
+
 ## Definition of done (every slice)
 
 - [ ] Feature checks above all ticked

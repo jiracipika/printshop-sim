@@ -1171,6 +1171,14 @@ func _make_card(s: Dictionary) -> PanelContainer:
 		comp_tag.add_theme_color_override("font_color", COLOR_TERRA)
 		comp_tag.add_theme_font_size_override("font_size", 12)
 		meta.add_child(comp_tag)
+	# Featured pick (v0.42.0): the board's daily highlight.
+	if bool(s.get("featured", false)):
+		var feat := Label.new()
+		feat.name = "FeaturedTag"
+		feat.text = "  [FEATURED +15%]"
+		feat.add_theme_color_override("font_color", COLOR_STEEL)
+		feat.add_theme_font_size_override("font_size", 12)
+		meta.add_child(feat)
 	# Customer voice (v0.30.0): the client's handwritten note, if any.
 	var note_text := str(s.get("note", ""))
 	if note_text != "":
