@@ -784,3 +784,29 @@ Test checks:
 - [ ] `vercel --prod --yes` deployed; live build-info.json matches the push
 - [ ] Live browser check: game boots, menu renders, new feature visible
 - [ ] README milestone + HANDOFF updated; Version.gd bumped
+
+## Post-roadmap — v0.44.0 "Stale offers" — SHIPPED
+
+- [x] A calm offer nobody took within three shop mornings rotates off the
+      board silently at rollover (STALE_MORNINGS = 3, cut = offered_day <=
+      day-3): no reputation hit, no missed stat — only rush/competing
+      expiry penalises. Board backfills with fresh deals at current tier
+      terms immediately.
+- [x] Restore semantics unchanged: snapshot/restore keeps offers a rollover
+      would have retired (retirement is a morning behavior, not a load
+      behavior).
+- [x] Fixes the tier-4 farm starvation: the board only refilled when a job
+      was taken, so a cautious player declining difficulty-4/5 jobs froze
+      intake at zero from day 5 (measured: 29 deliveries / $2,446 by day
+      14, rent bleeding for ten days).
+
+Test checks:
+- [x] 16 checks in v044_test (rotation + backfill, exactly-3-mornings
+      lifespan, silent at Main-level rollover, restore keeps stale) —
+      including a harness bug fix: _run now awaits each phase, which had
+      been silently skipping the 4 Main-level checks
+- [x] sim_lategame.gd picker is CONSERVATIVE again (difficulty <= 3) — the
+      profile that starved; floors raised to $3,000 / 60 deliveries so the
+      starved curve turns red. Healed run: 74 deliveries / $6,367 / 4
+      printers by day 14
+- [x] all 57 suites + both harnesses + pytest green

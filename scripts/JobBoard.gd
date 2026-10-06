@@ -34,6 +34,15 @@ var _capacity := 0  # cached fixture-pool size (set on first fill)
 ## difficulty and scale rush payouts. Defaults reproduce the uncapped board.
 var _deal_cap := 5
 var _deal_rush_mult := 1.0
+## Stale offers (v0.44.0): an offer that has sat on the board this many
+## shop days rotates off silently at rollover — no reputation hit, no
+## "missed" stat (only rush/competing expiry penalises; clients who never
+## got a promise just move on). Without this the board can freeze: refills
+## only happen when a job is taken, so a board full of work the shop
+## declines — a tier-4 farm whose player avoids the risk-heavy difficulty
+## 4-5 jobs — never refreshes and the farm starves while rent continues
+## (tests/sim_lategame.gd, conservative-picker run).
+const STALE_MORNINGS := 3
 ## Backorders (v0.39.0): extra board slots on top of the fixture capacity.
 var extra_jobs := 0
 ## Regulars (v0.31.0): client name -> completed orders, set by Main before
@@ -89,11 +98,12 @@ func _ready() -> void:
 	_fill_to_capacity()
 
 ## Morning rollover. Expire overnight offers (rush/competing dealt before
-## `day`), keep everything else, then top back up with fresh deals stamped
-## for the new day. `apply_expiry = false` deals a fresh board without
-## penalties (save-load path). `max_difficulty`/`rush_mult` (v0.19.0) update
-## the reputation-tier deal terms when >= 0/-1; refills use them from here
-## on. Returns the expired contracts, oldest first.
+## `day`), silently rotate off stale calm offers (v0.44.0, nobody took them
+## within STALE_MORNINGS days), keep everything else, then top back up with
+## fresh deals stamped for the new day. `apply_expiry = false` deals a fresh
+## board without penalties (save-load path). `max_difficulty`/`rush_mult`
+## (v0.19.0) update the reputation-tier deal terms when >= 0/-1; refills use
+## them from here on. Returns the expired contracts, oldest first.
 func rotate_day(day: int, apply_expiry := true, max_difficulty := -1, rush_mult := -1.0) -> Array:
 	if not generation_enabled:
 		return []
@@ -103,6 +113,17 @@ func rotate_day(day: int, apply_expiry := true, max_difficulty := -1, rush_mult 
 			if c.has_expired_for(maxi(day, 1)):
 				expired.append(c)
 	for c in expired:
+		_queue.erase(c)
+	# Stale offers (v0.44.0): offers nobody took within STALE_MORNINGS shop
+	# days rotate off silently so the board keeps refreshing even when
+	# nothing is taken. Backfill happens in _fill_to_capacity below; the
+	# expiry penalties above never apply to these.
+	var stale_cut := maxi(day, 1) - STALE_MORNINGS
+	var stale: Array = []
+	for c in _queue:
+		if int(c.offered_day) <= stale_cut:
+			stale.append(c)
+	for c in stale:
 		_queue.erase(c)
 	if max_difficulty > 0:
 		_deal_cap = clampi(max_difficulty, 1, 5)

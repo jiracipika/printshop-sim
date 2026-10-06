@@ -1,4 +1,50 @@
-# Current handoff — milestones II (v0.43.0)
+# Current handoff — stale offers (v0.44.0)
+
+## Current active work
+
+Tier-4 starvation fix. A board full of work the shop declines could never
+refresh: JobBoard refills ONLY when a job is taken (take_next ->
+_fill_to_capacity) or when rush/competing offers expire, and calm offers
+never rotated off — so a tier-4 farm whose player avoids the
+difficulty-4/5 jobs (uniform 1..5 fresh roll, +30% day bonus from day 7)
+froze at {4:7, 5:2} from day 5 with zero intake while rent kept charging
+(29 deliveries / $2,446 by day 14, measured). Fix is ONE knob:
+JobBoard.STALE_MORNINGS = 3 — rotate_day silently retires calm offers with
+offered_day <= day - 3 and the backfill replaces them. NO rep hit, NO
+missed stat (only rush/competing expiry penalises); restore/snapshot still
+reproduce boards exactly (retirement is rollover-only, not in
+restore_payload). v0.14 semantics otherwise untouched.
+
+sim_lategame's picker is back to the CONSERVATIVE rule (difficulty <= 3,
+sim_playtest's) — the difficulty-agnostic pick it replaced was a workaround
+for this exact starvation, documented in the old picker comment. Same bot
+now lands 74 deliveries / $6,367 by day 14 (fresh 2026-10-06 measurement;
+totals drift a few orders run-to-run with wall-clock pacing at 8x — gates
+are floors for that reason; days 1-4 are byte-identical to the starved run
+— the knob cannot fire before day 4). Balance floor sharpened $1,500 ->
+$3,000 WITH citation: the starved curve's $2,446 passed the old floor, so
+it caught nothing; the >= 60-delivery floor stands (starved 29 vs healed
+74). The agnostic curve gets slightly BETTER too ($18,271/154 -> $20,073/167
+by day 14 — even best-paying bots leave stragglers that now retire). New
+suite tests/v044_test.gd (16 checks: retirement never reports as expired,
+lifespan exactly 3 days, backfill, Main-level zero rep/missed, restore
+keeps stale offers).
+
+Suite bug fixed while verifying: v044_test's _run called the _test_*
+coroutines without await — each suspended at its first `await
+physics_frame` and quit() raced the pending continuations, so the 4
+Main-level checks SILENTLY never ran while the summary reported green
+(12/12 instead of 16/16). _run now awaits each phase; a suite that prints
+fewer checks than it defines is the tell.
+
+Local verification: all 57 suites (49 checks-format + 8 legacy "ALL PASS"
+format) + both sim harnesses + pytest 21/21 green. Note: do not edit any
+repo file while a ladder is running — mid-ladder edits made suites misparse
+or hang once (clean re-run was fully green).
+
+---
+
+# Previous handoff — milestones II (v0.43.0)
 
 ## Current active work
 

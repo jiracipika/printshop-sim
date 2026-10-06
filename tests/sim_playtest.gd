@@ -73,9 +73,14 @@ func _run() -> void:
 	_ok(min_balance >= 0, "balance never dipped negative (min %d)" % min_balance)
 	_ok(main.rent_debt_cents < 6000,
 		"rent debt stayed recoverable ($%s)" % main._cents_str(main.rent_debt_cents))
-	# Deterministic run (PrintSim has no RNG): the reference curve is
-	# 18 deliveries / $1,923 / rep 4.7 by day 8. Bounds leave room for
-	# balance tweaks but catch starvation regressions.
+	# Deterministic run (PrintSim has no RNG). Reference curve at loop end
+	# (the run rolls into day 9): 18 deliveries / $1,758 / rep 3.9 with the
+	# v0.44 stale-offer retirement — was 18 / $1,609 / rep 4.8 at v0.43 HEAD
+	# (measured 2026-10-06; the long-documented 18 / $1,923 / rep 4.7 v0.26
+	# curve had drifted with the v0.38-v0.42 board features without its
+	# comment being updated). Retirement retires offers the bot would
+	# eventually have taken, so the curve wobbles by ~1 delivery / ~$80.
+	# Bounds leave room for balance tweaks but catch starvation regressions.
 	_ok(int(main.stats.delivered) >= 8,
 		"the bot delivered at least 8 orders in %d days (got %d)" % [
 			DAYS, int(main.stats.delivered)])

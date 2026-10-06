@@ -6,6 +6,18 @@ extends SceneTree
 ## parallel (one pair of hands — the real bottleneck), and asserts the
 ## late game is reachable and profitable. Deterministic like sim_playtest.
 ##
+## v0.44.0: the picker is CONSERVATIVE again (difficulty <= 3, the
+## sim_playtest early-game rule) — the realistic cautious player. The
+## difficulty-agnostic pick below replaced with was a workaround: before
+## v0.44 stale-offer retirement, this exact configuration STARVED — tier 4
+## floods the board with difficulty-4/5 jobs, the board only refills when a
+## job is taken, and declined calm offers never left, so intake hit zero
+## from day 5 (29 deliveries / $2,446 by day 14, measured 2026-10-06) and
+## the farm bled rent for ten days. With stale offers retiring, the same
+## conservative bot lands 74 deliveries / $6,367 by day 14 (fresh
+## 2026-10-06 measurement; exact totals drift a few orders run-to-run with
+## wall-clock pacing at 8x — the gates below are floors for that reason).
+##
 ## Run: godot --headless --path . -s tests/sim_lategame.gd
 ## (Named outside tests/*_test.gd: simulates ~25 minutes of shop time.)
 
@@ -84,13 +96,21 @@ func _run() -> void:
 		_ok(ever_running[i], "printer %d ran at least one print" % (i + 1))
 
 	# --- survival + late-game progression ---------------------------------------
-	_ok(main.ledger.balance() >= 1500,
+	# $3,000 floor: the healed conservative run banks $6,367 by day 14, the
+	# starved pre-v0.44 run only $2,446 (rent outpaced the dead board) — the
+	# old $1,500 floor passed even the starved curve and caught nothing.
+	_ok(main.ledger.balance() >= 3000,
 		"day-%d balance shows late-game profit ($%s)" % [
 			DAYS, main._cents_str(main.ledger.balance())])
 	_ok(min_balance >= 0, "balance never dipped negative (min %d)" % min_balance)
 	_ok(main.rent_debt_cents < 6000,
 		"rent debt stayed recoverable ($%s)" % main._cents_str(main.rent_debt_cents))
-	# Deterministic reference: 159 deliveries / $19,294 / rep 5.0 by day 14.
+	# Reference curves at the v0.44 stale-offer retirement (2026-10-06):
+	# conservative picker 74 deliveries / $6,367 by day 14 (the curve this
+	# harness now runs); the pre-v0.44 difficulty-agnostic picker made
+	# 159 / $19,294 / rep 5.0 (v0.33) and 154 / $18,271 after v0.38-v0.42
+	# board changes. Floors sit well under both healthy curves and over the
+	# starved 29-delivery run, so a starvation regression turns red.
 	_ok(int(main.stats.delivered) >= 60,
 		"the farm delivered at least 60 orders in %d days (got %d)" % [
 			DAYS, int(main.stats.delivered)])
@@ -219,14 +239,20 @@ func _refill_filament(main, idx: int) -> void:
 		return
 
 
-## Late-game picker: take the best-paying job on the board regardless of
-## difficulty — at tier 4 the board deals hard jobs, and a conservative
-## filter starves the shop (the day-9 stall in the first calibration run).
-## Prints are forced-success in this harness, so difficulty only affects
-## filament cost, which the refill path covers.
+## Late-game picker: the conservative early-game rule (difficulty <= 3, skip
+## sub-2-day rush — same as sim_playtest). This is the profile that starved
+## before v0.44 stale-offer retirement (see header): at tier 4 the board
+## deals hard jobs a cautious player declines, and they now rotate off after
+## three mornings instead of clogging the board forever. Prints are
+## forced-success in this harness, so difficulty only affects filament cost,
+## which the refill path covers.
 func _pick_job(main) -> Contract:
 	var best: Contract = null
 	for c in main.job_board._queue:
+		if c.difficulty > 3:
+			continue
+		if c.rush and c.deadline_days < 2:
+			continue
 		if best == null or c.payout_cents > best.payout_cents:
 			best = c
 	return best
