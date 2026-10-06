@@ -120,6 +120,10 @@ static func validate(payload: Variant) -> Dictionary:
 		return {}
 	if not _media_a_valid(p):
 		return {}
+	if not _wear_valid(p):
+		return {}
+	if not _cleans_valid(p):
+		return {}
 	if not _day_earned_valid(p):
 		return {}
 
@@ -236,6 +240,33 @@ static func _media_a_valid(p: Dictionary) -> bool:
 	if t != TYPE_INT and t != TYPE_FLOAT:
 		return false
 	var f := float(p["media_a_deliveries"])
+	return f == floorf(f) and f >= 0.0
+
+
+## Optional "wear" key (v0.45.0): array of per-machine wear percents 0..100.
+static func _wear_valid(p: Dictionary) -> bool:
+	if not p.has("wear"):
+		return true
+	if typeof(p["wear"]) != TYPE_ARRAY:
+		return false
+	for w in p["wear"]:
+		var t := typeof(w)
+		if t != TYPE_INT and t != TYPE_FLOAT:
+			return false
+		var f := float(w)
+		if f != floorf(f) or f < 0.0 or f > 100.0:
+			return false
+	return true
+
+
+## Optional "cleans" key (v0.45.0): non-negative whole count.
+static func _cleans_valid(p: Dictionary) -> bool:
+	if not p.has("cleans"):
+		return true
+	var t := typeof(p["cleans"])
+	if t != TYPE_INT and t != TYPE_FLOAT:
+		return false
+	var f := float(p["cleans"])
 	return f == floorf(f) and f >= 0.0
 
 

@@ -207,6 +207,7 @@ var client_orders: Dictionary = {}
 var client_last_grade: Dictionary = {}
 ## Media-day A deliveries (v0.43.0) — persists for the Paper star milestone.
 var media_a_deliveries: int = 0
+var cleans: int = 0  # v0.45.0 completed maintenance cleans (Meticulous)
 ## False until _ready finishes: boot-time station marks happen before the
 ## save loads, and saving there would clobber the player's file.
 var _boot_ready := false
@@ -445,6 +446,8 @@ func _achievements() -> Array[Dictionary]:
 			"done": job_board.get_available_count() >= 12},
 		{"name": "Distinguished", "hint": "reach 5 regulars and 5 stars",
 			"done": _regulars_count() >= 5 and reputation >= 5.0},
+		{"name": "Meticulous", "hint": "run 10 cleaning cycles",
+			"done": cleans >= 10},
 		{"name": "Week one", "hint": "keep the shop open past day 7",
 			"done": day_cycle.day > 7},
 		{"name": "High earner", "hint": "earn $500 lifetime",
@@ -702,6 +705,11 @@ func _load_save() -> void:
 			var col = payload.spool_colors[i]
 			if col is String and (col == "" or col in Contract.VALID_COLORS):
 				machines[i]["color"] = col
+	if payload.has("wear") and typeof(payload.wear) == TYPE_ARRAY:
+		for i in mini(machines.size(), payload.wear.size()):
+			machines[i]["wear"] = clampf(float(int(payload.wear[i])), 0.0, 100.0)
+	if payload.has("cleans"):
+		cleans = maxi(int(payload.cleans), 0)
 	if payload.has("guide_flags") and typeof(payload.guide_flags) == TYPE_DICTIONARY:
 		for key in guide_flags.keys():
 			if payload.guide_flags.has(key):
@@ -808,6 +816,12 @@ func _machine_color_list() -> Array:
 		out.append(str(m.get("color")))
 	return out
 
+func _machine_wear_list() -> Array:
+	var out: Array = []
+	for m in machines:
+		out.append(int(float(m.get("wear", 0.0))))
+	return out
+
 func _save_game() -> void:
 	var snapshot: Dictionary = ledger.snapshot()
 	var payload: Dictionary = load("res://scripts/SaveSystem.gd").build_payload(
@@ -819,6 +833,8 @@ func _save_game() -> void:
 			"stats": stats,
 			"filament": _machine_filament_list(),
 			"spool_colors": _machine_color_list(),
+			"wear": _machine_wear_list(),
+			"cleans": cleans,
 			"guide_flags": guide_flags.duplicate(),
 			"guide_done": guide_done,
 			"crate_next": _crate_next,
@@ -1034,6 +1050,7 @@ func _build_world() -> void:
 			"color": "Clay" if i == 0 else "",
 			"last_est_g": 0,
 			"prototype": {},
+			"wear": 0.0, "clean_left_s": 0.0,  # v0.45.0 wear & tear
 		})
 		s.print_started.connect(_on_print_started.bind(i))
 		s.print_finished.connect(_on_print_done.bind(i))
@@ -2646,6 +2663,7 @@ func _physics_process(delta: float) -> void:
 	for m in machines:
 		var s: PrintSim = m.get("sim")
 		s.tick(delta)
+	_tick_cleaning(delta)  # v0.45.0 maintenance countdowns, same live gate
 	day_cycle.tick(delta)
 	_apply_daylight()
 	_animate_rain(delta)
@@ -2770,6 +2788,10 @@ func _on_print_done(ok: bool, idx: int) -> void:
 		if not m.get("prototype", {}).is_empty() and ok:
 			_set_prompt("Prototype complete — press E at Printer %d to collect it" % (idx + 1))
 		return
+	# Wear & tear (v0.45.0): every completed print stresses the machine;
+	# a failed print (jams, collapsed supports) stresses it more.
+	m["wear"] = clampf(float(m.get("wear", 0.0)) + (6.0 + c.difficulty if ok else 12.0),
+		0.0, 100.0)
 	if ok and c.state == Contract.State.PRINTING:
 		_advance(c, Contract.State.INSPECTION)
 	elif not ok:
@@ -2783,6 +2805,50 @@ func _on_print_done(ok: bool, idx: int) -> void:
 			cause if cause != "" else "print failed"])
 		_set_prompt("Print FAILED — %s lost. [E] clear the printer" % c.model_name)
 		m["contract"] = null
+
+## --- wear & tear (v0.45.0): cleaning cycle -----------------------------------
+
+const CLEAN_TIME_S := 15.0
+
+## E at the focused printer: start (or report) a cleaning cycle. Cleaning
+## needs an IDLE machine with no parked contract; the countdown lives on the
+## machine dict and is ticked from _physics_process beside the print sims.
+## Returns true when the press was consumed.
+func _maintenance_on(idx: int) -> bool:
+	var m := _machine(idx)
+	var left := float(m.get("clean_left_s", 0.0))
+	if left > 0.0:
+		_set_prompt("Cleaning Printer %d — %ds left" % [idx + 1, ceili(left)])
+		return true
+	var s: PrintSim = m.get("sim")
+	var c: Contract = m.get("contract")
+	if s.state != PrintSim.State.IDLE or c != null:
+		return false
+	# Only meaningful wear offers a clean — light wear (a print or two) must
+	# never steal the accept press at an idle printer.
+	var wear := float(m.get("wear", 0.0))
+	if wear < 50.0:
+		return false
+	m["clean_left_s"] = CLEAN_TIME_S
+	sfx.play("click")
+	_set_prompt("Cleaning Printer %d (%d%% wear) — %ds" % [idx + 1, int(wear), int(CLEAN_TIME_S)])
+	return true
+
+func _tick_cleaning(delta: float) -> void:
+	for m in machines:
+		var left := float(m.get("clean_left_s", 0.0))
+		if left <= 0.0:
+			continue
+		left -= delta
+		if left > 0.0:
+			m["clean_left_s"] = left
+			continue
+		m["clean_left_s"] = 0.0
+		m["wear"] = 0.0
+		cleans += 1
+		_log_event("maintained", "Printer %d cleaned" % (int(m.get("idx")) + 1))
+		if _focus == int(m.get("idx")):
+			_set_prompt("Printer %d cleaned — wear reset" % (int(m.get("idx")) + 1))
 
 func _nearest_printer() -> Node3D:
 	var best: Node3D = null
@@ -3532,7 +3598,8 @@ func _write_prep_to_sim(eval: Dictionary, idx: int) -> void:
 		if idx == 1 and upgrades.pro_machine_unlocked() else 1.0
 	s.speed_multiplier = upgrades.speed_multiplier() * machine_mult
 	s.failure_threshold = clampf(BASE_FAILURE_THRESHOLD + upgrades.failure_threshold_delta() \
-		+ float(today_event.failure_delta), 0.0, 1.0)
+		+ float(today_event.failure_delta) \
+		+ 0.25 * clampf(float(_machine(idx).get("wear", 0.0)) / 100.0, 0.0, 1.0), 0.0, 1.0)
 
 func _write_prep_to_sim_focus(eval: Dictionary) -> void:
 	_write_prep_to_sim(eval, _focus)
@@ -3853,6 +3920,11 @@ func _try_interact() -> void:
 	_focus = clampi(int(printer.get_meta("printer_index", 0)), 0, maxi(machines.size() - 1, 0))
 	var m := _machine(_focus)
 	var s: PrintSim = m.get("sim")
+	# Wear & tear (v0.45.0): a cleaning cycle in progress blocks the printer;
+	# an idle worn printer offers one. Only acts when idle with no contract,
+	# so FAILED clears and part collects keep priority.
+	if _maintenance_on(_focus):
+		return
 	if s.is_running():
 		return
 	if s.state == PrintSim.State.DONE_FAIL:
@@ -4111,12 +4183,20 @@ func _update_hud() -> void:
 	for m in machines:
 		var fg := int(m.get("filament_g"))
 		var col: String = str(m.get("color", ""))
-		fil_bits.append("P%d %dg %s" % [int(m.get("idx")) + 1, fg, col if col != "" else "—"])
+		var wear := int(float(m.get("wear", 0.0)))
+		fil_bits.append("P%d %dg %s%s" % [int(m.get("idx")) + 1, fg,
+			col if col != "" else "—", " ⚠%d%%" % wear if wear >= 50 else ""])
 	lines.append("Filament — " + " · ".join(fil_bits))
 	# Focused machine's action line, then per-machine print progress.
 	var fm := _machine(_focus)
 	var fs: PrintSim = fm.get("sim")
 	var fc: Contract = fm.get("contract")
+	var fclean := float(fm.get("clean_left_s", 0.0))
+	if fclean > 0.0:
+		lines.append("Cleaning Printer %d — %ds left" % [_focus + 1, ceili(fclean)])
+	elif fs.state == PrintSim.State.IDLE and fc == null \
+			and float(fm.get("wear", 0.0)) >= 50.0:
+		lines.append("[E] Clean printer (%d%% wear)" % int(float(fm.get("wear", 0.0))))
 	if fs.state == PrintSim.State.IDLE and (fc == null or fc.state != Contract.State.PREPARING):
 		var p := _nearest_printer()
 		if p != null and job_board.has_available():

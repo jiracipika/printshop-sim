@@ -74,13 +74,10 @@ func _run() -> void:
 	_ok(main.rent_debt_cents < 6000,
 		"rent debt stayed recoverable ($%s)" % main._cents_str(main.rent_debt_cents))
 	# Deterministic run (PrintSim has no RNG). Reference curve at loop end
-	# (the run rolls into day 9): 18 deliveries / $1,758 / rep 3.9 with the
-	# v0.44 stale-offer retirement — was 18 / $1,609 / rep 4.8 at v0.43 HEAD
-	# (measured 2026-10-06; the long-documented 18 / $1,923 / rep 4.7 v0.26
-	# curve had drifted with the v0.38-v0.42 board features without its
-	# comment being updated). Retirement retires offers the bot would
-	# eventually have taken, so the curve wobbles by ~1 delivery / ~$80.
-	# Bounds leave room for balance tweaks but catch starvation regressions.
+	# (the run rolls into day 9): 17 deliveries / $1,759 with the v0.45
+	# wear & tear maintenance loop (the bot cleans at 50% wear; one delivery
+	# trades for a clean cycle vs the v0.44 curve's 18 / $1,758). Bounds
+	# leave room for balance tweaks but catch starvation regressions.
 	_ok(int(main.stats.delivered) >= 8,
 		"the bot delivered at least 8 orders in %d days (got %d)" % [
 			DAYS, int(main.stats.delivered)])
@@ -140,8 +137,14 @@ func _bot_tick(main) -> void:
 				main._try_interact()  # grab the finished part
 				return
 
-	# Idle machine: top up filament, then take the best affordable job.
+	# Idle machine: keep it maintained (v0.45.0), then filament, then jobs.
 	if c == null and sim.state == PrintSim.State.IDLE:
+		if float(m.get("clean_left_s", 0.0)) > 0.0:
+			return  # a clean is running; it ticks on its own
+		if float(m.get("wear", 0.0)) >= 50.0:
+			main._player.global_position = PRINTER_POS
+			main._try_interact()  # clean the worn machine (wear raises risk)
+			return
 		if int(m.get("filament_g")) < 700:
 			_refill_filament(main)
 			return

@@ -1,4 +1,35 @@
-# Current handoff — stale offers (v0.44.0)
+# Current handoff — wear & tear (v0.45.0)
+
+## Current active work
+
+Machines now wear out: every completed print adds 6 + difficulty wear
+(12 on a failure, clamp 0..100), persisted per machine ("wear" array +
+"cleans" counter, validated). Wear widens the PrintSim failure threshold
+at _write_prep_to_sim — 0.25 x wear/100 COMPOSED with the upgrades delta
+and today_event.failure_delta (the first cut set the threshold fresh in
+_prep_on and clobbered the power-hiccup +0.10; events_test check 11
+caught it — compose, never overwrite). At 50%+ wear an IDLE printer
+offers a 15 s cleaning cycle on E (_maintenance_on; countdown lives on
+the machine dict as clean_left_s, ticked by _tick_cleaning in
+_physics_process beside the sims; paused shop pauses cleaning too).
+Below 50% wear E never offers a clean — a light-worn printer must keep
+accepting (economy_test caught the 9%-wear clean stealing the accept
+press). E during a clean reports the countdown and refuses. Completion
+resets wear, counts cleans, logs "maintained". HUD: "P1 812g Clay
+[warning]62%" at 50%+, "[E] Clean printer (N% wear)" action line,
+cleaning countdown line. Meticulous milestone at 10 cleans.
+
+Bots maintain now: sim_playtest cleans in its idle tier, sim_lategame
+runs a per-machine maintenance pass (a running clean parks that machine;
+the farm bot parks wholly for the 15 s). Measured: upkeep is nearly
+cost-neutral (17/$1,759 vs 18/$1,758 early — one delivery trades for a
+clean; 74/$6,082 vs 74/$6,367 late). tests/v045_test.gd: 28 checks.
+
+Local verification: all 58 suites + both harnesses + pytest green.
+
+---
+
+# Previous handoff — stale offers (v0.44.0)
 
 ## Current active work
 

@@ -810,3 +810,28 @@ Test checks:
       starved curve turns red. Healed run: 74 deliveries / $6,367 / 4
       printers by day 14
 - [x] all 57 suites + both harnesses + pytest green
+
+## Post-roadmap — v0.45.0 "Wear & tear" — SHIPPED
+
+- [x] Machines accrue wear per print (6 + difficulty; 12 on a failure,
+      clamped 0..100), persisted per machine with a save validator
+- [x] Wear widens the PrintSim failure threshold at prep-write time
+      (0.25 × wear/100, composed WITH the upgrades delta and the daily
+      event's failure_delta — the first cut clobbered the power-hiccup
+      +0.10 and events_test caught it)
+- [x] Cleaning cycle: E at an IDLE printer with 50%+ wear runs a 15 s
+      clean (sim-time countdown on the machine dict, ticks beside the
+      print sims), resetting wear; below 50% wear E never steals the
+      accept press; E during a clean is refused politely
+- [x] HUD: wear ⚠ marker on the filament line at 50%+, "[E] Clean
+      printer" action line, live cleaning countdown
+- [x] Meticulous milestone (10 cleans); "maintained" workshop-log kind
+- [x] Both bots maintain: playtest cleans at 50% wear, farm bot runs a
+      per-machine maintenance pass — upkeep measured nearly cost-neutral
+      (17/$1,759 vs 18/$1,758 early; 74/$6,082 vs 74/$6,367 late)
+
+Test checks:
+- [x] 28 checks in v045_test (accrual both paths, composed threshold,
+      clean start/refuse/complete, milestone, persistence, validators,
+      restore boot, no-steal accept)
+- [x] all 58 suites + both harnesses + pytest green

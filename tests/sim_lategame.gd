@@ -105,12 +105,13 @@ func _run() -> void:
 	_ok(min_balance >= 0, "balance never dipped negative (min %d)" % min_balance)
 	_ok(main.rent_debt_cents < 6000,
 		"rent debt stayed recoverable ($%s)" % main._cents_str(main.rent_debt_cents))
-	# Reference curves at the v0.44 stale-offer retirement (2026-10-06):
-	# conservative picker 74 deliveries / $6,367 by day 14 (the curve this
-	# harness now runs); the pre-v0.44 difficulty-agnostic picker made
-	# 159 / $19,294 / rep 5.0 (v0.33) and 154 / $18,271 after v0.38-v0.42
-	# board changes. Floors sit well under both healthy curves and over the
-	# starved 29-delivery run, so a starvation regression turns red.
+	# Reference curves (2026-10-06): conservative picker WITH the v0.45
+	# maintenance loop — 74 deliveries / $6,082 by day 14 (upkeep is nearly
+	# cost-neutral vs the no-clean v0.44 curve's 74 / $6,367); the pre-v0.44
+	# difficulty-agnostic picker made 159 / $19,294 / rep 5.0 (v0.33) and
+	# 154 / $18,271 after v0.38-v0.42 board changes. Floors sit well under
+	# both healthy curves and over the starved 29-delivery run, so a
+	# starvation regression turns red.
 	_ok(int(main.stats.delivered) >= 60,
 		"the farm delivered at least 60 orders in %d days (got %d)" % [
 			DAYS, int(main.stats.delivered)])
@@ -171,6 +172,21 @@ func _bot_tick(main) -> void:
 		if c != null and c.state == Contract.State.PREPARING \
 				and sim.state == PrintSim.State.IDLE:
 			_confirm_prep(main, m, idx)
+			return
+
+	# Maintenance (v0.45.0): cleans on worn idle machines — wear raises the
+	# failure threshold, so upkeep is cheaper than reprints. A running clean
+	# parks the whole bot for its 15 s (the printer refuses E regardless).
+	for m in main.machines:
+		var idx := int(m.get("idx"))
+		if not main.upgrades.machine_unlocked(idx):
+			continue
+		if float(m.get("clean_left_s", 0.0)) > 0.0:
+			return
+		if float(m.get("wear", 0.0)) >= 50.0 and m.get("contract") == null \
+				and (m.get("sim") as PrintSim).state == PrintSim.State.IDLE:
+			_stand_at(main, idx)
+			main._try_interact()
 			return
 
 	# Idle machines take work.
