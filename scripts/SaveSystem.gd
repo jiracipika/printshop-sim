@@ -126,6 +126,10 @@ static func validate(payload: Variant) -> Dictionary:
 		return {}
 	if not _day_earned_valid(p):
 		return {}
+	if not _daily_delivered_valid(p):
+		return {}
+	if not _day_delivered_valid(p):
+		return {}
 
 	var out: Dictionary = p.duplicate(true)
 	out["version"] = int(p["version"])
@@ -267,6 +271,36 @@ static func _cleans_valid(p: Dictionary) -> bool:
 	if t != TYPE_INT and t != TYPE_FLOAT:
 		return false
 	var f := float(p["cleans"])
+	return f == floorf(f) and f >= 0.0
+
+
+## Optional "daily_delivered" key (v0.47.0): weekly window of per-day order
+## counts — same shape rules as daily_earned.
+static func _daily_delivered_valid(p: Dictionary) -> bool:
+	if not p.has("daily_delivered"):
+		return true
+	if typeof(p["daily_delivered"]) != TYPE_ARRAY:
+		return false
+	if p["daily_delivered"].size() > 7:
+		return false
+	for v in p["daily_delivered"]:
+		var t := typeof(v)
+		if t != TYPE_INT and t != TYPE_FLOAT:
+			return false
+		var f := float(v)
+		if f != floorf(f) or f < 0.0:
+			return false
+	return true
+
+
+## Optional "day_delivered_today" key (v0.47.0): non-negative whole count.
+static func _day_delivered_valid(p: Dictionary) -> bool:
+	if not p.has("day_delivered_today"):
+		return true
+	var t := typeof(p["day_delivered_today"])
+	if t != TYPE_INT and t != TYPE_FLOAT:
+		return false
+	var f := float(p["day_delivered_today"])
 	return f == floorf(f) and f >= 0.0
 
 

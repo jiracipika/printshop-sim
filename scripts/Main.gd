@@ -199,6 +199,8 @@ var recent_grades: Array[String] = []
 ## sparkline from the history.
 var daily_earned: Array[int] = []
 var day_earned_today: int = 0
+var daily_delivered: Array[int] = []  # v0.47.0 shop-history graph
+var day_delivered_today: int = 0
 ## Regulars (v0.31.0): client name -> completed orders. Feeds the loyalty
 ## notes on freshly dealt board jobs and the Stats regulars line.
 var client_orders: Dictionary = {}
@@ -348,6 +350,10 @@ func _on_menu_today() -> void:
 		lines.append("Yesterday: the shop just opened.")
 	else:
 		lines.append("Yesterday: $%s earned" % _cents_str(int(daily_earned[-1])))
+		# v0.47.0: the matching order count from the shop-history graph.
+		if not daily_delivered.is_empty():
+			lines.append("Yesterday: %d order%s delivered" % [int(daily_delivered[-1]),
+				"" if int(daily_delivered[-1]) == 1 else "s"])
 	var yday := day_cycle.day - 1
 	if yday >= 1:
 		var kinds := {}
@@ -753,6 +759,14 @@ func _load_save() -> void:
 			daily_earned = daily_earned.slice(daily_earned.size() - 7)
 	if payload.has("day_earned_today"):
 		day_earned_today = maxi(int(payload.day_earned_today), 0)
+	if payload.has("daily_delivered") and typeof(payload.daily_delivered) == TYPE_ARRAY:
+		daily_delivered.clear()
+		for v in payload.daily_delivered:
+			daily_delivered.append(maxi(int(v), 0))
+		if daily_delivered.size() > 7:
+			daily_delivered = daily_delivered.slice(daily_delivered.size() - 7)
+	if payload.has("day_delivered_today"):
+		day_delivered_today = maxi(int(payload.day_delivered_today), 0)
 	if payload.has("shelf_models") and typeof(payload.shelf_models) == TYPE_ARRAY:
 		_shelf_models.clear()
 		for mname in payload.shelf_models:
@@ -822,6 +836,14 @@ func _machine_wear_list() -> Array:
 		out.append(int(float(m.get("wear", 0.0))))
 	return out
 
+## Machines drawing power (v0.46.0): every unlocked printer bills $1/day.
+func _unlocked_machine_count() -> int:
+	var n := 0
+	for i in range(machines.size()):
+		if upgrades.machine_unlocked(i):
+			n += 1
+	return n
+
 func _save_game() -> void:
 	var snapshot: Dictionary = ledger.snapshot()
 	var payload: Dictionary = load("res://scripts/SaveSystem.gd").build_payload(
@@ -846,6 +868,8 @@ func _save_game() -> void:
 			"recent_grades": recent_grades,
 			"daily_earned": daily_earned,
 			"day_earned_today": day_earned_today,
+			"daily_delivered": daily_delivered,
+			"day_delivered_today": day_delivered_today,
 			"client_orders": client_orders,
 			"client_last_grade": client_last_grade,
 			"media_a_deliveries": media_a_deliveries,
@@ -3469,6 +3493,7 @@ func _try_pack_held() -> bool:
 	stats.delivered += 1
 	stats.earned_cents += payout
 	day_earned_today += payout
+	day_delivered_today += 1  # v0.47.0 shop-history graph
 	client_orders[c.client] = int(client_orders.get(c.client, 0)) + 1
 	client_last_grade[c.client] = final_grade
 	_guide("delivered")
@@ -3758,11 +3783,15 @@ func _on_day_changed(new_day: int) -> void:
 	_refresh_event()
 	_morning_bell()
 	# Shop history (v0.30.0): bank yesterday's take onto the chalkboard
-	# sparkline, newest last, keep a week.
+	# sparkline, newest last, keep a week. v0.47.0 banks the order count too.
 	daily_earned.append(day_earned_today)
 	if daily_earned.size() > 7:
 		daily_earned = daily_earned.slice(daily_earned.size() - 7)
 	day_earned_today = 0
+	daily_delivered.append(day_delivered_today)
+	if daily_delivered.size() > 7:
+		daily_delivered = daily_delivered.slice(daily_delivered.size() - 7)
+	day_delivered_today = 0
 	var missed_note := ""
 	if not expired.is_empty():
 		stats.missed += expired.size()
@@ -3788,6 +3817,15 @@ func _on_day_changed(new_day: int) -> void:
 			rent_debt_cents += rent_due
 			_log_event("rent", "rent UNPAID — now owe $%s" % _cents_str(rent_debt_cents))
 			_set_prompt("Day %d — rent UNPAID (now owe $%s)%s" % [new_day, _cents_str(rent_debt_cents), missed_note])
+	# Power bill (v0.46.0): every unlocked printer draws $1/day — standby
+	# heaters, steppers, beds. Charged with rent but with NO debt plumbing:
+	# a shop that cannot pay simply runs dark tomorrow. A rent holiday does
+	# not cover it. Logged so the Today panel's morning recap counts it.
+	var power_due := 100 * _unlocked_machine_count()
+	if ledger.can_afford(power_due):
+		ledger.charge(power_due, "power day %d" % new_day)
+		_log_event("power", "power bill $%s (%d machine%s)" % [_cents_str(power_due),
+			_unlocked_machine_count(), "" if _unlocked_machine_count() == 1 else "s"])
 	for m in machines:
 		if not _is_cancelled_for(m):
 			continue
@@ -4247,6 +4285,30 @@ func _earnings_sparkline() -> String:
 			out += RAMP[clampi(int(float(v) / float(top) * 7.0), 0, 7)]
 	return out
 
+## Order-count graph (v0.47.0): same weekly window and ramp as the earnings
+## sparkline, scaled against the best DAY (never against dollars).
+func _orders_sparkline() -> String:
+	if daily_delivered.is_empty():
+		return "No orders yet this week."
+	var top := 1
+	for v in daily_delivered:
+		top = maxi(top, int(v))
+	const RAMP := "▁▂▃▄▅▆▇█"
+	var out := "Orders: "
+	for v in daily_delivered:
+		if int(v) <= 0:
+			out += "·"
+		else:
+			out += RAMP[clampi(int(float(v) / float(top) * 7.0), 0, 7)]
+	return out
+
+## Best single day on record (v0.47.0), in dollars.
+func _best_day_cents() -> int:
+	var top := 0
+	for v in daily_earned:
+		top = maxi(top, int(v))
+	return top
+
 func _update_chalkboard() -> void:
 	if _chalk_label == null:
 		return
@@ -4256,11 +4318,13 @@ func _update_chalkboard() -> void:
 	var week := int((day_cycle.day - 1) / 7.0) + 1
 	var icon := _season_icon(str(season.get("id", "calm")))
 	var week_line := "Week %d %s" % [week, icon] if icon != "" else "Week %d" % week
-	var text := "SHOP LEDGER\nDay %d · %s\nDelivered: %d\nMissed: %d\nEarned: $%s\n%s\nRep %s %.1f" % [
+	var text := "SHOP LEDGER\nDay %d · %s\nDelivered: %d\nMissed: %d\nEarned: $%s\n%s\n%s\nBest day: $%s\nRep %s %.1f" % [
 		day_cycle.day, week_line,
 		int(stats.delivered), int(stats.missed),
 		_cents_str(int(stats.earned_cents)),
 		_earnings_sparkline(),
+		_orders_sparkline(),
+		_cents_str(_best_day_cents()),
 		stars, reputation]
 	if text != _chalk_cache:
 		_chalk_cache = text

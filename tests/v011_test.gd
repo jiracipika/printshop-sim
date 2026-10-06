@@ -128,8 +128,10 @@ func _test_season_effects() -> void:
 		main.day_cycle.tick(main.day_cycle.day_length_s)  # rolls within the week
 		_ok(int(main.season.extra_rent_cents) == 100, "cold-snap season active after rollover")
 		var due: int = main.rent_for_day(main.day_cycle.day) + 100
-		_ok(ledger.balance() == bal1 - due,
-			"cold snap adds $1 to the scaled rent ($%s)" % main._cents_str(due))
+		var power: int = 100 * main._unlocked_machine_count()  # v0.46.0 power bill
+		_ok(ledger.balance() == bal1 - due - power,
+			"cold snap adds $1 to the scaled rent ($%s + $%s power)" % [
+				main._cents_str(due), main._cents_str(power)])
 
 	main.queue_free()
 	await physics_frame

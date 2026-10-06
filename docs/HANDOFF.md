@@ -1,4 +1,34 @@
-# Current handoff — wear & tear (v0.45.0)
+# Current handoff — power bill + shop history (v0.46.0, v0.47.0)
+
+## Current active work
+
+v0.46.0 POWER BILL: every unlocked printer draws $1/day at the morning
+rollover, charged after rent via _unlocked_machine_count() (base shop $1,
+full farm $4; measured exactly $56 across the 14-day harness). NO debt
+plumbing — a shop that cannot afford it runs dark (skip, no owe); rent
+debt is untouched. A rent holiday skips rent but NOT power. Logged as a
+"power" log-kind so the Today panel recap counts it. day_test and
+v011_test rollover balance pins were updated to the new invariant
+(balance = old - rent - power, both terms explicit — do not revert them
+to rent-only).
+
+v0.47.0 SHOP HISTORY: chalkboard gains an order-count graph
+(_orders_sparkline, same 7-day window/ramp as earnings, scaled against
+the best DAY) and a "Best day: $X" record line (_best_day_cents);
+Today panel reports yesterday's order count. daily_delivered +
+day_delivered_today persist with validators, banked at rollover exactly
+like daily_earned; delivery increments day_delivered_today beside
+stats.delivered in the pack path. TEST GOTCHA re-confirmed: assigning an
+untyped array literal (main.daily_delivered = [1, 2]) to a typed
+Array[int] var is a RUNTIME error that aborts _run before quit() — the
+suite then hangs with zero output; use .assign([...]).
+
+Local verification: all 60 suites + both harnesses + pytest green
+(day_test/v011 re-pinned, v046 11 checks, v047 18 checks).
+
+---
+
+# Previous handoff — wear & tear (v0.45.0)
 
 ## Current active work
 

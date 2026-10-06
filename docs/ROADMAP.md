@@ -835,3 +835,39 @@ Test checks:
       clean start/refuse/complete, milestone, persistence, validators,
       restore boot, no-steal accept)
 - [x] all 58 suites + both harnesses + pytest green
+
+## Post-roadmap — v0.46.0 "Power bill" — SHIPPED
+
+- [x] Every unlocked printer draws $1/day, charged at the morning rollover
+      right after rent (base shop $1, full farm $4 — measured on the
+      14-day harness: exactly $56 over 14 farm days)
+- [x] No debt plumbing: a shop that cannot pay runs dark (nothing charged,
+      nothing owed); rent debt still accrues independently
+- [x] A rent holiday skips rent but NOT power; logged as a "power" kind so
+      the Today panel's morning recap counts it
+- [x] day_test + v011_test rollover balance pins updated to the new
+      invariant: balance = old - rent - power (precise, both terms named)
+
+Test checks:
+- [x] 11 checks in v046_test (day-1 quiet, $1 single / $4 farm, rent
+      coexists, holiday skips rent not power, broke runs dark, rent debt
+      unaffected, log kind present)
+- [x] harness re-measured: farm 74 deliveries / $6,026 by day 14
+
+---
+
+## Post-roadmap — v0.47.0 "Shop history" — SHIPPED
+
+- [x] Chalkboard gains an order-count graph beside the earnings sparkline
+      (same weekly window + ramp, scaled against the best DAY) and a
+      "Best day: $X" record line
+- [x] Today panel reports yesterday's order count under yesterday's take
+- [x] daily_delivered / day_delivered_today persist with validators
+      (weekly window <= 7, non-negative whole counts), banked at rollover
+      exactly like daily_earned
+
+Test checks:
+- [x] 18 checks in v047_test (placeholders, ramp glyphs pinned per day,
+      chalkboard render, real delivery feeds today's count, rollover
+      banking + trim, persistence, 4 validator rejections, restore boot)
+- [x] all 60 suites + both harnesses + pytest green

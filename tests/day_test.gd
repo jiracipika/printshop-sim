@@ -68,8 +68,9 @@ func _test_rent_and_debt() -> void:
 	main.day_cycle.tick(main.day_cycle.day_length_s)  # -> day 2
 	_ok(main.day_cycle.day == 2, "day rolled to 2")
 	var rent2: int = 0 if bool(main.today_event.rent_free) else main.rent_for_day(2)
-	_ok(ledger.balance() == bal0 - rent2,
-		"rent handled per the day's event (%s)" % main.today_event.id)
+	var power2: int = 100 * main._unlocked_machine_count()  # v0.46.0 power bill
+	_ok(ledger.balance() == bal0 - rent2 - power2,
+		"rent + power handled per the day's event (%s)" % main.today_event.id)
 	var rent_txs := 0
 	for t in ledger.transactions:
 		if t["reason"] == "rent day 2":
