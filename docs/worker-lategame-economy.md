@@ -89,15 +89,35 @@ green before and after.
   sharpened $1,500 -> $3,000 with citation (the starved run's $2,446 passed
   the old floor — it caught nothing); delivery floor >= 60 kept (starved 29
   vs healed 64 straddles it).
-- tests/v044_test.gd — new: 12 checks (retirement not reported as expired,
+- tests/v044_test.gd — new: 16 checks (retirement not reported as expired,
   lifespan exactly 3 days, backfill, Main-level zero rep/missed, restore
-  keeps stale offers).
+  keeps stale offers). NOTE: committed by the sibling session with a fix to
+  this suite — my first cut called the _test_* phases without await, so
+  quit() raced the Main-level coroutine and its 4 checks silently never ran
+  (a false 12/12 green). The committed suite awaits each phase.
 - scripts/Version.gd — 0.44.0.
 - docs/HANDOFF.md — new current-active-work section.
 
 ## Verification
 
-(filled at completion — see HANDOFF for the final list)
+- `godot --headless --path . --editor --import --quit` — exit 0.
+- Full serial ladder: 57 tests/*_test.gd + tests/smoke.gd = 58/58 green
+  (0 red; per-suite outputs kept under /tmp/psim_myladder/).
+- tests/sim_lategame.gd (conservative picker): 16/16 green THREE times,
+  curve byte-identical each run — deterministic. 64 deliveries / $5,224 /
+  rep 4.6 by day 14; $6,367 / 74 / 4.7 at loop end; min balance $2.29,
+  rent debt $0.
+- tests/sim_playtest.gd: 8/8 green solo (18 deliveries / $1,758 / rep 3.9
+  at loop end).
+- `python3 -m pytest tests/test_build_web.py -q` — 21 passed.
+- A sibling session independently ran the same 57-suite ladder over this
+  working tree mid-slice (its /tmp/psim_ladder_full logs) — no red either —
+  then reviewed, fixed the v044 await bug above, extended the suite to 16
+  checks, added the ROADMAP slice, and COMMITTED/PUSHED the slice as
+  2370f52 ("feat: stale offers — calm offers retire after three mornings
+  (v0.44.0)") while this report was being written. The commit is the
+  integrated result of this task's changes; nothing of the slice was
+  committed by this worker directly.
 
 ## Notes for the next worker
 
