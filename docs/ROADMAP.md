@@ -757,6 +757,21 @@ Test checks:
 
 ---
 
+## Post-roadmap — v0.43.0 "Milestones II" — SHIPPED
+
+- [x] Paper star: deliver 3 A-grades on media days (media_a_deliveries
+      counter, persisted + validated)
+- [x] Board magnet: 12 jobs on the board at once (pairs with Backorders)
+- [x] Distinguished: 5 regulars AND 5 stars (late-game combo)
+
+Test checks:
+- [x] 11 new checks in v043_test (definitions, locked starts, media
+      counter through real deliveries, backorder board width, unlock
+      thresholds, persistence + validator)
+- [x] all 54 suites + playtest bot + pytest green
+
+---
+
 ## Definition of done (every slice)
 
 - [ ] Feature checks above all ticked

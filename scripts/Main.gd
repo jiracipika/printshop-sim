@@ -205,6 +205,8 @@ var client_orders: Dictionary = {}
 ## The customers remember (v0.38.0): client name -> last grade received.
 ## Fresh jobs from that client carry a reaction note about it.
 var client_last_grade: Dictionary = {}
+## Media-day A deliveries (v0.43.0) — persists for the Paper star milestone.
+var media_a_deliveries: int = 0
 ## False until _ready finishes: boot-time station marks happen before the
 ## save loads, and saving there would clobber the player's file.
 var _boot_ready := false
@@ -437,6 +439,12 @@ func _achievements() -> Array[Dictionary]:
 			"done": upgrades.owned_count() == 11},
 		{"name": "Curator", "hint": "display 5 different models (Grand showcase)",
 			"done": _shelf_models.size() >= 5},
+		{"name": "Paper star", "hint": "deliver 3 A-grades on media days",
+			"done": int(media_a_deliveries) >= 3},
+		{"name": "Board magnet", "hint": "have 12 jobs on the board at once",
+			"done": job_board.get_available_count() >= 12},
+		{"name": "Distinguished", "hint": "reach 5 regulars and 5 stars",
+			"done": _regulars_count() >= 5 and reputation >= 5.0},
 		{"name": "Week one", "hint": "keep the shop open past day 7",
 			"done": day_cycle.day > 7},
 		{"name": "High earner", "hint": "earn $500 lifetime",
@@ -749,6 +757,8 @@ func _load_save() -> void:
 		for k in payload.client_orders:
 			if k is String and not (k as String).is_empty():
 				client_orders[k] = clampi(int(payload.client_orders[k]), 1, 999)
+	if payload.has("media_a_deliveries"):
+		media_a_deliveries = maxi(int(payload.media_a_deliveries), 0)
 	if payload.has("client_last_grade") and typeof(payload.client_last_grade) == TYPE_DICTIONARY:
 		client_last_grade.clear()
 		for k in payload.client_last_grade:
@@ -822,6 +832,7 @@ func _save_game() -> void:
 			"day_earned_today": day_earned_today,
 			"client_orders": client_orders,
 			"client_last_grade": client_last_grade,
+			"media_a_deliveries": media_a_deliveries,
 			"shelf_models": _shelf_models,
 		})
 	var ok: bool = load("res://scripts/BrowserSave.gd").save_payload(payload)
@@ -3384,8 +3395,11 @@ func _try_pack_held() -> bool:
 		stats.late += 1
 	else:
 		# Media day (v0.39.0): A-grade deliveries make the local paper.
-		_rep_event(0.3 if str(today_event.get("id", "")) == "media_day" \
-			and final_grade == "A" else 0.2)
+		if str(today_event.get("id", "")) == "media_day" and final_grade == "A":
+			media_a_deliveries += 1
+			_rep_event(0.3)
+		else:
+			_rep_event(0.2)
 	stats.delivered += 1
 	stats.earned_cents += payout
 	day_earned_today += payout

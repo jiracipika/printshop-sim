@@ -118,6 +118,8 @@ static func validate(payload: Variant) -> Dictionary:
 		return {}
 	if not _client_grades_valid(p):
 		return {}
+	if not _media_a_valid(p):
+		return {}
 	if not _day_earned_valid(p):
 		return {}
 
@@ -222,6 +224,18 @@ static func _day_earned_valid(p: Dictionary) -> bool:
 	if t != TYPE_INT and t != TYPE_FLOAT:
 		return false
 	var f := float(p["day_earned_today"])
+	return f == floorf(f) and f >= 0.0
+
+
+## Optional "media_a_deliveries" key (v0.43.0): absent = fine; present
+## must be a non-negative whole int.
+static func _media_a_valid(p: Dictionary) -> bool:
+	if not p.has("media_a_deliveries"):
+		return true
+	var t := typeof(p["media_a_deliveries"])
+	if t != TYPE_INT and t != TYPE_FLOAT:
+		return false
+	var f := float(p["media_a_deliveries"])
 	return f == floorf(f) and f >= 0.0
 
 

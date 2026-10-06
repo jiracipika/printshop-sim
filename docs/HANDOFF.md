@@ -1,4 +1,19 @@
-# Current handoff — featured orders (v0.42.1)
+# Current handoff — milestones II (v0.43.0)
+
+## Current active work
+
+Three late-game achievements: Paper star (media_a_deliveries >= 3 — the
+counter increments in the media-day rep branch on A-grade deliveries and
+persists as media_a_deliveries), Board magnet (>= 12 jobs on the board —
+pairs with the Backorders event's +4 capacity), Distinguished (5 regulars
+AND 5 stars). Validator covers the counter (non-negative whole int).
+
+Local verification: all 54 suites + playtest bot + pytest green (11 new
+checks in tests/v043_test.gd).
+
+---
+
+# Previous handoff — featured orders (v0.42.1)
 
 ## Current active work
 
