@@ -54,30 +54,58 @@ var regulars: Dictionary = {}
 var client_grades: Dictionary = {}
 
 ## Reaction pools (v0.38.0): praise after an A, neutral after B/C, worry
-## after D. Deterministic per job id within the pool.
+## after D. Deterministic per job id within the pool. Expanded v0.49.0.
 const REACTION_PRAISE: Array[String] = [
 	"The last batch was perfect.",
 	"Exactly the quality we hoped for.",
 	"You've earned this repeat order.",
+	"Boss hung the last one by the entrance.",
+	"That finish outshined the sample. More of that.",
+	"Our clients asked who did the printing. Told them.",
+	"Came out crisp. You're in the good book.",
+	"Best batch we've had from anyone, honestly.",
 ]
 const REACTION_NEUTRAL: Array[String] = [
 	"Last one was fine. Keep it up.",
 	"Same as before, please.",
 	"No complaints this time.",
+	"Serviceable. Nothing to write home about.",
+	"Did the job. That's all we needed.",
+	"Middle of the road — we can work with it.",
 ]
 const REACTION_WORRIED: Array[String] = [
 	"The last one warped a little — straight this time?",
 	"Quality slipped last order. We're watching.",
 	"Please double-check this one.",
+	"Edges were rough last time. It matters.",
+	"That lopsided shelf nearly cost us a client.",
+	"We had to re-glue half the last batch.",
 ]
 
 ## Handwritten loyalty lines (v0.31.0) — deterministic per job id.
+## Expanded v0.49.0.
 const LOYALTY_NOTES: Array[String] = [
 	"Welcome back — same quality, please.",
 	"You never disappoint.",
 	"Telling my friends about you.",
 	"Consider this a standing order.",
 	"Third order in — you're our printer now.",
+	"We don't shop anywhere else anymore.",
+	"My partner asked where I keep finding these.",
+	"Every order, on time. Every time.",
+	"You're the reason we fixed the budget line.",
+	"Same as always — which is exactly the point.",
+]
+
+## First-visit voice (v0.49.0): a client with no history gets an
+## introduction line on most jobs, drawn deterministically per id.
+const FIRST_NOTES: Array[String] = [
+	"First order with you — heard good things.",
+	"New face, new shop. Make us look great.",
+	"A friend pointed us here. No pressure.",
+	"Trying you out on a small one first.",
+	"Heard the printers here sing. Show me.",
+	"First timer — go easy on the warping.",
 ]
 
 
@@ -157,6 +185,10 @@ func _refill() -> void:
 				else REACTION_WORRIED if last in ["D", "F"] \
 				else REACTION_NEUTRAL
 			g.note = pool[absi(hash("react-" + g.id)) % pool.size()]
+		elif absi(hash("firstdraw-" + g.id)) % 100 < 60:
+			# First-visit voice (v0.49.0): a client with no history
+			# introduces themselves on most jobs (~60%, hash-pinned).
+			g.note = FIRST_NOTES[absi(hash("first-" + g.id)) % FIRST_NOTES.size()]
 		# Featured pick (v0.42.0): exactly one generated job per day pays
 		# +15%. Hash-pinned per (day, slot); stamped AFTER the note chain
 		# so a featured job keeps its note.

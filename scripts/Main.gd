@@ -141,7 +141,7 @@ var active_part: Grabbable:
 
 var settings := {"mouse_sens_scale": 1.0, "sfx_volume": 0.8, "invert_y": false, "shadows": true,
 	"music_enabled": true, "music_volume": 0.35, "quality_preset": "Standard",
-	"radio_station": 0, "haptics": true}
+	"radio_station": 0, "haptics": true, "haptics_strength": 100}
 var _settings_dirty := false
 var sfx: Sfx
 var _hum: AudioStreamPlayer3D
@@ -683,7 +683,7 @@ func _load_save() -> void:
 		var s: Dictionary = payload.settings
 		for key in ["mouse_sens_scale", "sfx_volume", "invert_y", "shadows",
 				"music_enabled", "music_volume", "quality_preset",
-				"radio_station", "haptics"]:
+				"radio_station", "haptics", "haptics_strength"]:
 			if s.has(key):
 				apply_setting(key, s[key], false)
 	_update_music_state()
@@ -812,8 +812,8 @@ func apply_setting(key: String, value, persist := true) -> void:
 			_apply_quality()
 		"radio_station":
 			_update_music_state()
-		"haptics":
-			pass  # read live by _rumble
+		"haptics", "haptics_strength":
+			pass  # read live by _rumble / haptics_gain()
 		# mouse_sens_scale / invert_y are read live by the look paths.
 	if persist:
 		_save_game()
@@ -3083,10 +3083,18 @@ func _apply_gamepad_look(delta: float) -> void:
 ## Gamepad rumble (v0.27.0): soft pulse on delivery, harsher on failure.
 ## A no-op wherever no pad is connected (headless included).
 func _rumble(low: float, high: float, seconds: float) -> void:
-	if not bool(settings.get("haptics", true)):
+	var gain := haptics_gain()
+	if gain <= 0.0:
 		return
 	for pad in Input.get_connected_joypads():
-		Input.start_joy_vibration(pad, low, high, seconds)
+		Input.start_joy_vibration(pad, low * gain, high * gain, seconds)
+
+## Rumble strength (v0.48.0): 0.0..1.0 multiplier from the persisted
+## setting. Haptics off or strength 0 both silence the pads entirely.
+func haptics_gain() -> float:
+	if not bool(settings.get("haptics", true)):
+		return 0.0
+	return clampf(float(settings.get("haptics_strength", 100)), 0.0, 100.0) / 100.0
 
 ## Footsteps (v0.22.0): soft alternating thuds timed to the walk. Idle time
 ## pre-charges the timer to half a step so a resumed walk starts promptly.

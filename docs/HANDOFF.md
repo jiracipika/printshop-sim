@@ -1,4 +1,41 @@
-# Current handoff — power bill + shop history (v0.46.0, v0.47.0)
+# Current handoff — rumble settings + customer voices II (v0.48.0, v0.49.0)
+
+## Current active work
+
+v0.48.0 RUMBLE SETTINGS: gamepad rumble is now scaled by a persisted
+"haptics_strength" setting (default 100, whole 0..100, validated).
+Main.haptics_gain() is the single source of truth — 0.0 when the haptics
+toggle is off OR strength is 0, else strength/100 — and _rumble()
+multiplies BOTH magnitudes by it (durations unchanged). The settings
+sheet gains a "Rumble strength" slider via the existing _labeled_slider
+helper ("RumbleSlider", 0..100 step 10; slider_name_to_key maps it to
+"haptics_strength"); show_settings pushes the persisted value. Plumbing
+mirrors every other setting: DEFAULTS dict, restore key list, the
+"haptics" match arm (now "haptics", "haptics_strength"), SaveSystem
+validator (whole int/float 0..100; absence fine for old saves).
+
+v0.49.0 CUSTOMER VOICES II: note pools expanded — REACTION_PRAISE 3→8,
+REACTION_NEUTRAL 3→6, REACTION_WORRIED 3→6, LOYALTY_NOTES 5→10,
+Contract.GEN_NOTES 12→20 — plus a NEW FIRST_NOTES pool (6 lines) in
+JobBoard: a client with NO history (not a 2+ regular, no last grade)
+introduces itself on ~60% of generated jobs via a hash-pinned draw
+("firstdraw-<id>" gate, "first-<id>" pick), stamped as the last elif in
+the _refill note chain so loyalty > grade reactions > first visit. The
+board persists notes wholesale, so nothing new to save. Both slices are
+behavior-neutral for the bots (flavor text + headless-no-op rumble), so
+the v0.46 harness curves stand (17/$1,759 early, 74/$6,082 late).
+
+Local verification: all 62 suites + both harnesses + pytest green
+(v048 21 checks, v049 22 checks).
+
+TEST GOTCHA (v049): client lineups are pinned per (day, slot) — pick a
+regular/grade-test client from a board dealt for the SAME day you
+re-deal, or the client never regenerates and the precedence check
+silently counts zero jobs.
+
+---
+
+# Previous handoff — power bill + shop history (v0.46.0, v0.47.0)
 
 ## Current active work
 

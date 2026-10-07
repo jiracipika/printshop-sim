@@ -201,6 +201,13 @@ static func _settings_valid(p: Dictionary) -> bool:
 		var rs := float(s["radio_station"])
 		if rs != floorf(rs) or rs < 0.0 or rs > 2.0:
 			return false
+	if s.has("haptics_strength"):
+		var t3 := typeof(s["haptics_strength"])
+		if t3 != TYPE_INT and t3 != TYPE_FLOAT:
+			return false
+		var hs := float(s["haptics_strength"])
+		if hs != floorf(hs) or hs < 0.0 or hs > 100.0:
+			return false
 	return true
 
 

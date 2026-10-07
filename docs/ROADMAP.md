@@ -871,3 +871,37 @@ Test checks:
       chalkboard render, real delivery feeds today's count, rollover
       banking + trim, persistence, 4 validator rejections, restore boot)
 - [x] all 60 suites + both harnesses + pytest green
+
+## Post-roadmap — v0.48.0 "Rumble settings" — SHIPPED
+
+- [x] Persisted "haptics_strength" setting (default 100, whole 0..100,
+      validated; absent = fine for old saves) with the full settings
+      plumbing: DEFAULTS, restore key list, match arm, save validator
+- [x] Main.haptics_gain() is the single source of truth: 0.0 when the
+      haptics toggle is off OR strength is 0, else strength/100;
+      _rumble() scales BOTH magnitudes by it (durations unchanged)
+- [x] Settings sheet gains a "Rumble strength" slider (0..100 step 10)
+      via _labeled_slider; show_settings pushes the persisted value;
+      dragging applies live through the existing settings_changed path
+
+Test checks:
+- [x] 21 checks in v048_test (gain math incl. clamps/floats/mute,
+      safe call path, persistence + reload, 5 validator cases, slider
+      exists + spans 0..100/10, show_settings push, live drag apply)
+- [x] all 62 suites + both harnesses + pytest green
+
+## Post-roadmap — v0.49.0 "Customer voices II" — SHIPPED
+
+- [x] Note pools expanded: praise 3→8, neutral 3→6, worried 3→6,
+      loyalty 5→10, generic (Contract.GEN_NOTES) 12→20 — all
+      printshop-flavored, no duplicates, deterministic per job id as before
+- [x] NEW first-visit voice (JobBoard.FIRST_NOTES, 6 lines): a client
+      with no history (not a 2+ regular, no last grade) introduces itself
+      on ~60% of generated jobs via a hash-pinned draw; stamped last in
+      the _refill chain so loyalty > grade reactions > first visit
+
+Test checks:
+- [x] 22 checks in v049_test (pool sizes + hygiene, all notes from
+      known pools, first-visit variety, loyalty/praise/worry precedence,
+      re-deal determinism, generic reachability, board round-trip)
+- [x] all 62 suites + both harnesses + pytest green

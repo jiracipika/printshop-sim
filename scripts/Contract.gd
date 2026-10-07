@@ -348,7 +348,7 @@ const GEN_MODELS: Array[String] = [
 ]
 const GEN_BASE_PAYOUT: Array[int] = [4200, 6400, 8750, 9800, 9000]
 
-## Handwritten client notes (v0.30.0) — flavor only.
+## Handwritten client notes (v0.30.0) — flavor only. Expanded v0.49.0.
 const GEN_NOTES: Array[String] = [
 	"Make it sturdy — it gets dropped.",
 	"Needed for a market stall this weekend.",
@@ -362,6 +362,14 @@ const GEN_NOTES: Array[String] = [
 	"If it rattles, we send it back.",
 	"The kids will destroy this. Fair warning.",
 	"Lighter is better — it travels.",
+	"It rides in a toolbag. Expect bumps.",
+	"Sun-facing window shelf, so no warping, please.",
+	"We photograph everything — make it photogenic.",
+	"Needs to survive a toddler's birthday party.",
+	"Replacing the one the movers crushed.",
+	"Keep it cheap-looking. It's a stage prop.",
+	"Grandpa's workshop replica — dimensions matter.",
+	"We re-order these every season if they hold up.",
 ]
 
 

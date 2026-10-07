@@ -608,6 +608,9 @@ func _build_settings_panel() -> void:
 			settings_changed.emit("haptics", on))
 	sv.add_child(haptics)
 
+	# Rumble strength (v0.48.0): scales both rumble magnitudes; 0 mutes.
+	sv.add_child(_labeled_slider("Rumble strength", "RumbleSlider", 0.0, 100.0, 10.0))
+
 	var quality_row := HBoxContainer.new()
 	quality_row.name = "QualityRow"
 	var quality_label := Label.new()
@@ -686,6 +689,8 @@ static func slider_name_to_key(slider_name: String) -> String:
 			return "mouse_sens_scale"
 		"MusicSlider":
 			return "music_volume"
+		"RumbleSlider":
+			return "haptics_strength"
 		_:
 			return "sfx_volume"
 
@@ -718,6 +723,8 @@ func show_settings(current: Dictionary) -> void:
 	music.set_pressed_no_signal(bool(current.get("music_enabled", true)))
 	(_settings_panel.get_node("Sheet/SheetBox/HapticsCheck") as CheckBox) \
 		.set_pressed_no_signal(bool(current.get("haptics", true)))
+	(_settings_panel.get_node("Sheet/SheetBox/RumbleSliderRow/RumbleSlider") as HSlider) \
+		.set_value_no_signal(float(current.get("haptics_strength", 100)))
 	(_settings_panel.get_node("Sheet/SheetBox/SlotRow/SlotOption") as OptionButton) \
 		.selected = clampi(int(current.get("active_slot", 1)), 1, 3) - 1
 	var preset: String = str(current.get("quality_preset", "Standard"))
