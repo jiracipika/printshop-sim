@@ -1,4 +1,69 @@
-# Current handoff — rumble settings + customer voices II (v0.48.0, v0.49.0)
+# Current handoff — shop codes + calm mode (v0.50.0, v0.51.0)
+
+## Current active work
+
+v0.50.0 SHOP CODES: the Settings sheet gains a code field + two buttons.
+"Export save code" fills the field with the ACTIVE shop as base64 of
+compact JSON (Main.export_shop_code); "Import code below" runs the
+two-press flow (request_import_shop_code): press 1 DECODES + VALIDATES
+first — an invalid code never arms — press 2 writes the normalized
+payload over the ACTIVE slot file (apply_shop_code) and reloads the
+scene, so the imported shop boots through the normal restore path.
+The payload is built by _build_save_payload(), refactored out of
+_save_game verbatim, so a code is exactly a save. parse_shop_code
+returns {} on ANY failure (empty / not base64 / not JSON / fails
+SaveSystem.validate). Disarm is wired through reset_disarmed +
+_show_panel, so switching panels or leaving settings cancels an armed
+import like an armed reset. A failed import NEVER touches the file.
+
+v0.51.0 CALM MODE: persisted "calm_mode" bool (full settings plumbing:
+DEFAULTS, restore key list, match arm -> _apply_calm_motion, SaveSystem
+bool validator). calm_motion() gates _animate_rain/_snow/_clouds in
+Main, and WindowLife.set_motion(on) gates _advance — the gate lives in
+the deterministic seam so _process inherits it and tests can PROVE the
+freeze (set_motion(false) + _advance(120) moves nothing). The scene
+stays; nothing drifts. Restore re-applies the gate at boot via the
+settings loop.
+
+SETTINGS SHEET SCROLLS: the rows had outgrown the sheet (probe: 20 px
+of headroom), so Sheet/SheetBox now lives inside
+Sheet/SheetScroll/SheetBox (ScrollContainer, horizontal disabled). The
+focus chain covers all 16 controls in creation order — including the
+haptics/rumble/slot rows that had silently never been chained.
+
+LADDER GOTCHAS this batch (cost real time, all three bit):
+1. A sed rewriting `"Sheet/SheetBox` over-matched OTHER panels'
+   sheets (contracts/stats/log/today/howto keep Sheet/SheetBox — only
+   the SETTINGS sheet is wrapped). Same trap in tests: bare
+   `get_node("Sheet/...")` paths on _stats_panel/_howto_panel/
+   _today_panel getters.
+2. `var body: Label = <null get_node>` ABORTS _run with rc 0 → FALSE
+   GREEN: v031 printed "checks=10 failures=0" (13 defined); v029/v035
+   hung forever because quit() never ran. NEVER trust rc alone — grep
+   every ladder log for SCRIPT ERROR and compare checks= counts.
+3. A hung suite wedges the ladder loop; kill that ONE godot process to
+   let the loop advance, fix the cause after LADDER_DONE.
+
+HARNESS HONESTY: this machine now replays BOTH harnesses
+deterministically at 15/$1,666 (early) and 64/$4,919 (late) — the
+documented 17/$1,759 and 74/$6,082 curves no longer reproduce here.
+A clean worktree at a5610ab (pre-batch) replays BYTE-IDENTICAL
+64/$4,918.89, so the shift predates this batch: 8x pacing
+determinism is machine-state-dependent, which is exactly why the
+survival gates are floors. Both gates pass (>=8/$500, >=60/$3,000).
+
+Local verification: all 65 suites + both harnesses + pytest green
+(v050 33 checks, v051 27 checks; the 7 sed-bruised suites re-ran clean
+after the revert).
+
+TEST GOTCHA (v051): particle "falls again" checks must pin the
+streak/flake mid-pane (y = 2.2) before the move — particles spawned
+near the sill wrap to the top on the first step and the strict
+decrease assertion fails.
+
+---
+
+# Previous handoff — rumble settings + customer voices II (v0.48.0, v0.49.0)
 
 ## Current active work
 

@@ -905,3 +905,42 @@ Test checks:
       known pools, first-visit variety, loyalty/praise/worry precedence,
       re-deal determinism, generic reachability, board round-trip)
 - [x] all 62 suites + both harnesses + pytest green
+
+## Post-roadmap — v0.50.0 "Shop codes" — SHIPPED
+
+- [x] Settings sheet gains a shop-code field + Export/Import buttons:
+      export fills the field with the active shop as base64 of compact
+      JSON (the exact save payload, via _build_save_payload shared with
+      _save_game); import validates BEFORE arming, writes the normalized
+      payload over the active slot on confirm, and reloads so the shop
+      boots through the normal restore path
+- [x] Two-press confirm mirrors reset; panel switches / leaving settings
+      cancel an armed import; a failed import never touches the file
+- [x] Settings sheet scrolls (SheetScroll) — the rows had outgrown the
+      panel; focus chain extended to all 16 controls
+
+Test checks:
+- [x] 33 checks in v050_test (export/decode/round-trip, state rides the
+      code, 5 rejection paths, failed import leaves the file untouched,
+      valid import rewrites the slot + boots into the imported shop,
+      widget wiring, arm/disarm/panel-cancel flow)
+- [x] all 65 suites + both harnesses + pytest green
+
+## Post-roadmap — v0.51.0 "Calm mode" — SHIPPED
+
+- [x] Persisted "calm_mode" reduced-motion setting (full plumbing:
+      DEFAULTS, restore list, match arm, SaveSystem bool validator;
+      absent = fine for old saves)
+- [x] calm_motion() freezes rain, snow and clouds in Main;
+      WindowLife.set_motion gates the deterministic _advance seam, so
+      _process and tests share one gate — the birds and van hold
+      exactly where they are, and the scene itself stays unchanged
+- [x] Settings checkbox (CalmCheck) applies live; restore re-applies at
+      boot; import brings calm across devices with the shop
+
+Test checks:
+- [x] 27 checks in v051_test (defaults, window gate, rain/snow/cloud
+      freeze + resume, live physics-frame freeze, deterministic seam
+      math, checkbox wiring + show_settings push, persistence,
+      3 validator cases, restore boot)
+- [x] all 65 suites + both harnesses + pytest green
