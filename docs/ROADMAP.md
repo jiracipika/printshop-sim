@@ -971,3 +971,30 @@ Test checks:
 - [x] 13 checks in v053_test (empty state, header counts, rank +
       tie-break order, podium cap, reload round-trip)
 - [x] 66 suites + smoke + both harnesses + pytest green
+
+## Post-roadmap — v0.54.0 "Surge protector" — SHIPPED
+
+- [x] 12th catalog upgrade ($100): conditioned power halves the wear
+      every completed/failed print accrues — failures drop 12 → 6
+- [x] "Fully kitted" derives its target and hint from the catalog size
+
+## Post-roadmap — v0.55.0 "Jazz" — SHIPPED
+
+- [x] Fourth radio station: dominant-7th chord chart, 96 BPM, warm hiss,
+      seamless loop like the other three
+- [x] Dial guards + save validators widened (radio_station 0..3,
+      stations_heard up to 4); old three-station saves still validate
+- [x] New "Full dial" milestone for hearing all four; Radio star stays
+      at three so existing saves keep it
+
+## Post-roadmap — v0.56.0 "Milestones IV" — SHIPPED
+
+- [x] Four figures — earn $1,000 lifetime
+- [x] Rolodex — serve 25 different clients
+- [x] Spotless — run 25 cleaning cycles
+- [x] All derived from existing persisted counters, zero new save keys
+
+Test checks:
+- [x] v054_test 21 · v055_test 25 · v056_test 16
+- [x] 69 suites + smoke + both harnesses + pytest green; bot curves
+      byte-identical (15/$1,665.79 early, 64/$4,918.89 late)

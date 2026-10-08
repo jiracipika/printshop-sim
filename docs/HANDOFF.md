@@ -1,6 +1,42 @@
-# Current handoff — milestones III + top clients (v0.52.0, v0.53.0)
+# Current handoff — surge protector + Jazz + milestones IV (v0.54.0–v0.56.0)
 
 ## Current active work
+
+v0.54.0 SURGE PROTECTOR: the 12th catalog upgrade ($100, id
+surge_protector). Upgrades.wear_multiplier() returns 0.5 when owned;
+Main._on_print_done multiplies the wear GAIN only — completed prints
+accrue (6+difficulty)*0.5, failures 12*0.5 = 6 — leaving the existing
+wear untouched. "Fully kitted" now derives its target and hint from
+Upgrades.catalog().size() so the milestone can never drift again.
+
+v0.55.0 JAZZ: a fourth radio station (Sfx.STATIONS entry — Dm7→G7→Cmaj7→A7
+dominant-7 chart, 96 BPM, warm hiss). The two hard-coded 0..2 guards
+(_load_save stations_heard restore + _mark_station_heard) derive from
+Sfx.STATIONS.size() now; SaveSystem widened radio_station to 0..3 and
+stations_heard to 4 entries of 0..3. New FULL DIAL milestone (hear all
+four); RADIO STAR stays at three so old saves keep it (its hint now
+reads "hear 3 radio stations").
+
+v0.56.0 MILESTONES IV: three more derived achievements, zero new save
+keys — Four figures (stats.earned_cents >= $1,000 lifetime), Rolodex
+(client_orders.size() >= 25), Spotless (cleans >= 25, one above
+Meticulous).
+
+OPS: today Vercel turned on "Vercel Authentication"
+(ssoProtection all_except_custom_domains) on this Hobby project —
+fresh deploys served an auth 302 / the alias served DEPLOYMENT_NOT_FOUND.
+Fix applied: alias set manually (`vercel alias set <ready-deployment>
+print-shop-sim.vercel.app`) + `PATCH /v9/projects/printshop-sim
+{"ssoProtection": null}` with the CLI token from `~/Library/Application
+Support/com.vercel.cli/auth.json`. curl-verified public at 0.56.0.
+
+Ladder notes: three more suites (v054 21 checks, v055 25, v056 16) put
+the project at 69 suites + smoke. Stale pins updated for the catalog
+growth: features/v040 11→12, upgrades_test ids+panel 11→12, v021
+station count 3→4 + its in-scene cycle gained the Jazz step, v016's
+cycle gained the Jazz step before off. Both bot curves replay
+byte-identical (15/$1,665.79 early, 64/$4,918.89 late) — the lategame
+bot's BUY_ORDER doesn't include the protector.
 
 v0.52.0 MILESTONES III: four new derived achievements appended to
 Main._achievements() — Fortnight (day > 14, mirroring Week one's > 7),
