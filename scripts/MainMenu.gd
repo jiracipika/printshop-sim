@@ -26,6 +26,8 @@ signal reset_requested
 signal slot_switch_requested(slot: int)
 signal reset_disarmed
 signal settings_changed(key: String, value)
+signal export_code_requested
+signal import_code_requested(code: String)
 
 ## Test-only: simulate a web export (hides Quit exactly like the real gate).
 var simulate_web := false:
@@ -551,10 +553,18 @@ func _build_settings_panel() -> void:
 	sheet.add_theme_stylebox_override("panel", _sheet_style())
 	_settings_panel.add_child(sheet)
 
+	# Scrollable sheet (v0.50.0): the settings list outgrew the panel — the
+	# rows scroll now, so short windows can always reach the back button.
+	var scroll := ScrollContainer.new()
+	scroll.name = "SheetScroll"
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	sheet.add_child(scroll)
+
 	var sv := VBoxContainer.new()
 	sv.name = "SheetBox"
 	sv.add_theme_constant_override("separation", 14)
-	sheet.add_child(sv)
+	sv.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	scroll.add_child(sv)
 
 	var h1 := Label.new()
 	h1.text = "SETTINGS"
@@ -611,6 +621,18 @@ func _build_settings_panel() -> void:
 	# Rumble strength (v0.48.0): scales both rumble magnitudes; 0 mutes.
 	sv.add_child(_labeled_slider("Rumble strength", "RumbleSlider", 0.0, 100.0, 10.0))
 
+	# Calm mode (v0.51.0): freezes ambient motion (rain, snow, clouds and the
+	# window's birds/van) for motion-sensitive players.
+	var calm := CheckBox.new()
+	calm.name = "CalmCheck"
+	calm.text = "Calm mode (freeze rain, snow & window motion)"
+	calm.add_theme_color_override("font_color", COLOR_PAPER)
+	calm.add_theme_font_size_override("font_size", 16)
+	calm.toggled.connect(func(on: bool) -> void:
+		if not _settings_applying:
+			settings_changed.emit("calm_mode", on))
+	sv.add_child(calm)
+
 	var quality_row := HBoxContainer.new()
 	quality_row.name = "QualityRow"
 	var quality_label := Label.new()
@@ -655,6 +677,44 @@ func _build_settings_panel() -> void:
 	reset.pressed.connect(func() -> void: reset_requested.emit())
 	sv.add_child(reset)
 
+	# Shop codes (v0.50.0): export fills the field with the save as a
+	# portable code; import applies a pasted code over the ACTIVE slot
+	# (two-press confirm, like reset).
+	var code_label := Label.new()
+	code_label.name = "CodeLabel"
+	code_label.text = "Shop code — copy this shop to another slot or device"
+	code_label.add_theme_color_override("font_color", COLOR_PAPER)
+	code_label.add_theme_font_size_override("font_size", 14)
+	sv.add_child(code_label)
+
+	var code_field := TextEdit.new()
+	code_field.name = "CodeField"
+	code_field.placeholder_text = "Export fills this — or paste a code to import"
+	code_field.custom_minimum_size = Vector2(0, 84)
+	code_field.wrap_mode = TextEdit.LINE_WRAPPING_BOUNDARY
+	code_field.add_theme_font_size_override("font_size", 12)
+	code_field.add_theme_color_override("font_color", COLOR_PAPER)
+	sv.add_child(code_field)
+
+	var code_row := HBoxContainer.new()
+	code_row.name = "CodeRow"
+	code_row.add_theme_constant_override("separation", 16)
+	var code_export := Button.new()
+	code_export.name = "ExportCodeButton"
+	code_export.text = "Export save code"
+	code_export.add_theme_font_size_override("font_size", 15)
+	code_export.pressed.connect(func() -> void: export_code_requested.emit())
+	code_row.add_child(code_export)
+	var code_import := Button.new()
+	code_import.name = "ImportCodeButton"
+	code_import.text = "Import code below"
+	code_import.add_theme_color_override("font_color", COLOR_TERRA)
+	code_import.add_theme_font_size_override("font_size", 15)
+	code_import.pressed.connect(func() -> void:
+		import_code_requested.emit(code_field.text))
+	code_row.add_child(code_import)
+	sv.add_child(code_row)
+
 	sv.add_child(_make_back_button(func() -> void:
 		_settings_panel.visible = false
 		_settings_open = false
@@ -696,40 +756,58 @@ static func slider_name_to_key(slider_name: String) -> String:
 
 ## Second-press confirm state for the reset button.
 func arm_reset_button() -> void:
-	var reset: Button = _settings_panel.get_node("Sheet/SheetBox/ResetButton")
+	var reset: Button = _settings_panel.get_node("Sheet/SheetScroll/SheetBox/ResetButton")
 	reset.text = "Really reset? Press again"
 
-## Leaving settings (or any re-show) cancels the armed reset.
+## Leaving settings (or any re-show) cancels the armed reset — and the
+## armed import with it, so a half-confirmed code never lands later.
 func disarm_reset_button() -> void:
-	var reset: Button = _settings_panel.get_node_or_null("Sheet/SheetBox/ResetButton")
+	var reset: Button = _settings_panel.get_node_or_null("Sheet/SheetScroll/SheetBox/ResetButton")
 	if reset != null:
 		reset.text = "Reset shop (new game)"
+	disarm_import_button()
 	reset_disarmed.emit()
+
+## Second-press confirm state for the import button (v0.50.0).
+func arm_import_button() -> void:
+	var btn: Button = _settings_panel.get_node("Sheet/SheetScroll/SheetBox/CodeRow/ImportCodeButton")
+	btn.text = "Really import? Press again"
+
+func disarm_import_button() -> void:
+	var btn: Button = _settings_panel.get_node_or_null("Sheet/SheetScroll/SheetBox/CodeRow/ImportCodeButton")
+	if btn != null:
+		btn.text = "Import code below"
+
+## Fill the code field from Main (v0.50.0 export path).
+func set_shop_code(code: String) -> void:
+	(_settings_panel.get_node("Sheet/SheetScroll/SheetBox/CodeField") as TextEdit).text = code
 
 ## Push current settings into the sliders without re-emitting signals.
 func show_settings(current: Dictionary) -> void:
 	_settings_applying = true
-	var sens: HSlider = _settings_panel.get_node("Sheet/SheetBox/SensSliderRow/SensSlider")
-	var vol: HSlider = _settings_panel.get_node("Sheet/SheetBox/VolSliderRow/VolSlider")
-	var music_vol: HSlider = _settings_panel.get_node("Sheet/SheetBox/MusicSliderRow/MusicSlider")
-	var invert: CheckBox = _settings_panel.get_node("Sheet/SheetBox/InvertCheck")
-	var shadows: CheckBox = _settings_panel.get_node("Sheet/SheetBox/ShadowsCheck")
-	var music: CheckBox = _settings_panel.get_node("Sheet/SheetBox/MusicCheck")
+	var sens: HSlider = _settings_panel.get_node("Sheet/SheetScroll/SheetBox/SensSliderRow/SensSlider")
+	var vol: HSlider = _settings_panel.get_node("Sheet/SheetScroll/SheetBox/VolSliderRow/VolSlider")
+	var music_vol: HSlider = _settings_panel.get_node("Sheet/SheetScroll/SheetBox/MusicSliderRow/MusicSlider")
+	var invert: CheckBox = _settings_panel.get_node("Sheet/SheetScroll/SheetBox/InvertCheck")
+	var shadows: CheckBox = _settings_panel.get_node("Sheet/SheetScroll/SheetBox/ShadowsCheck")
+	var music: CheckBox = _settings_panel.get_node("Sheet/SheetScroll/SheetBox/MusicCheck")
 	sens.set_value_no_signal(float(current.get("mouse_sens_scale", 1.0)))
 	vol.set_value_no_signal(float(current.get("sfx_volume", 0.8)))
 	music_vol.set_value_no_signal(float(current.get("music_volume", 0.35)))
 	invert.set_pressed_no_signal(bool(current.get("invert_y", false)))
 	shadows.set_pressed_no_signal(bool(current.get("shadows", true)))
 	music.set_pressed_no_signal(bool(current.get("music_enabled", true)))
-	(_settings_panel.get_node("Sheet/SheetBox/HapticsCheck") as CheckBox) \
+	(_settings_panel.get_node("Sheet/SheetScroll/SheetBox/HapticsCheck") as CheckBox) \
 		.set_pressed_no_signal(bool(current.get("haptics", true)))
-	(_settings_panel.get_node("Sheet/SheetBox/RumbleSliderRow/RumbleSlider") as HSlider) \
+	(_settings_panel.get_node("Sheet/SheetScroll/SheetBox/RumbleSliderRow/RumbleSlider") as HSlider) \
 		.set_value_no_signal(float(current.get("haptics_strength", 100)))
-	(_settings_panel.get_node("Sheet/SheetBox/SlotRow/SlotOption") as OptionButton) \
+	(_settings_panel.get_node("Sheet/SheetScroll/SheetBox/CalmCheck") as CheckBox) \
+		.set_pressed_no_signal(bool(current.get("calm_mode", false)))
+	(_settings_panel.get_node("Sheet/SheetScroll/SheetBox/SlotRow/SlotOption") as OptionButton) \
 		.selected = clampi(int(current.get("active_slot", 1)), 1, 3) - 1
 	var preset: String = str(current.get("quality_preset", "Standard"))
 	var qidx := ["Low", "Standard", "High"].find(preset)
-	(_settings_panel.get_node("Sheet/SheetBox/QualityRow/QualityOption") as OptionButton) \
+	(_settings_panel.get_node("Sheet/SheetScroll/SheetBox/QualityRow/QualityOption") as OptionButton) \
 		.selected = qidx if qidx >= 0 else 1
 	_settings_applying = false
 	_show_panel(_settings_panel)
@@ -1039,15 +1117,22 @@ func _make_back_button(on_pressed: Callable) -> Button:
 ## panel (slider rows, checkboxes, quality option, reset, back).
 func _chain_settings_focus() -> void:
 	var order: Array[String] = [
-		"Sheet/SheetBox/SensSliderRow/SensSlider",
-		"Sheet/SheetBox/VolSliderRow/VolSlider",
-		"Sheet/SheetBox/MusicSliderRow/MusicSlider",
-		"Sheet/SheetBox/MusicCheck",
-		"Sheet/SheetBox/InvertCheck",
-		"Sheet/SheetBox/ShadowsCheck",
-		"Sheet/SheetBox/QualityRow/QualityOption",
-		"Sheet/SheetBox/ResetButton",
-		"Sheet/SheetBox/Back",
+		"Sheet/SheetScroll/SheetBox/SensSliderRow/SensSlider",
+		"Sheet/SheetScroll/SheetBox/VolSliderRow/VolSlider",
+		"Sheet/SheetScroll/SheetBox/MusicSliderRow/MusicSlider",
+		"Sheet/SheetScroll/SheetBox/MusicCheck",
+		"Sheet/SheetScroll/SheetBox/InvertCheck",
+		"Sheet/SheetScroll/SheetBox/ShadowsCheck",
+		"Sheet/SheetScroll/SheetBox/HapticsCheck",
+		"Sheet/SheetScroll/SheetBox/RumbleSliderRow/RumbleSlider",
+		"Sheet/SheetScroll/SheetBox/CalmCheck",
+		"Sheet/SheetScroll/SheetBox/QualityRow/QualityOption",
+		"Sheet/SheetScroll/SheetBox/SlotRow/SlotOption",
+		"Sheet/SheetScroll/SheetBox/ResetButton",
+		"Sheet/SheetScroll/SheetBox/CodeField",
+		"Sheet/SheetScroll/SheetBox/CodeRow/ExportCodeButton",
+		"Sheet/SheetScroll/SheetBox/CodeRow/ImportCodeButton",
+		"Sheet/SheetScroll/SheetBox/Back",
 	]
 	var nodes: Array[Control] = []
 	for path in order:

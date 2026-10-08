@@ -135,7 +135,7 @@ func _test_reset() -> void:
 	# Two-press confirm: first press arms, does not wipe.
 	main.request_reset_shop()
 	_ok(not BrowserSave.load_payload().is_empty(), "first press only arms the reset")
-	var reset_btn: Button = main.main_menu.get_node("Root/SettingsPanel/Sheet/SheetBox/ResetButton")
+	var reset_btn: Button = main.main_menu.get_node("Root/SettingsPanel/Sheet/SheetScroll/SheetBox/ResetButton")
 	_ok("Really reset" in reset_btn.text, "reset button shows the confirm state")
 
 	# Leaving settings disarms.

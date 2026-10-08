@@ -172,8 +172,8 @@ func _test_main_radio() -> void:
 	var menu = main.main_menu
 	menu.open_menu()
 	menu.show_settings(main.settings)
-	var slider: HSlider = menu.get_node("Root/SettingsPanel/Sheet/SheetBox/MusicSliderRow/MusicSlider")
-	var check: CheckBox = menu.get_node("Root/SettingsPanel/Sheet/SheetBox/MusicCheck")
+	var slider: HSlider = menu.get_node("Root/SettingsPanel/Sheet/SheetScroll/SheetBox/MusicSliderRow/MusicSlider")
+	var check: CheckBox = menu.get_node("Root/SettingsPanel/Sheet/SheetScroll/SheetBox/MusicCheck")
 	_ok(slider != null and absf(slider.value - 0.35) < 0.001,
 		"music slider reflects the setting")
 	_ok(check != null and check.is_pressed(), "music checkbox reflects on")

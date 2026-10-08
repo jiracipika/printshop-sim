@@ -208,6 +208,8 @@ static func _settings_valid(p: Dictionary) -> bool:
 		var hs := float(s["haptics_strength"])
 		if hs != floorf(hs) or hs < 0.0 or hs > 100.0:
 			return false
+	if s.has("calm_mode") and not (s["calm_mode"] is bool):
+		return false
 	return true
 
 

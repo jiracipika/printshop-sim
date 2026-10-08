@@ -184,7 +184,7 @@ func _test_polish() -> void:
 
 	# Settings panel carries the shadows checkbox.
 	menu.show_settings(main.settings)
-	var shadows: CheckBox = menu.get_node("Root/SettingsPanel/Sheet/SheetBox/ShadowsCheck")
+	var shadows: CheckBox = menu.get_node("Root/SettingsPanel/Sheet/SheetScroll/SheetBox/ShadowsCheck")
 	_ok(shadows.is_pressed(), "settings panel reflects the shadows value")
 
 	main.queue_free()

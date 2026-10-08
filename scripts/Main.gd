@@ -141,7 +141,8 @@ var active_part: Grabbable:
 
 var settings := {"mouse_sens_scale": 1.0, "sfx_volume": 0.8, "invert_y": false, "shadows": true,
 	"music_enabled": true, "music_volume": 0.35, "quality_preset": "Standard",
-	"radio_station": 0, "haptics": true, "haptics_strength": 100}
+	"radio_station": 0, "haptics": true, "haptics_strength": 100,
+	"calm_mode": false}
 var _settings_dirty := false
 var sfx: Sfx
 var _hum: AudioStreamPlayer3D
@@ -602,6 +603,72 @@ func request_reset_shop() -> void:
 	BrowserSave.clear()
 	get_tree().reload_current_scene()
 
+## --- shop codes (v0.50.0) ----------------------------------------------------
+## A shop code is the full save payload as base64 of compact JSON: paste it
+## into the Settings field on another slot (or another device) and import to
+## carry the whole shop over. Import validates through SaveSystem before it
+## ever touches the active slot file, then reloads so the imported state boots.
+
+## Serialize the CURRENT shop into a portable code.
+func export_shop_code() -> String:
+	return Marshalls.utf8_to_base64(JSON.stringify(_build_save_payload()))
+
+## Decode + validate a code. Returns the normalized payload, or {} when
+## anything at all is wrong (empty, not base64, not JSON, fails validation).
+func parse_shop_code(code: String) -> Dictionary:
+	var trimmed := code.strip_edges()
+	if trimmed.is_empty():
+		return {}
+	var json_text := Marshalls.base64_to_utf8(trimmed)
+	if json_text.is_empty():
+		return {}
+	var parsed: Variant = JSON.parse_string(json_text)
+	if parsed is Dictionary:
+		return load("res://scripts/SaveSystem.gd").validate(parsed)
+	return {}
+
+## Validate a code and write it over the ACTIVE slot file. Returns "" on
+## success or a human-readable reason; a failed import never touches the file.
+func apply_shop_code(code: String) -> String:
+	var payload := parse_shop_code(code)
+	if payload.is_empty():
+		return "That code didn't decode to a valid shop"
+	if not load("res://scripts/BrowserSave.gd").save_payload(payload):
+		return "Could not write the imported shop"
+	return ""
+
+## Two-press confirm (like reset): the first press validates and arms, the
+## second applies + reloads. An invalid code never arms.
+var _import_armed := false
+
+func request_import_shop_code(code: String) -> void:
+	var payload := parse_shop_code(code)
+	if not _import_armed:
+		if payload.is_empty():
+			_set_prompt("That code didn't decode to a valid shop — nothing imported")
+			return
+		_import_armed = true
+		main_menu.arm_import_button()
+		_set_prompt("Found a day-%d shop — importing overwrites this slot, press again" \
+			% maxi(int(payload.get("day", 1)), 1))
+		return
+	_import_armed = false
+	if payload.is_empty():
+		main_menu.disarm_import_button()
+		_set_prompt("That code didn't decode to a valid shop — nothing imported")
+		return
+	var err := apply_shop_code(code)
+	if err != "":
+		main_menu.disarm_import_button()
+		_set_prompt(err)
+		return
+	get_tree().reload_current_scene()
+
+## Export button: fill the field so the player can copy the code out.
+func _on_menu_export_code() -> void:
+	main_menu.set_shop_code(export_shop_code())
+	_set_prompt("Save code filled in the field — copy it somewhere safe")
+
 ## Quality settings (v0.4.0 shadows; v0.20.0 presets): Low / Standard / High.
 ## The preset drives shadows + glow; the shadows checkbox stays in sync
 ## (checking it = Standard, unchecking = Low). Persists in the save.
@@ -683,7 +750,7 @@ func _load_save() -> void:
 		var s: Dictionary = payload.settings
 		for key in ["mouse_sens_scale", "sfx_volume", "invert_y", "shadows",
 				"music_enabled", "music_volume", "quality_preset",
-				"radio_station", "haptics", "haptics_strength"]:
+				"radio_station", "haptics", "haptics_strength", "calm_mode"]:
 			if s.has(key):
 				apply_setting(key, s[key], false)
 	_update_music_state()
@@ -814,6 +881,8 @@ func apply_setting(key: String, value, persist := true) -> void:
 			_update_music_state()
 		"haptics", "haptics_strength":
 			pass  # read live by _rumble / haptics_gain()
+		"calm_mode":
+			_apply_calm_motion()
 		# mouse_sens_scale / invert_y are read live by the look paths.
 	if persist:
 		_save_game()
@@ -844,9 +913,11 @@ func _unlocked_machine_count() -> int:
 			n += 1
 	return n
 
-func _save_game() -> void:
+## The full save payload, shared by _save_game and the v0.50.0 export path —
+## a shop code is exactly this payload, base64 of compact JSON.
+func _build_save_payload() -> Dictionary:
 	var snapshot: Dictionary = ledger.snapshot()
-	var payload: Dictionary = load("res://scripts/SaveSystem.gd").build_payload(
+	return load("res://scripts/SaveSystem.gd").build_payload(
 		snapshot, {}, snapshot.balance_cents, snapshot.paid_contract_ids, {
 			"upgrades": upgrades.owned_ids(),
 			"settings": settings,
@@ -875,7 +946,9 @@ func _save_game() -> void:
 			"media_a_deliveries": media_a_deliveries,
 			"shelf_models": _shelf_models,
 		})
-	var ok: bool = load("res://scripts/BrowserSave.gd").save_payload(payload)
+
+func _save_game() -> void:
+	var ok: bool = load("res://scripts/BrowserSave.gd").save_payload(_build_save_payload())
 	save_status_line = "%s at %s" % ["saved ok" if ok else "save FAILED",
 		Time.get_time_string_from_system()]
 	_settings_dirty = false
@@ -2466,7 +2539,11 @@ func _build_hud() -> void:
 	main_menu.log_pressed.connect(_on_menu_log)
 	main_menu.today_pressed.connect(_on_menu_today)
 	main_menu.reset_requested.connect(request_reset_shop)
-	main_menu.reset_disarmed.connect(func() -> void: _reset_armed = false)
+	main_menu.reset_disarmed.connect(func() -> void:
+		_reset_armed = false
+		_import_armed = false)
+	main_menu.export_code_requested.connect(_on_menu_export_code)
+	main_menu.import_code_requested.connect(request_import_shop_code)
 	main_menu.open_menu()
 	design_studio = load("res://scripts/DesignStudio.gd").new()
 	design_studio.close_requested.connect(_close_design_studio)
@@ -2699,6 +2776,8 @@ func _physics_process(delta: float) -> void:
 ## Snow (v0.29.0): flakes fall slower than rain and sway sideways; the
 ## whole node is hidden outside cold snaps.
 func _animate_snow(delta: float) -> void:
+	if calm_motion():
+		return  # v0.51.0 calm mode: the flakes hold still
 	if _snow == null or not _snow.visible:
 		return
 	var kids := _snow.get_children()
@@ -2715,6 +2794,8 @@ func _animate_snow(delta: float) -> void:
 ## The wrap teleports from the left edge back to the right, so the clouds
 ## fade out near the frame edges — no visible pop.
 func _animate_clouds(delta: float) -> void:
+	if calm_motion():
+		return  # v0.51.0 calm mode: the wisps hold still
 	for i in range(_clouds.size()):
 		var c := _clouds[i]
 		c.position.x -= _cloud_speeds[i] * delta
@@ -2728,6 +2809,8 @@ func _animate_clouds(delta: float) -> void:
 ## Slide the rain streaks down the glass and wrap them at the sill. The whole
 ## node is hidden outside humid weeks, so this early-returns for free.
 func _animate_rain(delta: float) -> void:
+	if calm_motion():
+		return  # v0.51.0 calm mode: the streaks hold still
 	if _rain == null or not _rain.visible:
 		return
 	var kids := _rain.get_children()
@@ -3095,6 +3178,16 @@ func haptics_gain() -> float:
 	if not bool(settings.get("haptics", true)):
 		return 0.0
 	return clampf(float(settings.get("haptics_strength", 100)), 0.0, 100.0) / 100.0
+
+## Calm mode (v0.51.0): reduced-motion gate for the ambient animation.
+## The scene stays exactly as it is — rain, snow, clouds and the window's
+## birds/van simply stop moving while the flag is set.
+func calm_motion() -> bool:
+	return bool(settings.get("calm_mode", false))
+
+func _apply_calm_motion() -> void:
+	if _window_life != null and _window_life.has_method("set_motion"):
+		_window_life.set_motion(not calm_motion())
 
 ## Footsteps (v0.22.0): soft alternating thuds timed to the walk. Idle time
 ## pre-charges the timer to half a step so a resumed walk starts promptly.

@@ -66,7 +66,7 @@ func _test_presets_and_hardening() -> void:
 	# Settings panel reflects the preset; validator accepts it in saves.
 	main.main_menu.show_settings(main.settings)
 	var opt: OptionButton = main.main_menu._settings_panel \
-		.get_node("Sheet/SheetBox/QualityRow/QualityOption")
+		.get_node("Sheet/SheetScroll/SheetBox/QualityRow/QualityOption")
 	_ok(opt.selected == 1, "settings dropdown shows the current preset")
 	main.apply_setting("quality_preset", "High", false)
 	main._save_game()

@@ -38,6 +38,9 @@ const LAMP_NIGHT := Color(1.0, 0.84, 0.5, 0.95)
 var _rng := RandomNumberGenerator.new()
 var _weather := "calm"
 var _nightness := 0.0
+## Calm mode (v0.51.0): when Main turns this off, _advance stops stepping —
+## every bird and the van hold exactly where they are until it returns.
+var motion_enabled := true
 ## Birds: nodes plus per-bird flight state. wait > 0 = seconds until the
 ## next appearance, wait == 0 = flying, wait < 0 = grounded by weather.
 var _birds: Array[Node3D] = []
@@ -71,10 +74,19 @@ func _process(delta: float) -> void:
 
 
 ## Deterministic heartbeat: steps the exact math _process runs, so tests
-## can drive minutes of outside life instantly.
+## can drive minutes of outside life instantly. Calm mode (v0.51.0) freezes
+## the heartbeat — the gate lives here so _process inherits it and the
+## deterministic seam proves the freeze.
 func _advance(seconds: float) -> void:
+	if not motion_enabled:
+		return
 	_advance_birds(seconds)
 	_advance_van(seconds)
+
+
+## Calm mode (v0.51.0): Main pushes the persisted "calm_mode" setting here.
+func set_motion(on: bool) -> void:
+	motion_enabled = on
 
 
 ## "humid" / "cold_snap" ground the birds — flights in progress finish,

@@ -173,7 +173,7 @@ func _test_settings_and_menu() -> void:
 	var menu = main.main_menu
 	menu.open_menu()
 	menu.show_settings(main.settings)
-	var sens: HSlider = menu.get_node("Root/SettingsPanel/Sheet/SheetBox/SensSliderRow/SensSlider")
+	var sens: HSlider = menu.get_node("Root/SettingsPanel/Sheet/SheetScroll/SheetBox/SensSliderRow/SensSlider")
 	_ok(absf(float(sens.value) - float(main.settings.mouse_sens_scale)) < 0.0001,
 		"settings panel shows live sensitivity value")
 

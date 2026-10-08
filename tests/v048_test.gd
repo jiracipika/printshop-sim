@@ -95,7 +95,7 @@ func _run() -> void:
 	main2.main_menu.show_settings(main2.settings)
 	await physics_frame
 	var slider: HSlider = main2.main_menu._settings_panel \
-		.get_node("Sheet/SheetBox/RumbleSliderRow/RumbleSlider")
+		.get_node("Sheet/SheetScroll/SheetBox/RumbleSliderRow/RumbleSlider")
 	_ok(slider != null, "RumbleSlider exists on the settings sheet")
 	_ok(slider.min_value == 0.0 and slider.max_value == 100.0
 		and is_equal_approx(slider.step, 10.0),
