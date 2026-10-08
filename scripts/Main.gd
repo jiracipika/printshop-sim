@@ -320,11 +320,15 @@ func _on_menu_stats() -> void:
 			int(stats.delivered), int(stats.late), int(stats.scrapped), int(stats.cancelled)],
 		"Board offers missed: %d" % int(stats.missed),
 		"Regulars: %d (clients with 3+ orders)" % _regulars_count(),
+	]
+	# Top clients (v0.53.0): the three most loyal names by completed orders.
+	lines.append_array(_top_client_lines())
+	lines.append_array([
 		"Lifetime earnings: $%s" % _cents_str(int(stats.earned_cents)),
 		"Reputation: %s %.1f / 5  (payout x%.2f)" % [stars, reputation, reputation_multiplier()],
 		"",
 		"BOARD TIER (v0.19)",
-	]
+	])
 	# Reputation tiers (v0.19.0): current terms + what the next tier unlocks.
 	var tier := Events.tier_for_rep(reputation)
 	lines.append("%s — jobs up to difficulty %d, rush premium x%.1f" % [
@@ -410,6 +414,26 @@ func _regulars_count() -> int:
 			n += 1
 	return n
 
+## Top clients (v0.53.0): the three most loyal names by completed orders,
+## with the distinct-client count. Ties break alphabetically so the
+## ranking is deterministic regardless of dictionary insertion order.
+func _top_client_lines() -> Array[String]:
+	var out: Array[String] = []
+	if client_orders.is_empty():
+		return out
+	var names := client_orders.keys()
+	names.sort_custom(func(a, b) -> bool:
+		var ca := int(client_orders[a])
+		var cb := int(client_orders[b])
+		if ca != cb:
+			return ca > cb
+		return String(a) < String(b))
+	out.append("")
+	out.append("CLIENTS (%d distinct)" % names.size())
+	for i in range(mini(3, names.size())):
+		out.append("%d. %s x%d" % [i + 1, names[i], int(client_orders[names[i]])])
+	return out
+
 ## Full house (v0.23.0): every machine on the floor is mid-print.
 func _full_house() -> bool:
 	if machines.size() < 4:
@@ -459,7 +483,26 @@ func _achievements() -> Array[Dictionary]:
 			"done": day_cycle.day > 7},
 		{"name": "High earner", "hint": "earn $500 lifetime",
 			"done": int(stats.earned_cents) >= 50000},
+		{"name": "Fortnight", "hint": "keep the shop open past day 14",
+			"done": day_cycle.day > 14},
+		{"name": "Century", "hint": "deliver 100 parts",
+			"done": int(stats.delivered) >= 100},
+		{"name": "Full week", "hint": "ship an order every day for a week",
+			"done": _full_week_delivered()},
+		{"name": "Ten spot", "hint": "serve 10 different clients",
+			"done": client_orders.size() >= 10},
 	]
+
+## Full week (v0.52.0): every day in the persisted 7-day window shipped at
+## least one order. The window only fills after day 7, so the earliest this
+## can fire is the morning of day 8.
+func _full_week_delivered() -> bool:
+	if daily_delivered.size() < 7:
+		return false
+	for v in daily_delivered:
+		if int(v) < 1:
+			return false
+	return true
 
 ## Settings sliders write through on menu close, not on every drag tick.
 func _flush_settings_if_dirty() -> void:
