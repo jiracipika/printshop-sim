@@ -457,8 +457,10 @@ func _achievements() -> Array[Dictionary]:
 			"done": reputation >= 3.5},
 		{"name": "Top of the market", "hint": "reach a 4.25+ reputation",
 			"done": reputation >= 4.25},
-		{"name": "Radio star", "hint": "hear all 3 radio stations",
+		{"name": "Radio star", "hint": "hear 3 radio stations",
 			"done": _stations_heard.size() >= 3},
+		{"name": "Full dial", "hint": "hear every station on the dial",
+			"done": _stations_heard.size() >= Sfx.STATIONS.size()},
 		{"name": "Full house", "hint": "have all 4 printers running at once",
 			"done": _full_house()},
 		{"name": "Perfectionist", "hint": "deliver five A grades in a row",
@@ -467,8 +469,8 @@ func _achievements() -> Array[Dictionary]:
 				and not recent_grades.has("D") and not recent_grades.has("F")},
 		{"name": "Neighborhood favorite", "hint": "serve 5 clients 3+ times each",
 			"done": _regulars_count() >= 5},
-		{"name": "Fully kitted", "hint": "own all 11 upgrades",
-			"done": upgrades.owned_count() == 11},
+		{"name": "Fully kitted", "hint": "own all %d upgrades" % Upgrades.catalog().size(),
+			"done": upgrades.owned_count() == Upgrades.catalog().size()},
 		{"name": "Curator", "hint": "display 5 different models (Grand showcase)",
 			"done": _shelf_models.size() >= 5},
 		{"name": "Paper star", "hint": "deliver 3 A-grades on media days",
@@ -491,6 +493,12 @@ func _achievements() -> Array[Dictionary]:
 			"done": _full_week_delivered()},
 		{"name": "Ten spot", "hint": "serve 10 different clients",
 			"done": client_orders.size() >= 10},
+		{"name": "Four figures", "hint": "earn $1,000 lifetime",
+			"done": int(stats.earned_cents) >= 100000},
+		{"name": "Rolodex", "hint": "serve 25 different clients",
+			"done": client_orders.size() >= 25},
+		{"name": "Spotless", "hint": "run 25 cleaning cycles",
+			"done": cleans >= 25},
 	]
 
 ## Full week (v0.52.0): every day in the persisted 7-day window shipped at
@@ -854,7 +862,7 @@ func _load_save() -> void:
 		_stations_heard.clear()
 		for st in payload.stations_heard:
 			var si := int(st)
-			if si >= 0 and si <= 2 and not _stations_heard.has(si):
+			if si >= 0 and si < Sfx.STATIONS.size() and not _stations_heard.has(si):
 				_stations_heard.append(si)
 	if payload.has("recent_grades") and typeof(payload.recent_grades) == TYPE_ARRAY:
 		recent_grades.clear()
@@ -2939,9 +2947,10 @@ func _on_print_done(ok: bool, idx: int) -> void:
 			_set_prompt("Prototype complete — press E at Printer %d to collect it" % (idx + 1))
 		return
 	# Wear & tear (v0.45.0): every completed print stresses the machine;
-	# a failed print (jams, collapsed supports) stresses it more.
-	m["wear"] = clampf(float(m.get("wear", 0.0)) + (6.0 + c.difficulty if ok else 12.0),
-		0.0, 100.0)
+	# a failed print (jams, collapsed supports) stresses it more. The surge
+	# protector (v0.54.0) conditions the power line and halves the gain.
+	var wear_gain := (6.0 + c.difficulty if ok else 12.0) * upgrades.wear_multiplier()
+	m["wear"] = clampf(float(m.get("wear", 0.0)) + wear_gain, 0.0, 100.0)
 	if ok and c.state == Contract.State.PRINTING:
 		_advance(c, Contract.State.INSPECTION)
 	elif not ok:
@@ -4276,9 +4285,10 @@ func _apply_hud_layout() -> void:
 		card.offset_top = 10.0
 		card.reset_size()
 
-## Record a station as heard (v0.22.0); third one unlocks Radio star.
+## Record a station as heard (v0.22.0); third one unlocks Radio star, all of
+## them (v0.55.0) unlock Full dial.
 func _mark_station_heard(station: int) -> void:
-	if station >= 0 and station <= 2 and not _stations_heard.has(station):
+	if station >= 0 and station < Sfx.STATIONS.size() and not _stations_heard.has(station):
 		_stations_heard.append(station)
 		# The boot mark lands before _load_save; saving there would wipe the
 		# file with a fresh-shop payload. The next natural save persists it.

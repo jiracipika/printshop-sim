@@ -79,6 +79,13 @@ const CATALOG: Array[Dictionary] = [
 		"desc": "Still air, steady warmth — stability risk -0.25 more",
 		"cost_cents": 12000,
 	},
+	{
+		"id": "surge_protector",
+		"name": "Surge protector",
+		"desc": "Conditioned power — every machine wears half as fast",
+		"cost_cents": 10000,
+		"wear_multiplier": 0.5,
+	},
 ]
 
 var _owned: Dictionary = {}  # id -> true
@@ -174,6 +181,15 @@ func failure_threshold_delta() -> float:
 	if is_owned("premium_nozzle"):
 		d += float(entry("premium_nozzle").failure_threshold_delta)
 	return d
+
+
+## Multiplier on the wear every completed/failed print accrues (v0.54.0).
+## 1.0 with no protector; the surge protector conditions the power so the
+## fleet wears half as fast — completed prints and failures alike.
+func wear_multiplier() -> float:
+	if is_owned("surge_protector"):
+		return float(entry("surge_protector").wear_multiplier)
+	return 1.0
 
 
 ## Risk modifiers written into the prep evaluation before it reaches the sim.

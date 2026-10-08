@@ -199,7 +199,8 @@ static func _settings_valid(p: Dictionary) -> bool:
 		if t2 != TYPE_INT and t2 != TYPE_FLOAT:
 			return false
 		var rs := float(s["radio_station"])
-		if rs != floorf(rs) or rs < 0.0 or rs > 2.0:
+		# Station dial: 0..3 since v0.55.0 added the fourth station (Jazz).
+		if rs != floorf(rs) or rs < 0.0 or rs > 3.0:
 			return false
 	if s.has("haptics_strength"):
 		var t3 := typeof(s["haptics_strength"])
@@ -368,20 +369,21 @@ static func _recent_grades_valid(p: Dictionary) -> bool:
 
 
 ## Optional "stations_heard" key (v0.22.0): absent = fine; present must be
-## an array of station indexes 0..2 (at most 3, duplicates tolerated-read).
+## an array of station indexes 0..3 (at most 4 since v0.55.0 added the
+## fourth station, duplicates tolerated-read).
 static func _stations_heard_valid(p: Dictionary) -> bool:
 	if not p.has("stations_heard"):
 		return true
 	if typeof(p["stations_heard"]) != TYPE_ARRAY:
 		return false
-	if p["stations_heard"].size() > 3:
+	if p["stations_heard"].size() > 4:
 		return false
 	for v in p["stations_heard"]:
 		var t := typeof(v)
 		if t != TYPE_INT and t != TYPE_FLOAT:
 			return false
 		var f := float(v)
-		if f != floorf(f) or f < 0.0 or f > 2.0:
+		if f != floorf(f) or f < 0.0 or f > 3.0:
 			return false
 	return true
 

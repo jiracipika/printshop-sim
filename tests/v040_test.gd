@@ -104,8 +104,8 @@ func _run() -> void:
 	# chain: ratio vs the bare base is ~1.21.
 	_ok(absf(float(want) / 5000.0 / rep_mult - 1.21) < 0.03,
 		"payout carries the +10% showcase cap (+10%% same-day tip)")
-	_ok(main.upgrades.catalog().size() == 11,
-		"the catalog carries 11 upgrades (Fully kitted tracks 11)")
+	_ok(main.upgrades.catalog().size() == 12,
+		"the catalog carries 12 upgrades (Fully kitted tracks 12)")
 
 	# Persistence: 5 models survive (the restore guard allows 5).
 	main._save_game()

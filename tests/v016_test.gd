@@ -104,6 +104,7 @@ func _test_main_radio() -> void:
 	main.captured = true
 	main._player.global_position = Vector3(-3.0, 0.3, -1.0)
 	# v0.21.0: E cycles stations Lo-fi -> Synthwave -> Ambient -> off -> on.
+	# v0.55.0 added the Jazz station between Ambient and off.
 	main._try_interact()
 	_ok(main._music.playing and int(main.settings.radio_station) == 1,
 		"E at the radio moves to station 2, still playing")
@@ -111,17 +112,20 @@ func _test_main_radio() -> void:
 	_ok(main._music.playing and int(main.settings.radio_station) == 2,
 		"E again moves to station 3")
 	main._try_interact()
+	_ok(main._music.playing and int(main.settings.radio_station) == 3,
+		"E again moves to station 4 (Jazz)")
+	main._try_interact()
 	_ok(not main._music.playing and not bool(main.settings.music_enabled),
 		"E past the last station turns the music off")
 	main._try_interact()
 	_ok(main._music.playing and bool(main.settings.music_enabled)
-		and int(main.settings.radio_station) == 2,
+		and int(main.settings.radio_station) == 3,
 		"E again turns the music back on the same station")
 	var radio_log: Array[String] = []
 	for e in main.workshop_log.entries():
 		if str(e["kind"]) == "radio":
 			radio_log.append(str(e["text"]))
-	_ok(radio_log.size() == 4 and "off" in radio_log[2],
+	_ok(radio_log.size() == 5 and "off" in radio_log[3],
 		"radio station changes land in the workshop log")
 
 	# Slider writes through apply_setting; disabled stops the player.

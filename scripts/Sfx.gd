@@ -158,7 +158,7 @@ static func stream_lengths() -> Dictionary:
 ##
 ## Runtime-synthesized music: one soft chord per bar over a hiss floor, 4
 ## bars, seamless loop. Deliberately simple and QUIET — background texture,
-## not a production. v0.21.0 added stations: the radio cycles three loops.
+## not a production. v0.21.0 added stations; v0.55.0 a fourth (Jazz).
 
 const MUSIC_BARS := 4
 
@@ -198,6 +198,17 @@ const STATIONS: Array[Dictionary] = [
 			[87.31, 174.61, 220.0, 261.63],
 			[65.41, 130.81, 196.0, 246.94],
 			[87.31, 174.61, 220.0, 261.63],
+		],
+	},
+	{
+		"name": "Jazz", "bpm": 96.0, "hiss": 0.014, "env_pow": 1.25, "level": 0.05,
+		"partials": [[1.0, 1.0], [2.0, 0.28]],
+		"voices": [1.0, 0.8, 0.7, 0.6],
+		"chords": [
+			[146.83, 174.61, 220.0, 261.63],
+			[98.0, 123.47, 146.83, 174.61],
+			[130.81, 164.81, 196.0, 246.94],
+			[110.0, 138.59, 164.81, 196.0],
 		],
 	},
 ]

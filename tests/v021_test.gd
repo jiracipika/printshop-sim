@@ -35,19 +35,19 @@ func _run() -> void:
 
 func _test_stations() -> void:
 	var names := Sfx.station_names()
-	_ok(names.size() == 3 and names[0] == "Lo-fi" and names[1] == "Synthwave"
-		and names[2] == "Ambient", "three named stations")
+	_ok(names.size() == 4 and names[0] == "Lo-fi" and names[1] == "Synthwave"
+		and names[2] == "Ambient" and names[3] == "Jazz", "four named stations")
 	var streams: Array = []
 	var all_loop := true
 	var distinct := {}
-	for i in range(3):
+	for i in range(4):
 		var s: AudioStreamWAV = Sfx.music_station_stream(i)
 		streams.append(s)
 		distinct[s.data.size()] = true
 		if s.loop_mode != AudioStreamWAV.LOOP_FORWARD or s.loop_end != s.data.size() / 2:
 			all_loop = false
 	_ok(all_loop, "every station loops seamlessly")
-	_ok(distinct.size() == 3, "stations differ in length (tempo)")
+	_ok(distinct.size() == 4, "stations differ in length (tempo)")
 	# Station 0 keeps the v0.16 lo-fi timing; cached streams are stable.
 	_ok(absf(streams[0].data.size() / 2.0 / Sfx.RATE - 4.0 * 4.0 * 60.0 / 72.0) < 0.1,
 		"Lo-fi stays 4 bars at 72 BPM")
@@ -100,16 +100,20 @@ func _test_radio_and_toasts() -> void:
 	_ok(int(main.settings.radio_station) == 2 and main._music.playing,
 		"E moves to Ambient")
 	main._try_interact()
+	_ok(int(main.settings.radio_station) == 3 and main._music.playing
+		and main._music.stream == Sfx.music_station_stream(3),
+		"E moves to Jazz (station 4)")
+	main._try_interact()
 	_ok(not bool(main.settings.music_enabled) and not main._music.playing,
 		"E past the last station switches the radio off")
 	main._try_interact()
-	_ok(bool(main.settings.music_enabled) and int(main.settings.radio_station) == 2
-		and main._music.stream == Sfx.music_station_stream(2),
+	_ok(bool(main.settings.music_enabled) and int(main.settings.radio_station) == 3
+		and main._music.stream == Sfx.music_station_stream(3),
 		"E revives the radio on the last station")
 	# Station persists through a save.
 	main._save_game()
 	var saved: Dictionary = load("res://scripts/BrowserSave.gd").load_payload()
-	_ok(int(saved.get("settings", {}).get("radio_station", -1)) == 2,
+	_ok(int(saved.get("settings", {}).get("radio_station", -1)) == 3,
 		"radio_station persists in the save")
 
 	# Milestone toasts: flipping a stat toasts exactly once, persists.
