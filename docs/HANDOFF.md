@@ -1,4 +1,45 @@
-# Current handoff — shop codes + calm mode (v0.50.0, v0.51.0)
+# Current handoff — milestones III + top clients (v0.52.0, v0.53.0)
+
+## Current active work
+
+v0.52.0 MILESTONES III: four new derived achievements appended to
+Main._achievements() — Fortnight (day > 14, mirroring Week one's > 7),
+Century (stats.delivered >= 100), Full week (_full_week_delivered():
+all 7 days of the persisted daily_delivered window shipped >= 1; the
+window only fills after day 7 so the earliest fire is day 8's morning)
+and Ten spot (client_orders.size() >= 10). NO new save keys — every
+input is an existing persisted counter, so toasts, the boot
+silent-adoption loop and the Stats listing come free.
+
+v0.53.0 TOP CLIENTS: Main._top_client_lines() feeds a CLIENTS block
+into the Stats panel right after the Regulars line — header
+"CLIENTS (N distinct)" + up to three numbered "1. Name x<count>" rows
+ranked by completed orders, TIES BREAK ALPHABETICALLY (deterministic
+regardless of dictionary insertion order). Empty history renders no
+block at all (fresh shops keep the old layout).
+
+Both slices are bot-neutral: the playtest/lategame curves replay
+byte-identical to the v0.50/v0.51 batch (15/$1,665.79 early,
+64/$4,918.89 late).
+
+OPS NOTE: between batches the live site went 404 NOT_FOUND with the
+deploy intact — the documented alias-stuck Vercel state; a plain
+`vercel --prod --yes` retry restored it (verify with curl every time).
+
+GDScript trap that cost a parse error: `Array[String]` has NO
+extend() — use append_array(). (The parse failure then made
+packed.instantiate() yield a bare Node3D and the suite's
+`main.paused = false` threw "Invalid assignment ... on Node3D" —
+a broken Main.gd always shows up as nonsense downstream boot errors.)
+
+Local verification: 66 suites + smoke + both harnesses + pytest green
+(v052 18 checks, v053 13 checks); the ladder gate now fails a suite on
+rc != 0 OR any SCRIPT ERROR in its log (the v0.50 false-green lesson,
+now enforced mechanically).
+
+---
+
+# Previous handoff — shop codes + calm mode (v0.50.0, v0.51.0)
 
 ## Current active work
 

@@ -944,3 +944,30 @@ Test checks:
       math, checkbox wiring + show_settings push, persistence,
       3 validator cases, restore boot)
 - [x] all 65 suites + both harnesses + pytest green
+
+## Post-roadmap — v0.52.0 "Milestones III" — SHIPPED
+
+- [x] Four derived achievements (no new save keys): Fortnight
+      (past day 14), Century (100 delivered), Full week (all 7 days of
+      the daily_delivered window shipped >=1, earliest day 8), Ten spot
+      (10 distinct clients)
+- [x] Toasts + boot silent-adoption ride the existing machinery
+
+Test checks:
+- [x] 18 checks in v052_test (fresh-shop states, threshold edges both
+      sides per milestone, panel check/hint rendering, reload adoption
+      adopts done-only)
+- [x] 66 suites + smoke + both harnesses + pytest green
+
+## Post-roadmap — v0.53.0 "Top clients" — SHIPPED
+
+- [x] Stats panel CLIENTS block: "CLIENTS (N distinct)" + top three
+      "1. Name x<count>" ranked by completed orders, ties alphabetical,
+      capped at three; empty history renders nothing
+- [x] Survives save/reload (same persisted client_orders the regulars
+      system uses)
+
+Test checks:
+- [x] 13 checks in v053_test (empty state, header counts, rank +
+      tie-break order, podium cap, reload round-trip)
+- [x] 66 suites + smoke + both harnesses + pytest green
