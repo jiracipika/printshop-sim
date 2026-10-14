@@ -3,8 +3,10 @@
 *.translation
 export_credentials.cfg
 
-# Web export output (deployed, built fresh each release)
-web/build/
+# Web export output: web/build is TRACKED because Vercel serves it straight
+# from the repo (Godot is not available on Vercel builders). Rebuild with
+# `bash tools/build_web.sh` and commit the refreshed output before every
+# release push, or the live site keeps serving the previous build.
 
 # System
 .DS_Store
