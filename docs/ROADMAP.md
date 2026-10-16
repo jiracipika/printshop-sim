@@ -998,3 +998,20 @@ Test checks:
 - [x] v054_test 21 · v055_test 25 · v056_test 16
 - [x] 69 suites + smoke + both harnesses + pytest green; bot curves
       byte-identical (15/$1,665.79 early, 64/$4,918.89 late)
+
+## Post-roadmap — v0.57.0 "Milestones V" — SHIPPED
+
+- [x] Ten K — earn $10,000 lifetime (the tier above Four figures;
+      deliberately lifetime-earned, not balance-held — the shop OPENS
+      with $2,500, so a held-balance badge would fire at boot)
+- [x] Scrap heap — scrap 15 misprints (the failures are experience too)
+- [x] Better late than never — deliver 10 late orders (they still pay)
+- [x] Hard knocks — have 10 orders fail on quality (second-F deaths)
+- [x] All derived from existing persisted counters, zero new save keys;
+      toasts, boot silent adoption and the Stats listing come free
+
+Test checks:
+- [x] v057_test 22 checks (boundaries 999999/1000000 cents, 14/15
+      scrapped, 9/10 late, 9/10 cancelled; panel render; boot adoption)
+- [x] full ladder + smoke + both harnesses + pytest green (results in
+      HANDOFF)

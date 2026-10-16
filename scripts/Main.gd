@@ -499,6 +499,14 @@ func _achievements() -> Array[Dictionary]:
 			"done": client_orders.size() >= 25},
 		{"name": "Spotless", "hint": "run 25 cleaning cycles",
 			"done": cleans >= 25},
+		{"name": "Ten K", "hint": "earn $10,000 lifetime",
+			"done": int(stats.earned_cents) >= 1000000},
+		{"name": "Scrap heap", "hint": "scrap 15 misprints",
+			"done": int(stats.scrapped) >= 15},
+		{"name": "Better late than never", "hint": "deliver 10 late orders",
+			"done": int(stats.late) >= 10},
+		{"name": "Hard knocks", "hint": "have 10 orders fail on quality",
+			"done": int(stats.cancelled) >= 10},
 	]
 
 ## Full week (v0.52.0): every day in the persisted 7-day window shipped at

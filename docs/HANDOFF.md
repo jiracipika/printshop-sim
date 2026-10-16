@@ -1,6 +1,35 @@
-# Current handoff — surge protector + Jazz + milestones IV (v0.54.0–v0.56.0)
+# Current handoff — milestones V (v0.57.0)
 
 ## Current active work
+
+v0.57.0 MILESTONES V: four more derived achievements appended to
+Main._achievements(), zero new save keys — Ten K (stats.earned_cents
+>= $10,000 lifetime), Scrap heap (stats.scrapped >= 15), Better late
+than never (stats.late >= 10) and Hard knocks (stats.cancelled >= 10).
+The money milestone is deliberately LIFETIME-EARNED, not
+balance-held: _ready() credits $2,500 opening funds, so a held-balance
+badge would fire at boot on a fresh shop. The three "failure" badges
+celebrate resilience (late orders still pay; a second-F death logs
+"scrap" and counts in stats.cancelled). Toasts, boot silent adoption
+and the Stats listing come free from the existing loop.
+
+DESIGN TRAP for future balance badges: the opening balance IS $2,500 —
+any "hold $X in the account" milestone must sit well above it, and
+balance DIPS on every buy, so peak-held thresholds are flaky by
+nature. Lifetime counters are monotonic; prefer them.
+
+Verification this batch: v057_test 22 checks green; full ladder
+(70 version+named suites + smoke) run with the mechanical gate
+(rc != 0 OR SCRIPT ERROR OR 150s hang = fail) — results in
+/tmp/ps-ladder/ logs and recorded below; both harnesses + pytest
+replayed with curve comparison below. Web export via
+tools/build_web.sh; deploy + live curl verification recorded below.
+
+---
+
+# Previous handoff — surge protector + Jazz + milestones IV (v0.54.0–v0.56.0)
+
+## Current active work (previous batch)
 
 v0.54.0 SURGE PROTECTOR: the 12th catalog upgrade ($100, id
 surge_protector). Upgrades.wear_multiplier() returns 0.5 when owned;
