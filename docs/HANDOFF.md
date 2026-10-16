@@ -19,11 +19,19 @@ balance DIPS on every buy, so peak-held thresholds are flaky by
 nature. Lifetime counters are monotonic; prefer them.
 
 Verification this batch: v057_test 22 checks green; full ladder
-(70 version+named suites + smoke) run with the mechanical gate
-(rc != 0 OR SCRIPT ERROR OR 150s hang = fail) — results in
-/tmp/ps-ladder/ logs and recorded below; both harnesses + pytest
-replayed with curve comparison below. Web export via
-tools/build_web.sh; deploy + live curl verification recorded below.
+(71 suites incl. smoke) run SEQUENTIALLY with the mechanical gate
+(rc != 0 OR SCRIPT ERROR OR 150s hang = fail) — 0 bad. An earlier
+ladder pass showed 5-7 phantom boot failures purely because
+sim_playtest ran CONCURRENTLY with the ladder (two headless godots
+race on BrowserSave state); never overlap them. Both harnesses replay
+BYTE-IDENTICAL pre-change (git stash) vs post-change: playtest
+day-8 15/$1,665.79 both, lategame 74/$6,026.39 both (the handoff's
+older 64/$4,918.89 late curve is machine-state drift, predating this
+batch). pytest 21 passed. Web export stamped clean
+(0435ee6, dirty:False). Deploy: push → Vercel Ready but the alias
+STAYED on 0.56.0 (the documented alias-stuck state again) — fixed
+with `vercel alias set printshop-4aj9y89zu… print-shop-sim.vercel.app`;
+live curl now serves 0.57.0/0435ee6, page 200.
 
 ---
 
