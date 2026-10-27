@@ -1,5 +1,14 @@
 # Current handoff — milestones V (v0.57.0)
 
+## External QA pass (2026-10-27, no code changes)
+
+A fresh-machine verification pass confirmed every gate on the v0.57.0
+tree: 62-suite serial ladder 0 red, smoke 9/9, sim_playtest 8/8 and
+sim_lategame 16/16 both replaying byte-identical curves, python 21/21.
+Full evidence: docs/worker-qa-pass.md. Export templates absent on that
+machine, so the web export was not re-run — do that before the next deploy.
+
+
 ## Current active work
 
 v0.57.0 MILESTONES V: four more derived achievements appended to
