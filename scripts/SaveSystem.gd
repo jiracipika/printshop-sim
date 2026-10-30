@@ -120,6 +120,8 @@ static func validate(payload: Variant) -> Dictionary:
 		return {}
 	if not _media_a_valid(p):
 		return {}
+	if not _walkins_served_valid(p):
+		return {}
 	if not _wear_valid(p):
 		return {}
 	if not _cleans_valid(p):
@@ -254,6 +256,18 @@ static func _media_a_valid(p: Dictionary) -> bool:
 	if t != TYPE_INT and t != TYPE_FLOAT:
 		return false
 	var f := float(p["media_a_deliveries"])
+	return f == floorf(f) and f >= 0.0
+
+
+## Optional "walkins_served" key (v0.59.0): absent = fine; present must be
+## a non-negative whole int. (media_a_deliveries pattern.)
+static func _walkins_served_valid(p: Dictionary) -> bool:
+	if not p.has("walkins_served"):
+		return true
+	var t := typeof(p["walkins_served"])
+	if t != TYPE_INT and t != TYPE_FLOAT:
+		return false
+	var f := float(p["walkins_served"])
 	return f == floorf(f) and f >= 0.0
 
 
@@ -544,7 +558,7 @@ static func _log_valid(p: Dictionary) -> bool:
 
 
 ## Optional "stats" key: dict of known non-negative int counters.
-const STAT_KEYS: Array[String] = ["delivered", "late", "scrapped", "cancelled", "earned_cents", "missed"]
+const STAT_KEYS: Array[String] = ["delivered", "late", "scrapped", "cancelled", "earned_cents", "missed", "lost_walkins"]
 
 static func _stats_valid(p: Dictionary) -> bool:
 	if not p.has("stats"):

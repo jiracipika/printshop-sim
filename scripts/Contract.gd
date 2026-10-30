@@ -68,6 +68,10 @@ const VALID_COLORS: Array[String] = ["Clay", "Sage", "Honey"]
 ## Featured order (v0.42.0): one job per day is the board's featured pick
 ## and pays +15%. Deterministic per (day, slot) — derived, not stored.
 @export var featured: bool = false
+## Walk-in (v0.59.0): a while-you-wait counter order. Never dealt onto the
+## board and never queued; the customer waits at the counter while the
+## contract rides the normal accept -> prep -> print -> collect pipeline.
+var walk_in := false
 
 
 ## Which slot of the day's board is the featured pick (v0.42.0): one per

@@ -15,6 +15,9 @@ const BASE_FAILURE_THRESHOLD := 0.55
 ## --- shop day (v0.2.0) ---
 const RENT_CENTS := 400
 const LATE_PAYOUT_FACTOR := 0.5
+## Counter premium (v0.59.0): while-you-wait walk-in orders pay x1.10,
+## applied after the event multiplier and before the late factor.
+const COUNTER_PREMIUM := 1.10
 
 ## Rent scales with the shop's age (v0.12 balance pass): $9 on day 1, +$2 per
 ## day, capped at $25. Keeps early pressure honest without mid-game crush.
@@ -62,7 +65,7 @@ var reputation := 3.0
 var announced_tier := 1
 ## Lifetime counters (v0.5.0), persisted and shown in the menu Stats panel.
 ## "missed" (v0.14.0): board offers that expired overnight.
-var stats := {"delivered": 0, "late": 0, "scrapped": 0, "cancelled": 0, "earned_cents": 0, "missed": 0}
+var stats := {"delivered": 0, "late": 0, "scrapped": 0, "cancelled": 0, "earned_cents": 0, "missed": 0, "lost_walkins": 0}
 ## Workshop log (v0.15.0): capped ring buffer of shop events, persisted.
 var workshop_log := WorkshopLog.new()
 
@@ -183,6 +186,19 @@ var _finishing: Node3D
 ## Front counter (v0.58.0): the service island on the front wall — bell,
 ## slip pad; walk-in customers queue here from v0.59.0.
 var _counter: Node3D
+## Walk-in customers (v0.59.0): pure arrival/patience logic plus the ONE
+## waiting actor. The actor spawns on arrival and queue_frees on despawn —
+## nothing customer-shaped ever exists at boot (v020 budget). Waiting
+## walk-ins are not persisted; only the counters below are.
+var _counter_service: CounterService
+var _customer: Node3D
+## Two-press slip arm at the counter (shop-code import pattern): armed flag
+## plus a CounterService.ARM_WINDOW_S timeout ticked in _tick_counter; the
+## arm also drops on leaving the counter radius or when nobody waits.
+var _counter_arm := false
+var _counter_arm_t := 0.0
+## Walk-ins served at the counter (v0.59.0, persisted). Walk-ins lost to
+## patience expiry live in stats.lost_walkins.
 var _window_life: Node3D
 ## Display shelf (v0.37.0): finished parts shown by the window add +2%
 ## payout each (max +6%). Shelf slots hold model names; duplicates count
@@ -213,6 +229,8 @@ var client_orders: Dictionary = {}
 var client_last_grade: Dictionary = {}
 ## Media-day A deliveries (v0.43.0) — persists for the Paper star milestone.
 var media_a_deliveries: int = 0
+## Walk-ins served at the counter (v0.59.0) — media_a_deliveries pattern.
+var walkins_served: int = 0
 var cleans: int = 0  # v0.45.0 completed maintenance cleans (Meticulous)
 ## False until _ready finishes: boot-time station marks happen before the
 ## save loads, and saving there would clobber the player's file.
@@ -829,7 +847,7 @@ func _load_save() -> void:
 	if payload.has("reputation"):
 		reputation = clampf(float(payload.reputation), 0.0, 5.0)
 	if payload.has("stats"):
-		for key in ["delivered", "late", "scrapped", "cancelled", "earned_cents", "missed"]:
+		for key in ["delivered", "late", "scrapped", "cancelled", "earned_cents", "missed", "lost_walkins"]:
 			if payload.stats.has(key):
 				stats[key] = maxi(int(payload.stats[key]), 0)
 	if payload.has("filament") and typeof(payload.filament) == TYPE_ARRAY:
@@ -910,6 +928,8 @@ func _load_save() -> void:
 				client_orders[k] = clampi(int(payload.client_orders[k]), 1, 999)
 	if payload.has("media_a_deliveries"):
 		media_a_deliveries = maxi(int(payload.media_a_deliveries), 0)
+	if payload.has("walkins_served"):
+		walkins_served = maxi(int(payload.walkins_served), 0)
 	if payload.has("client_last_grade") and typeof(payload.client_last_grade) == TYPE_DICTIONARY:
 		client_last_grade.clear()
 		for k in payload.client_last_grade:
@@ -1006,6 +1026,7 @@ func _build_save_payload() -> Dictionary:
 			"client_orders": client_orders,
 			"client_last_grade": client_last_grade,
 			"media_a_deliveries": media_a_deliveries,
+			"walkins_served": walkins_served,
 			"shelf_models": _shelf_models,
 		})
 
@@ -1505,6 +1526,10 @@ func _build_environment() -> void:
 	_counter = load("res://scripts/CounterStation.gd").new()
 	_counter.position = CounterStation.COUNTER_POS
 	add_child(_counter)
+
+	# Walk-in service (v0.59.0): pure logic, built after the counter. No
+	# customer node exists until an arrival spawns one (never at boot).
+	_counter_service = CounterService.new()
 
 	# Window life (v0.34.0): birds + delivery van outside the glass.
 	_window_life = load("res://scripts/WindowLife.gd").new()
@@ -2454,7 +2479,10 @@ func _try_grab_or_place() -> void:
 	if held != null:
 		# Delivering beats placing: a held part at the packing table goes
 		# through the interact path (pack / scrap), never drops on the spot.
-		if _is_held_part() and _near_packing_station():
+		# The counter (v0.59.0) joins the carve-out: a walk-in's part is
+		# handed over there; board parts fall through _try_interact to the
+		# same place action they had before.
+		if _is_held_part() and (_near_packing_station() or _near_counter()):
 			_try_interact()
 			return
 		_try_place()
@@ -2833,6 +2861,7 @@ func _physics_process(delta: float) -> void:
 		var s: PrintSim = m.get("sim")
 		s.tick(delta)
 	_tick_cleaning(delta)  # v0.45.0 maintenance countdowns, same live gate
+	_tick_counter(delta)  # v0.59.0 walk-in arrivals + patience, same live gate
 	day_cycle.tick(delta)
 	_apply_daylight()
 	_animate_rain(delta)
@@ -3025,6 +3054,154 @@ func _tick_cleaning(delta: float) -> void:
 		_log_event("maintained", "Printer %d cleaned" % (int(m.get("idx")) + 1))
 		if _focus == int(m.get("idx")):
 			_set_prompt("Printer %d cleaned — wear reset" % (int(m.get("idx")) + 1))
+
+## --- walk-in customers (v0.59.0) ----------------------------------------------
+## BOT-SAFETY INVARIANT: unless the player serves a walk-in at the counter,
+## everything in this section is observationally inert — arrival, waiting and
+## expiry never log, never touch money or reputation, never touch the board
+## or the machines (except cancelling the walk-in's own contract on expiry).
+## The deterministic bots never approach the counter, so their curves must
+## not move by a single byte.
+
+## Ticked beside _tick_cleaning under the same paused/live gate: slip-arm
+## timeout, patience expiry, then arrivals. Day fraction comes from the same
+## DayCycle clock every other system reads.
+func _tick_counter(delta: float) -> void:
+	if _counter_service == null:
+		return
+	# The two-press slip arm disarms on its 8 s timeout, on leaving the
+	# counter radius, or when its walk-in is gone (shop-code import pattern).
+	if _counter_arm:
+		_counter_arm_t = maxf(_counter_arm_t - delta, 0.0)
+		if _counter_arm_t <= 0.0 or not _near_counter() \
+				or not _counter_service.waiting():
+			_counter_disarm()
+	var day := day_cycle.day
+	var frac := day_cycle.t
+	# Patience expiry: despawn, then cancel the walk-in's contract through
+	# the SAME teardown calls _on_day_changed's overnight-cancel branch uses
+	# (sim reset, visual reset, part discarded, machine freed, stack cleared)
+	# — but with zero rep change and zero log noise. Walk-ins never punish.
+	if _counter_service.waiting() \
+			and CounterService.is_expired(_counter_service.state, day, frac):
+		var wi: int = int(_counter_service.state.get("machine_idx", -1))
+		if wi >= 0 and wi < machines.size():
+			var wm := _machine(wi)
+			var wc: Contract = wm.get("contract")
+			if wc != null and wc.walk_in:
+				if wc.state in [Contract.State.PREPARING, Contract.State.PRINTING, Contract.State.INSPECTION]:
+					_advance(wc, Contract.State.FAILED)
+				var ws: PrintSim = wm.get("sim")
+				if ws.is_running() or ws.state == PrintSim.State.DONE_OK:
+					ws.reset()
+					var wvi := int(wm.get("idx"))
+					if wvi < _print_visuals.size():
+						_print_visuals[wvi].reset()
+					if wvi < _printers.size() and _printers[wvi].get("set_failed") != null:
+						_printers[wvi].set_failed(false)
+				_discard_part_for(wm)
+				wm["contract"] = null
+				packing_station.set_stack_count(0)
+		_counter_despawn()
+		stats.lost_walkins += 1
+	# Arrivals: deterministic per (day, slot), skipped entirely while a
+	# customer waits, refused outside the business window.
+	var due := _counter_service.due(day, frac, _counter_service.waiting())
+	if due >= 0:
+		_spawn_walkin(day, due)
+
+## Spawn the (day, slot) walk-in: the slip's contract, the service state and
+## the customer actor behind the counter. Silent by design — no log, no
+## sound, nothing a bot can observe.
+func _spawn_walkin(day: int, index: int) -> void:
+	if _counter_service == null or _counter_service.waiting() or _customer != null:
+		return
+	var cap := Events.tier_max_difficulty(Events.tier_for_rep(reputation))
+	var contract := CounterService.make_contract(day, index, cap)
+	_counter_service.begin(day, index, contract, day_cycle.t)
+	var actor := CustomerActor.new()
+	actor.position = CustomerActor.WAIT_POS
+	actor.set_meta("walkin_day", day)
+	actor.set_meta("walkin_index", index)
+	actor.set_motion(not calm_motion())
+	add_child(actor)
+	_customer = actor
+
+## Despawn the waiting customer and forget the state (serve or expiry).
+func _counter_despawn() -> void:
+	_counter_service.clear()
+	if _customer != null:
+		_customer.queue_free()
+		_customer = null
+	_counter_disarm()
+
+func _counter_disarm() -> void:
+	_counter_arm = false
+	_counter_arm_t = 0.0
+
+## First idle, unlocked, contract-free printer — the walk-in accept order
+## (same eligibility _accept_on assumes; walk-ins never enter JobBoard
+## queues, so this scan replaces take_next()).
+func _first_free_machine() -> int:
+	for i in range(machines.size()):
+		if not upgrades.machine_unlocked(i):
+			continue
+		var m := _machine(i)
+		if m.get("contract") != null:
+			continue
+		if (m.get("sim") as PrintSim).state != PrintSim.State.IDLE:
+			continue
+		return i
+	return -1
+
+## Accept the waiting walk-in on machine `idx` with the same machine-setup
+## calls _accept_on uses (contract state advances, day anchor, part counters,
+## orient reset) minus the board plumbing.
+func _accept_walkin_on(idx: int) -> void:
+	var m := _machine(idx)
+	var w: Dictionary = _counter_service.state
+	var c: Contract = w.get("contract")
+	if c == null:
+		return
+	if not _advance(c, Contract.State.ACCEPTED):
+		return
+	if not _advance(c, Contract.State.PREPARING):
+		_advance(c, Contract.State.FAILED)
+		return
+	w["accepted"] = true
+	w["machine_idx"] = idx
+	m["contract"] = c
+	m["day"] = day_cycle.day
+	c.parts_packed = 0
+	c.copy_grades = []
+	packing_station.set_stack_count(0)
+	_guide("accepted")
+	m["orient"] = 0
+	m["orient_pending"] = false
+	sfx.play("click")
+	_set_prompt("Sent to Printer %d — %s is waiting" % [idx + 1, str(w.get("client", ""))])
+
+## Counter handover (v0.59.0): grade the held walk-in part exactly like the
+## packing table grades (QualityCheck on the machine's grade snapshot), then
+## settle through the extracted delivery tail with the counter premium. An
+## F part can't be handed over — scrap it at the packing table.
+func _counter_deliver_held(mi: int) -> void:
+	var m := _machine(mi)
+	var c: Contract = m.get("contract")
+	var snap: Dictionary = m.get("grade_snapshot", {})
+	var raw := QualityCheck.grade(c, int(snap.get("final_layer", 0)),
+		int(snap.get("total_layers", 0)), snap.get("risks", {}))
+	if raw == "F":
+		_set_prompt("A failed part can't be handed over — scrap it at the packing table")
+		sfx.play("buzz")
+		return
+	var client: String = c.client
+	_settle_held_delivery(m, _is_late_for(m), true)
+	_counter_despawn()
+	# One "counter" log entry on the player's serve (allowed by the brief;
+	# bots never serve, so the pinned log counts never see it).
+	_log_event("counter", "%s served at the counter — %s" % [client, c.model_name])
+
 
 func _nearest_printer() -> Node3D:
 	var best: Node3D = null
@@ -3266,6 +3443,10 @@ func calm_motion() -> bool:
 func _apply_calm_motion() -> void:
 	if _window_life != null and _window_life.has_method("set_motion"):
 		_window_life.set_motion(not calm_motion())
+	# The waiting customer freezes exactly where it stands in calm mode
+	# (v0.51.0 gate, WindowLife pattern).
+	if _customer != null and _customer.has_method("set_motion"):
+		_customer.set_motion(not calm_motion())
 
 ## Footsteps (v0.22.0): soft alternating thuds timed to the walk. Idle time
 ## pre-charges the timer to half a step so a resumed walk starts promptly.
@@ -3610,16 +3791,19 @@ func _try_pack_held() -> bool:
 		else:
 			_set_prompt("Pack refused: %s" % result.get("reason", "?"))
 		return true
-	# Non-F copy: record the (color-capped) grade and stack the part.
-	var raw_grade: String = result.grade
-	if bool(m.get("finished")):
-		raw_grade = _bump_grade(raw_grade)
-		m["finished"] = false
-	var eff_grade: String = _cap_grade_for_color(raw_grade, c, m)
-	c.copy_grades.append(eff_grade)
-	c.parts_packed += 1
-	_discard_part_for(m)
-	if c.needs_parts():
+	# Non-F copy: partial packs (multi-part orders, v0.18.0) keep their own
+	# path — the order stays open until every copy is packed, no payout yet.
+	# The FINAL copy settles through _settle_held_delivery (below), which the
+	# v0.59.0 counter handover shares; board behavior is unchanged.
+	if c.parts_packed + 1 < c.parts_total:
+		var raw_grade: String = result.grade
+		if bool(m.get("finished")):
+			raw_grade = _bump_grade(raw_grade)
+			m["finished"] = false
+		var eff_grade: String = _cap_grade_for_color(raw_grade, c, m)
+		c.copy_grades.append(eff_grade)
+		c.parts_packed += 1
+		_discard_part_for(m)
 		# Partial pack (v0.18.0): the copy joins the stack on the table; the
 		# order stays open until every copy is packed. No payout yet.
 		packing_station.set_stack_count(c.parts_packed)
@@ -3630,6 +3814,31 @@ func _try_pack_held() -> bool:
 		_set_prompt("Part %d/%d packed (%s) — [E] at Printer %d prints the next copy" % [
 			c.parts_packed, c.parts_total, eff_grade, mi + 1])
 		return true
+	# Final copy: grade, pay out and tear down via the extracted settle tail
+	# (behavior-identical for board contracts; via_counter=false).
+	return _settle_held_delivery(m, _is_late_for(m), false)
+
+## The FINAL delivery settle, extracted from _try_pack_held (v0.59.0) so the
+## counter handover can share it. Board path: called with via_counter=false
+## right after packing_station.try_pack said "packed" (try_pack already ran
+## the same QualityCheck call to gate F copies — re-grading here is the same
+## pure call with the same snapshot, so the grade matches). The counter path
+## differs ONLY by the counter premium (inside _finalize_payout) and the
+## walkins_served bookkeeping below. Statements are moved, not reorganized.
+func _settle_held_delivery(m: Dictionary, late: bool, via_counter: bool) -> bool:
+	var c: Contract = m.get("contract")
+	# Grade snapshot -> finishing bump -> color cap: the same grading core
+	# the packing station uses (QualityCheck on the sim snapshot).
+	var snap: Dictionary = m.get("grade_snapshot", {})
+	var raw_grade: String = QualityCheck.grade(c, int(snap.get("final_layer", 0)),
+		int(snap.get("total_layers", 0)), snap.get("risks", {}))
+	if bool(m.get("finished")):
+		raw_grade = _bump_grade(raw_grade)
+		m["finished"] = false
+	var eff_grade: String = _cap_grade_for_color(raw_grade, c, m)
+	c.copy_grades.append(eff_grade)
+	c.parts_packed += 1
+	_discard_part_for(m)
 	# Final copy: aggregate the order grade and pay out exactly once.
 	var final_grade: String = Contract.aggregate_grades(c.copy_grades)
 	var multitag := " ×%d" % c.parts_total if c.is_multi_part() else ""
@@ -3642,10 +3851,10 @@ func _try_pack_held() -> bool:
 		return true
 	if not _advance(c, Contract.State.DELIVERED):
 		return true
-	# Final payout: effective grade x reputation x season x event; late halves
-	# last; same-day delivery earns a 10% tip on top.
-	var late := _is_late_for(m)
-	var payout := _finalize_payout(eff_payout, late, m)
+	# Final payout: effective grade x reputation x season x event; the
+	# counter premium (x1.10) lands after the event and before the late
+	# half; late halves last; same-day delivery earns a 10% tip on top.
+	var payout := _finalize_payout(eff_payout, late, m, -1.0, via_counter)
 	var same_day := _days_taken_for(m) <= 0
 	if not ledger.pay_once(c.id, payout, "payout %s" % c.id):
 		return true
@@ -3675,6 +3884,8 @@ func _try_pack_held() -> bool:
 	day_delivered_today += 1  # v0.47.0 shop-history graph
 	client_orders[c.client] = int(client_orders.get(c.client, 0)) + 1
 	client_last_grade[c.client] = final_grade
+	if via_counter:
+		walkins_served += 1  # v0.59.0 counter-order bookkeeping
 	_guide("delivered")
 	if reputation >= 4.0:
 		_guide("stars")
@@ -4035,13 +4246,17 @@ func reputation_multiplier() -> float:
 
 ## Single source of truth for what a delivery actually pays: station grade
 ## x client loyalty (v0.32.0) -> reputation -> season -> daily event ->
-## late half -> same-day tip -> showcase bonus (v0.37.0).
+## counter premium x1.10 (v0.59.0, counter orders only) -> late half ->
+## same-day tip -> showcase bonus (v0.37.0).
 ## Tests pass the PRE-delivery reputation (the delivery bumps it afterwards).
-func _finalize_payout(base: int, late: bool, m: Dictionary, rep := -1.0) -> int:
+func _finalize_payout(base: int, late: bool, m: Dictionary, rep := -1.0,
+		counter := false) -> int:
 	var mult := reputation_multiplier() if rep < 0.0 else rep
 	var payout := roundi(float(base) * mult)
 	payout = roundi(float(payout) * float(season.payout_mult))
 	payout = roundi(float(payout) * float(today_event.payout_mult))
+	if counter:
+		payout = roundi(float(payout) * COUNTER_PREMIUM)
 	if late:
 		payout = roundi(float(payout) * LATE_PAYOUT_FACTOR)
 	if _days_taken_for(m) <= 0:
@@ -4091,11 +4306,32 @@ func _try_interact() -> void:
 		if mi2 >= 0:
 			_try_display_held(mi2)
 		return
+	# Holding a WALK-IN's part at the counter (v0.59.0): hand it over right
+	# there through the shared settle path — the packing table must never
+	# pay a counter order. Sits AFTER the finishing/shelf branches and
+	# BEFORE the packing-table branch (hazard 10 order). Board parts fall
+	# through to the existing branches unchanged.
+	if held != null and _is_held_part() and _near_counter():
+		var wmi := _machine_for_part(held)
+		if wmi >= 0:
+			var wc: Contract = _machine(wmi).get("contract")
+			if wc != null and wc.walk_in:
+				_counter_deliver_held(wmi)
+				return
 	# Holding the printed part at the packing table delivers (or scraps) it —
 	# this beats the generic place action so E never drops the part at the
 	# station when the player means to deliver.
 	if held != null and _is_held_part() and _near_packing_station():
 		var mi := _machine_for_part(held)
+		# A walk-in's part never PACKS here (v0.59.0): its payout happens at
+		# the counter only. An F-flagged scrap is still allowed (it pays
+		# nothing). Board parts take the original path unchanged.
+		if mi >= 0 and not bool(_machine(mi).get("scrap")):
+			var pc: Contract = _machine(mi).get("contract")
+			if pc != null and pc.walk_in:
+				_set_prompt("%s is waiting at the counter — hand it over there"
+					% str(pc.client))
+				return
 		if mi >= 0 and bool(_machine(mi).get("scrap")):
 			_machine(mi)["scrap"] = false
 			_scrap_held()
@@ -4114,8 +4350,49 @@ func _try_interact() -> void:
 	# so this order is load-bearing (hazard 10). Holding any object falls
 	# through to the existing place/carry behavior.
 	if held == null and _near_counter():
-		sfx.play("bell")
-		_set_prompt("The counter is quiet — nobody waiting yet")
+		if not _counter_service.waiting():
+			sfx.play("bell")
+			_set_prompt("The counter is quiet — nobody waiting yet")
+			return
+		var w: Dictionary = _counter_service.state
+		if bool(w.get("accepted", false)):
+			# Already accepted: name the machine and the patience left.
+			var left := ceili(CounterService.patience_left_s(w, day_cycle.day,
+				day_cycle.t, day_cycle.day_length_s))
+			_set_prompt("%s is waiting — order is on Printer %d (~%ds of patience left)"
+				% [str(w.get("client", "")), int(w.get("machine_idx", 0)) + 1, left])
+			return
+		# Two-press slip (shop-code import arm pattern): press 1 shows the
+		# slip and arms, press 2 within 8 s accepts. Leaving the radius or
+		# the timeout disarms (in _tick_counter).
+		var wc: Contract = w.get("contract")
+		if wc == null:
+			# A waiting state always carries its slip contract; if it is
+			# ever missing, treat the counter as quiet instead of crashing.
+			_counter_despawn()
+			sfx.play("bell")
+			_set_prompt("The counter is quiet — nobody waiting yet")
+			return
+		if not _counter_arm:
+			_counter_arm = true
+			_counter_arm_t = CounterService.ARM_WINDOW_S
+			sfx.play("bell")
+			var price := roundi(float(wc.order_payout_cents()) * COUNTER_PREMIUM)
+			var secs := ceili(CounterService.patience_left_s(w, day_cycle.day,
+				day_cycle.t, day_cycle.day_length_s))
+			_set_prompt("%s — %s, %s, ~$%s at the counter, waits ~%ds. [E] again to accept"
+				% [str(w.get("client", "")), wc.model_name,
+				wc.color if wc.color != "" else "any color",
+				_cents_str(price), secs])
+			return
+		# Press 2: accept onto the first idle, unlocked, contract-free
+		# printer. No free machine -> polite refusal, slip stays armed.
+		var mi := _first_free_machine()
+		if mi < 0:
+			sfx.play("click")
+			_set_prompt("No free printer for a counter order")
+			return
+		_accept_walkin_on(mi)
 		return
 	# Empty-handed at the crate buys a spool.
 	if _near_crate():
@@ -4403,6 +4680,16 @@ func _update_hud() -> void:
 					lines.append("[E] cycle")
 			else:
 				lines.append("Prep: [E] preview orientation")
+	# Waiting walk-in (v0.59.0): one counter line, ONLY while someone waits —
+	# nothing when the counter is quiet, so bot runs never render it.
+	if _counter_service != null and _counter_service.waiting():
+		var wu: Dictionary = _counter_service.state
+		var wuc: Contract = wu.get("contract")
+		if wuc != null:
+			var wsecs := ceili(CounterService.patience_left_s(wu, day_cycle.day,
+				day_cycle.t, day_cycle.day_length_s))
+			lines.append("Counter: %s — %s (%ds)" % [
+				str(wu.get("client", "")), wuc.model_name, wsecs])
 	var expiring: int = job_board.expiring_count(day_cycle.day + 1)
 	lines.append("Jobs waiting: %d%s" % [job_board.get_available_count(),
 		"" if expiring == 0 else "  · %d expire overnight" % expiring])

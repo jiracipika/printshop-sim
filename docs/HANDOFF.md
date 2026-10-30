@@ -1,4 +1,4 @@
-# Current handoff — Print Shop 3.0 (in progress; v0.58.0 = slice 1)
+# Current handoff — Print Shop 3.0 (in progress; v0.59.0 = slice 2)
 
 ## Print Shop 3.0 overhaul (2026-10-30, in progress)
 
@@ -9,6 +9,29 @@ Sequential ladder runner: `bash tools/ladder.sh --bots` (sim_* suites
 get 420 s; never run two headless Godots at once — BrowserSave race).
 
 Landed:
+- Slice 2 (v0.59.0, walk-in customers): CounterService.gd (pure
+  hash-gated arrivals — max 2 slots/day at 0.25+0.22i+0.03jitter, gate
+  6/10, window 0.15-0.80, patience 0.55 day FROM ARRIVAL) +
+  CustomerActor.gd (2-mesh Node3D behind the counter, set_motion-gated
+  bob, never at boot). Two-press slip accept onto the first idle
+  unlocked contract-free printer; walk-ins never enter JobBoard queues.
+  Counter handover settles through _settle_held_delivery(m, late,
+  via_counter) — extracted verbatim from _try_pack_held's final-copy
+  tail (board path behavior-identical, via_counter=false) — and
+  _finalize_payout gained a trailing counter param (x1.10 after event,
+  before late). Expiry mirrors _on_day_changed's cancel teardown with
+  zero rep/log noise + stats.lost_walkins. walkins_served +
+  stats.lost_walkins persisted (absence-tolerant). Packing table never
+  pays a walk-in (refusal prompt; F scrap still allowed). HUD counter
+  line only while someone waits. walkin_test 38 checks. Parent
+  re-verified ladder 75/75, pytest 21/21, both curves byte-identical.
+  Accepted deviations (docs/worker-walkin.md): absi() on hash draws;
+  patience anchored at ARRIVAL (only coherent reading — unaccepted
+  walk-ins must leave); _try_grab_or_place carve-out extended to the
+  counter (board parts verified to still reach _try_place);
+  duplicated-not-shared expiry teardown; defensive slip null-guard.
+  Known cosmetic edge: a walk-in accept/delivery resets the packing
+  table's stack VISUAL if a board multi-part order is mid-completion.
 - Slice 1 (v0.58.0, front counter): CounterStation island at
   (-1.9, 0, 2.55) — 10 meshes, world-layer StaticBody3D, deterministic
   tick-driven bell squash. Empty-handed E within 1.35 m rings the bell
@@ -23,12 +46,10 @@ Landed:
   1186ca3 baseline (playtest 8/8 day-9 $1,749.64 / 17; lategame 16/16
   day-14 $4,918.89 / 64).
 
-Next: slice 2 walk-in customers (v0.59.0, brief
-docs/GLM-3.0-SLICE-2.md). BOT-SAFETY INVARIANT: waiting walk-ins must
-be observationally inert — no money/rep/log/board changes the
-deterministic bots can see — so slices 2-3 keep both sim curves
-byte-identical to slice 1's. Slice 4 (shop rank) deliberately shifts
-payouts; its harnesses are re-measured with floors instead.
+Next: slice 3 atmosphere (v0.60.0, brief docs/GLM-3.0-SLICE-3.md) —
+visual-only, curves stay byte-identical to slice 2's; draw budget
+must pass WITH a walk-in active. Then slice 4 (shop rank) deliberately
+shifts payouts; its harnesses are re-measured with floors instead.
 
 ## External QA pass (2026-10-27, no code changes)
 
