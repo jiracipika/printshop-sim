@@ -63,6 +63,15 @@ var reputation := 3.0
 ## Reputation-tier high-water mark (v0.19.0): tier-up announcements and the
 ## morning board terms fire once per threshold; persisted.
 var announced_tier := 1
+## Reputation high-water (v0.61.0): the most reputation the shop has EVER
+## held, behind the shop rank's rep gates. Persisted as rep_high_water —
+## see shop_rank_level()'s header for why the announced_tier thresholds
+## cannot stand in for it.
+var rep_high_water := 0.0
+## Rank-announcement high-water (v0.61.0): the level-up toast, "rank" log
+## entry and chalkboard line fire once per level, ever; persisted 1..5,
+## absence-tolerant (announced_tier pattern).
+var announced_rank := 1
 ## Lifetime counters (v0.5.0), persisted and shown in the menu Stats panel.
 ## "missed" (v0.14.0): board offers that expired overnight.
 var stats := {"delivered": 0, "late": 0, "scrapped": 0, "cancelled": 0, "earned_cents": 0, "missed": 0, "lost_walkins": 0}
@@ -368,6 +377,18 @@ func _on_menu_stats() -> void:
 	else:
 		lines.append("Top tier reached — the whole market shops here.")
 	lines.append("")
+	# Shop rank (v0.61.0): derived level, next gate and payout bonus — the
+	# same shape as the BOARD TIER block above.
+	lines.append("RANK (v0.61)")
+	var rlvl := shop_rank_level()
+	lines.append("%s — payouts +%d%%" % [RANK_NAMES[rlvl - 1],
+		roundi(100.0 * (rank_payout_mult() - 1.0))])
+	if rlvl < 5:
+		lines.append("Next: %s at %d delivered and %.2f stars" % [
+			RANK_NAMES[rlvl], RANK_DELIVERED[rlvl - 1], RANK_REP[rlvl - 1]])
+	else:
+		lines.append("Top rank reached — the whole street knows the shop.")
+	lines.append("")
 	lines.append("MILESTONES")
 	for a in _achievements():
 		lines.append(("%s  %s" % ["✓", a.name]) if a.done else ("·  %s — %s" % [a.name, a.hint]))
@@ -533,6 +554,14 @@ func _achievements() -> Array[Dictionary]:
 			"done": int(stats.late) >= 10},
 		{"name": "Hard knocks", "hint": "have 10 orders fail on quality",
 			"done": int(stats.cancelled) >= 10},
+		# Shop rank milestones (v0.61.0): the counter counter is persisted from
+		# slice 2; the rank gates are the same derived level the payout reads.
+		{"name": "Counter regular", "hint": "serve 10 walk-in customers",
+			"done": int(walkins_served) >= 10},
+		{"name": "Face of the street", "hint": "reach the Known shop rank",
+			"done": shop_rank_level() >= 3},
+		{"name": "Institution", "hint": "reach the Institution shop rank",
+			"done": shop_rank_level() >= 5},
 	]
 
 ## Full week (v0.52.0): every day in the persisted 7-day window shipped at
@@ -891,6 +920,21 @@ func _load_save() -> void:
 	else:
 		# Pre-v0.19 saves: adopt the current tier silently, never re-announce.
 		announced_tier = Events.tier_for_rep(reputation)
+	# Shop rank (v0.61.0): the high-water restores verbatim; pre-v0.61 saves
+	# bootstrap it from everything derivable — the current reputation, or the
+	# rep floor the persisted board tier proves the shop once held (see
+	# docs/worker-rank.md for why this is a floor, not the full high-water).
+	# The announcement mark adopts the derived level silently: a boot must
+	# never toast or re-log old news.
+	if payload.has("rep_high_water"):
+		rep_high_water = clampf(float(payload.rep_high_water), 0.0, 5.0)
+	else:
+		rep_high_water = maxf(reputation, _rep_floor_for_tier(announced_tier))
+	if payload.has("announced_rank"):
+		var rk := int(payload.announced_rank)
+		announced_rank = rk if (rk >= 1 and rk <= 5) else shop_rank_level()
+	else:
+		announced_rank = shop_rank_level()
 	if payload.has("achv_toasted") and typeof(payload.achv_toasted) == TYPE_ARRAY:
 		_achv_toasted.clear()
 		for name in payload.achv_toasted:
@@ -1025,6 +1069,8 @@ func _build_save_payload() -> Dictionary:
 			"board": job_board.snapshot_payload(),
 			"log": workshop_log.snapshot(),
 			"tier_announced": announced_tier,
+			"announced_rank": announced_rank,
+			"rep_high_water": rep_high_water,
 			"achv_toasted": _achv_toasted,
 			"stations_heard": _stations_heard,
 			"recent_grades": recent_grades,
@@ -1254,6 +1300,10 @@ func _build_world() -> void:
 	# Fresh shops start AT their tier — it never announces. Saves override
 	# this in _load_save (persisted high-water or derived).
 	announced_tier = boot_tier
+	# Shop rank (v0.61.0): a fresh shop's high-water starts at its opening
+	# standing (3.0 stars); _load_save restores or bootstraps it for saves.
+	# The announcement mark stays 1 — the boot never toasts old news.
+	rep_high_water = maxf(rep_high_water, reputation)
 	_refresh_printer_locks()  # machines + printers all exist by now
 	_apply_daylight()
 
@@ -3934,6 +3984,10 @@ func _settle_held_delivery(m: Dictionary, late: bool, via_counter: bool) -> bool
 	client_last_grade[c.client] = final_grade
 	if via_counter:
 		walkins_served += 1  # v0.59.0 counter-order bookkeeping
+	# Shop rank (v0.61.0): both level operands only ever rise inside a settle
+	# (delivered here, rep in _rep_event above), so this is where a level-up
+	# announces. The guard makes the _rep_event call redundant, not harmful.
+	_check_rank_announcement()
 	_guide("delivered")
 	if reputation >= 4.0:
 		_guide("stars")
@@ -4295,7 +4349,10 @@ func reputation_multiplier() -> float:
 ## Single source of truth for what a delivery actually pays: station grade
 ## x client loyalty (v0.32.0) -> reputation -> season -> daily event ->
 ## counter premium x1.10 (v0.59.0, counter orders only) -> late half ->
-## same-day tip -> showcase bonus (v0.37.0).
+## same-day tip -> showcase bonus (v0.37.0) -> shop rank +2% x (level - 1)
+## (v0.61.0, the FINAL factor — after the shelf bonus, before the int-cents
+## return; derived from lifetime delivered + rep high-water, so fresh shops
+## sit at L1 and add nothing).
 ## Tests pass the PRE-delivery reputation (the delivery bumps it afterwards).
 func _finalize_payout(base: int, late: bool, m: Dictionary, rep := -1.0,
 		counter := false) -> int:
@@ -4311,10 +4368,14 @@ func _finalize_payout(base: int, late: bool, m: Dictionary, rep := -1.0,
 		payout += roundi(float(payout) * 0.10)
 	if _shelf_models.size() > 0:
 		payout = roundi(float(payout) * (1.0 + SHELF_BONUS_PER * _shelf_models.size()))
+	# Shop rank (v0.61.0): appended at the very END of the documented chain.
+	if shop_rank_level() > 1:
+		payout = roundi(float(payout) * rank_payout_mult())
 	return payout
 
 func _rep_event(delta: float) -> void:
 	reputation = clampf(reputation + delta, 0.0, 5.0)
+	rep_high_water = maxf(rep_high_water, reputation)  # v0.61.0 rank high-water
 	# Tier-up announcement (v0.19.0): exactly once per threshold, ever —
 	# the high-water mark survives rep drops and save/reload.
 	var tier := Events.tier_for_rep(reputation)
@@ -4323,6 +4384,67 @@ func _rep_event(delta: float) -> void:
 		_log_event("tier", "The board is buzzing — bigger jobs available")
 		_set_prompt("The board is buzzing — bigger jobs available")
 		_save_game()
+	_check_rank_announcement()
+
+## --- shop rank (v0.61.0) ------------------------------------------------------
+##
+## Five DERIVED levels, never persisted as a level — the level recomputes on
+## every read from the lifetime delivered counter and the reputation
+## high-water, exactly like the board tier recomputes from reputation:
+## L1 Sprout (default), L2 Staple (15 delivered + 3.0 stars high-water),
+## L3 Known (40 + 3.5), L4 Fixture (80 + 4.0), L5 Institution (150 + 4.5).
+## Reaching a bar EXACTLY counts as the higher level (>=, tier_for_rep's
+## boundary rule).
+
+const RANK_NAMES: Array[String] = [
+	"Sprout", "Staple", "Known", "Fixture", "Institution"]
+## Per-level gates (index i = level i+2): lifetime delivered AND rep
+## high-water. Both operands are monotonic (delivered only grows; the
+## high-water only grows), so a reached level is never lost — the v0.57
+## balance-held milestone trap does not apply here.
+const RANK_DELIVERED: Array[int] = [15, 40, 80, 150]
+const RANK_REP: Array[float] = [3.0, 3.5, 4.0, 4.5]
+const RANK_PAYOUT_PER_LEVEL := 0.02  # +2% x (level - 1)
+
+
+## The current shop rank, derived on every read (never stored).
+func shop_rank_level() -> int:
+	var lvl := 1
+	for i in range(RANK_DELIVERED.size()):
+		if int(stats.delivered) >= RANK_DELIVERED[i] \
+				and rep_high_water >= RANK_REP[i]:
+			lvl = i + 2
+	return lvl
+
+
+## Payout factor of the current rank: 1.0 at Sprout, +2% per level above it.
+func rank_payout_mult() -> float:
+	return 1.0 + RANK_PAYOUT_PER_LEVEL * float(shop_rank_level() - 1)
+
+
+## The rep floor a persisted board tier proves: Events.TIER_THRESHOLDS[i] is
+## the reputation where tier i+2 unlocks, so a saved announced_tier of t
+## proves the shop once held TIER_THRESHOLDS[t-2]. Tier 1 proves nothing.
+func _rep_floor_for_tier(tier: int) -> float:
+	if tier >= 2 and tier <= 4:
+		return Events.TIER_THRESHOLDS[tier - 2]
+	return 0.0
+
+
+## Rank-up announcement (v0.61.0): exactly once per level, ever — mirrors the
+## v0.19.0 tier block above. Gold toast, one "rank" workshop-log entry, and
+## the chalkboard header picks the name up on its next refresh. The mark
+## survives rep drops and save/reload.
+func _check_rank_announcement() -> void:
+	var lvl := shop_rank_level()
+	if lvl <= announced_rank:
+		return
+	announced_rank = lvl
+	var rname: String = RANK_NAMES[lvl - 1]
+	_show_toast("Shop rank: %s" % rname)
+	_log_event("rank", "Shop rank: %s" % rname)
+	_set_prompt("Shop rank: %s" % rname)
+	_save_game()
 
 ## Payouts repay rent debt before anything else can be done with the money.
 func _repay_rent_debt() -> void:
@@ -4842,7 +4964,8 @@ func _update_chalkboard() -> void:
 	var week := int((day_cycle.day - 1) / 7.0) + 1
 	var icon := _season_icon(str(season.get("id", "calm")))
 	var week_line := "Week %d %s" % [week, icon] if icon != "" else "Week %d" % week
-	var text := "SHOP LEDGER\nDay %d · %s\nDelivered: %d\nMissed: %d\nEarned: $%s\n%s\n%s\nBest day: $%s\nRep %s %.1f" % [
+	var text := "SHOP LEDGER\nRANK: %s\nDay %d · %s\nDelivered: %d\nMissed: %d\nEarned: $%s\n%s\n%s\nBest day: $%s\nRep %s %.1f" % [
+		RANK_NAMES[shop_rank_level() - 1],
 		day_cycle.day, week_line,
 		int(stats.delivered), int(stats.missed),
 		_cents_str(int(stats.earned_cents)),

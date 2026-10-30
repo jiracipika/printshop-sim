@@ -1,4 +1,4 @@
-# Current handoff — Print Shop 3.0 (in progress; v0.60.0 = slice 3)
+# Current handoff — Print Shop 3.0 (in progress; v0.61.0 = slice 4)
 
 ## Print Shop 3.0 overhaul (2026-10-30, in progress)
 
@@ -9,6 +9,30 @@ Sequential ladder runner: `bash tools/ladder.sh --bots` (sim_* suites
 get 420 s; never run two headless Godots at once — BrowserSave race).
 
 Landed:
+- Slice 4 (v0.61.0, shop rank career): five DERIVED levels
+  (Sprout/Staple 15+3.0/Known 40+3.5/Fixture 80+4.0/Institution
+  150+4.5, >= boundary rule) recomputed on every read from lifetime
+  stats.delivered + the NEW persisted rep_high_water (float 0..5,
+  absence-tolerant, updated ONLY in _rep_event the single rep writer;
+  pre-v0.61 saves bootstrap it from max(reputation,
+  _rep_floor_for_tier(announced_tier)) as a floor). THE BRIEF'S PRIMARY
+  derivation was analyzed and found UNSOUND (Events.TIER_THRESHOLDS
+  [3.0,3.5,4.25] never encodes 4.5 — L4 unsound in [4.0,4.25), L5 in
+  [4.5,5.0] after routine rep drops); the brief's explicit fallback was
+  adopted (docs/worker-rank.md). Payout: +2% x (level-1) appended at the
+  very END of _finalize_payout (after shelf bonus, before int-cents;
+  fresh shops are L1 = exactly 1.0 so the payout-pinning suites stayed
+  green UNMODIFIED). Once-per-level announcement mirrors the tier block:
+  gold toast + "rank" log + chalkboard "RANK:" header line; announced_rank
+  persisted 1..5. Stats RANK block + 3 milestones (Counter regular 10
+  walk-ins, Face of the street L3, Institution L5). rank_test.gd 33
+  checks (3x green). One parent-authorized deviation: atmosphere_test's
+  stale version pin refreshed 0.60.0 -> 0.61.0 (1 line, test plumbing).
+  NEW bot references (deliberate shift — delivery counts byte-identical
+  to baseline, only money moved): sim_playtest day-9 $1,753.13 / 17 /
+  min rep 2.80; sim_lategame day-14 $5,081.71 / 64, loop-end $6,245.19 /
+  74 / min rep 3.00. All floors pass. Parent re-verified ladder 77/77,
+  pytest 21/21, CJK clean.
 - Slice 3 (v0.60.0, atmosphere & presence): ShopFront.gd — entry door
   (flush honey panel on the front-wall face at hinge (-2.4, 0, 2.88),
   painted jamb + glass slit, NO wall hole/collision, deterministic

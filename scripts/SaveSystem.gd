@@ -122,6 +122,10 @@ static func validate(payload: Variant) -> Dictionary:
 		return {}
 	if not _walkins_served_valid(p):
 		return {}
+	if not _announced_rank_valid(p):
+		return {}
+	if not _rep_high_water_valid(p):
+		return {}
 	if not _wear_valid(p):
 		return {}
 	if not _cleans_valid(p):
@@ -269,6 +273,29 @@ static func _walkins_served_valid(p: Dictionary) -> bool:
 		return false
 	var f := float(p["walkins_served"])
 	return f == floorf(f) and f >= 0.0
+
+
+## Optional "announced_rank" key (v0.61.0): absent = fine; present must be
+## a whole int 1..5 — the rank-announcement high-water mark.
+static func _announced_rank_valid(p: Dictionary) -> bool:
+	if not p.has("announced_rank"):
+		return true
+	var t := typeof(p["announced_rank"])
+	if t != TYPE_INT and t != TYPE_FLOAT:
+		return false
+	var f := float(p["announced_rank"])
+	return f == floorf(f) and f >= 1.0 and f <= 5.0
+
+
+## Optional "rep_high_water" key (v0.61.0): absent = fine; present must be
+## a float in [0, 5] — the reputation high-water behind the shop rank.
+static func _rep_high_water_valid(p: Dictionary) -> bool:
+	if not p.has("rep_high_water"):
+		return true
+	var t := typeof(p["rep_high_water"])
+	if t != TYPE_INT and t != TYPE_FLOAT:
+		return false
+	return float(p["rep_high_water"]) >= 0.0 and float(p["rep_high_water"]) <= 5.0
 
 
 ## Optional "wear" key (v0.45.0): array of per-machine wear percents 0..100.
