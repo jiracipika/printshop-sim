@@ -46,9 +46,11 @@ func _test_crate_and_load() -> void:
 		"printer 1 opens with a 1500 g spool")
 	_ok(int(main._machine(1).get("filament_g")) == 0, "printer 2 opens empty")
 
-	# Buy at the crate: money out, spool in hand.
+	# Buy at the crate: money out, spool in hand. The spot sits outside the
+	# counter's 1.35 m radius (v0.58.0) so empty-handed E buys, and its hold
+	# marker stays over the crate so the full-hands press below cannot drop.
+	main._player.global_position = Vector3(-3.1, 0.3, 1.85)  # at the crate
 	var bal0: int = ledger.balance()
-	main._player.global_position = Vector3(-3.0, 0.3, 2.1)  # at the crate
 	main._try_interact()
 	_ok(main.held != null and main._is_held_spool(), "crate puts a spool in your hands")
 	_ok(ledger.balance() == bal0 - 1200, "a spool costs $12.00")
@@ -64,7 +66,7 @@ func _test_crate_and_load() -> void:
 		"loading adds 1500 g to the machine")
 
 	# Locked printer 2 refuses the load.
-	main._player.global_position = Vector3(-3.0, 0.3, 2.1)  # back at the crate
+	main._player.global_position = Vector3(-3.1, 0.3, 1.85)  # back at the crate
 	main._try_interact()
 	_ok(main.held != null and main._is_held_spool(), "bought a second spool")
 	main._player.global_position = Vector3(1.8, 0.3, -1.4)  # at printer 2

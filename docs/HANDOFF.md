@@ -1,4 +1,34 @@
-# Current handoff — milestones V (v0.57.0)
+# Current handoff — Print Shop 3.0 (in progress; v0.58.0 = slice 1)
+
+## Print Shop 3.0 overhaul (2026-10-30, in progress)
+
+Binding plan: design/overhaul-3.0.md; per-slice briefs
+docs/GLM-3.0-SLICE-{1..4}.md. Slice coding by glm-5.3-flash workers;
+the parent session plans, reviews, independently verifies and commits.
+Sequential ladder runner: `bash tools/ladder.sh --bots` (sim_* suites
+get 420 s; never run two headless Godots at once — BrowserSave race).
+
+Landed:
+- Slice 1 (v0.58.0, front counter): CounterStation island at
+  (-1.9, 0, 2.55) — 10 meshes, world-layer StaticBody3D, deterministic
+  tick-driven bell squash. Empty-handed E within 1.35 m rings the bell
+  ("The counter is quiet — nobody waiting yet"); the branch sits
+  BEFORE the crate branch (hazard 10 — load-bearing). counter_test.gd
+  22 checks. Only test-plumbing deviation: color/events/spool crate
+  teleports moved outside the counter radius; spool_test's spot
+  refined to (-3.1, 0.3, 1.85) so its full-hands press still gets
+  "No room here" instead of dropping the spool. Worker evidence:
+  docs/worker-counter.md; parent re-verified full ladder 74/74,
+  pytest 21/21, both sim curves byte-identical to this machine's
+  1186ca3 baseline (playtest 8/8 day-9 $1,749.64 / 17; lategame 16/16
+  day-14 $4,918.89 / 64).
+
+Next: slice 2 walk-in customers (v0.59.0, brief
+docs/GLM-3.0-SLICE-2.md). BOT-SAFETY INVARIANT: waiting walk-ins must
+be observationally inert — no money/rep/log/board changes the
+deterministic bots can see — so slices 2-3 keep both sim curves
+byte-identical to slice 1's. Slice 4 (shop rank) deliberately shifts
+payouts; its harnesses are re-measured with floors instead.
 
 ## External QA pass (2026-10-27, no code changes)
 

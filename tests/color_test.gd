@@ -68,7 +68,7 @@ func _test_crate_and_cap() -> void:
 	main.touch_controls.set_motion_enabled(true)
 
 	# Crate cycles Clay -> Sage -> Honey -> Clay ...; each buy charges.
-	main._player.global_position = Vector3(-3.0, 0.3, 2.1)
+	main._player.global_position = Vector3(-3.0, 0.3, 1.4)
 	var bal0: int = ledger.balance()
 	var bought: Array[String] = []
 	var guard := 0
@@ -84,7 +84,7 @@ func _test_crate_and_cap() -> void:
 			await physics_frame
 			main._try_place()
 			continue
-		main._player.global_position = Vector3(-3.0, 0.3, 2.1)
+		main._player.global_position = Vector3(-3.0, 0.3, 1.4)
 		await physics_frame
 		var want: String = main._crate_color()
 		var before: int = ledger.balance()

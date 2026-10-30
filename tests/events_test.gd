@@ -94,7 +94,7 @@ func _test_event_effects() -> void:
 	# Filament sale: the crate charges the event price.
 	main.today_event = Events._by_id("filament_sale")
 	var bal0: int = ledger.balance()
-	main._player.global_position = Vector3(-3.0, 0.3, 2.1)
+	main._player.global_position = Vector3(-3.0, 0.3, 1.4)
 	main._try_interact()
 	_ok(ledger.balance() == bal0 - 800, "spool bought at the sale price ($8)")
 

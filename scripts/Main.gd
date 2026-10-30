@@ -180,6 +180,9 @@ var _moonlight: OmniLight3D
 ## Print Shop 2.0 (v0.34.0): the vapor-smoothing bench and the life outside
 ## the window (birds + delivery van).
 var _finishing: Node3D
+## Front counter (v0.58.0): the service island on the front wall — bell,
+## slip pad; walk-in customers queue here from v0.59.0.
+var _counter: Node3D
 var _window_life: Node3D
 ## Display shelf (v0.37.0): finished parts shown by the window add +2%
 ## payout each (max +6%). Shelf slots hold model names; duplicates count
@@ -1496,6 +1499,12 @@ func _build_environment() -> void:
 	_finishing.position = Vector3(3.0, 0, 2.35)
 	_finishing.rotation_degrees = Vector3(0, 225, 0)
 	add_child(_finishing)
+
+	# Front counter (v0.58.0): the service island against the front wall —
+	# clear of the spool crate's 1.6 m corner and grab_test's x~0 corridor.
+	_counter = load("res://scripts/CounterStation.gd").new()
+	_counter.position = CounterStation.COUNTER_POS
+	add_child(_counter)
 
 	# Window life (v0.34.0): birds + delivery van outside the glass.
 	_window_life = load("res://scripts/WindowLife.gd").new()
@@ -3038,6 +3047,15 @@ func _near_finishing() -> bool:
 	return _player != null and _finishing != null \
 		and _player.global_position.distance_to(_finishing.position) <= 1.25
 
+## Near the front counter (v0.58.0) — horizontal distance on the floor plane
+## from the island's center (pattern of _near_finishing / _near_radio).
+func _near_counter() -> bool:
+	if _player == null or _counter == null:
+		return false
+	var p := _player.global_position
+	return Vector2(p.x, p.z).distance_to(
+		Vector2(CounterStation.COUNTER_POS.x, CounterStation.COUNTER_POS.z)) <= 1.35
+
 ## Grand showcase (v0.40.0): the upgrade widens the shelf to 5 slots
 ## (payout cap +10%).
 func _shelf_cap() -> int:
@@ -4090,6 +4108,15 @@ func _try_interact() -> void:
 		if pi >= 0:
 			_load_spool(pi)
 			return
+	# Front counter (v0.58.0): empty-handed E rings the service bell. The
+	# counter is quiet until walk-ins arrive (v0.59.0). MUST sit before the
+	# crate branch: the counter center is inside the crate's 1.6 m radius,
+	# so this order is load-bearing (hazard 10). Holding any object falls
+	# through to the existing place/carry behavior.
+	if held == null and _near_counter():
+		sfx.play("bell")
+		_set_prompt("The counter is quiet — nobody waiting yet")
+		return
 	# Empty-handed at the crate buys a spool.
 	if _near_crate():
 		if held == null:
