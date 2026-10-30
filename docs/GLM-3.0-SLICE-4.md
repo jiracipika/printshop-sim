@@ -72,3 +72,5 @@ reference numbers in docs/worker-rank.md and assert the floors pass:
 sim_playtest >= 8 deliveries / >= $500 / rep >= 2.0; sim_lategame >= 60
 deliveries / >= $3000 / rep >= 2.0. Paste the new curves. Version.gd 0.61.0.
 docs/worker-rank.md. Stop — parent session reviews, integrates, commits.
+
+Machine baseline (2026-10-30, this box, commit 1186ca3): full ladder 72/72 green incl. smoke; sim_playtest 17 deliveries / $1,749.64 day-8 (8/8 checks); sim_lategame 64 deliveries / $4,918.89 day-14 (16/16 checks). These two curves are the BYTE-IDENTICAL targets for slices 1-3 (slice 4 re-measures). GODOT is at $HOME/tools/godot; pytest is $HOME/tools/venv/bin/python -m pytest. Repo root: the directory containing this docs/ file.

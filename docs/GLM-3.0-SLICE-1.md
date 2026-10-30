@@ -77,3 +77,5 @@ new suite green 3 consecutive runs; full ladder LADDER_DONE failed=0; pytest
 green; playtest curve recorded; Version.gd 0.58.0; docs/worker-counter.md
 written (baseline, exact changes, commands + results, what you did NOT run,
 blockers). Stop there — the parent session reviews, integrates, commits.
+
+Machine baseline (2026-10-30, this box, commit 1186ca3): full ladder 72/72 green incl. smoke; sim_playtest 17 deliveries / $1,749.64 day-8 (8/8 checks); sim_lategame 64 deliveries / $4,918.89 day-14 (16/16 checks). These two curves are the BYTE-IDENTICAL targets for slices 1-3 (slice 4 re-measures). GODOT is at $HOME/tools/godot; pytest is $HOME/tools/venv/bin/python -m pytest. Repo root: the directory containing this docs/ file.

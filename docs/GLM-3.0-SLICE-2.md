@@ -142,3 +142,5 @@ docs/worker-counter.md — paste both numbers in your worker doc. Version.gd
 0.59.0. docs/worker-walkin.md (baseline, exact changes incl. the extraction
 diff shape, commands + results, harness curves, NOT-RUN list, blockers).
 Stop — parent session reviews, integrates, commits.
+
+Machine baseline (2026-10-30, this box, commit 1186ca3): full ladder 72/72 green incl. smoke; sim_playtest 17 deliveries / $1,749.64 day-8 (8/8 checks); sim_lategame 64 deliveries / $4,918.89 day-14 (16/16 checks). These two curves are the BYTE-IDENTICAL targets for slices 1-3 (slice 4 re-measures). GODOT is at $HOME/tools/godot; pytest is $HOME/tools/venv/bin/python -m pytest. Repo root: the directory containing this docs/ file.
