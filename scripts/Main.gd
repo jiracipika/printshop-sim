@@ -199,6 +199,11 @@ var _counter_arm := false
 var _counter_arm_t := 0.0
 ## Walk-ins served at the counter (v0.59.0, persisted). Walk-ins lost to
 ## patience expiry live in stats.lost_walkins.
+## Shopfront atmosphere (v0.60.0): entry door + swing, OPEN sign, counter
+## pendant, clutter. Room-space node; Main drives it through the hooks in
+## _apply_quality / _apply_calm_motion / _tick_counter and swings it from the
+## slice-2 spawn/despawn points.
+var _shop_front: Node3D
 var _window_life: Node3D
 ## Display shelf (v0.37.0): finished parts shown by the window add +2%
 ## payout each (max +6%). Shelf slots hold model names; duplicates count
@@ -765,6 +770,10 @@ func _apply_quality() -> void:
 		_env.glow_intensity = 0.8 if preset == "High" else 0.5
 	# Overlays and other quality-gated visuals follow _apply_season_visuals.
 	_apply_season_visuals()
+	# v0.60.0: the OPEN sign follows the same gate — at Low it stays on the
+	# door but drops its emissive lit look (the pendant light is not gated).
+	if _shop_front != null and _shop_front.has_method("set_quality"):
+		_shop_front.set_quality(preset == "Low")
 	# Browser-safe start: mouse visible, gameplay paused until a deliberate
 	# left click captures the pointer.
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
@@ -1530,6 +1539,11 @@ func _build_environment() -> void:
 	# Walk-in service (v0.59.0): pure logic, built after the counter. No
 	# customer node exists until an arrival spawns one (never at boot).
 	_counter_service = CounterService.new()
+
+	# Shopfront atmosphere (v0.60.0): door + OPEN sign + pendant + clutter,
+	# built in room coordinates after the counter it dresses.
+	_shop_front = load("res://scripts/ShopFront.gd").new()
+	add_child(_shop_front)
 
 	# Window life (v0.34.0): birds + delivery van outside the glass.
 	_window_life = load("res://scripts/WindowLife.gd").new()
@@ -2546,22 +2560,17 @@ func _build_hud() -> void:
 	vignette.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_hud.add_child(vignette)
 
-	# Translucent steel card behind the status block for readability over the
-	# bright workshop.
+	# Translucent ink card behind the status block for readability over the
+	# bright workshop (v0.60.0 restyle: shared _hud_panel_style, design
+	# tokens — ink ground, paper text).
 	var card := PanelContainer.new()
 	card.name = "StatusCard"
-	var sb := StyleBoxFlat.new()
-	sb.bg_color = Color(0.125, 0.169, 0.169, 0.55)
-	sb.set_corner_radius_all(6)
-	sb.content_margin_left = 10.0
-	sb.content_margin_right = 12.0
-	sb.content_margin_top = 6.0
-	sb.content_margin_bottom = 8.0
-	card.add_theme_stylebox_override("panel", sb)
+	card.add_theme_stylebox_override("panel", _hud_panel_style())
 	card.position = Vector2(10, 10)
 	_hud.add_child(card)
 	_status = Label.new()
 	_status.add_theme_font_size_override("font_size", 16)
+	_status.add_theme_color_override("font_color", Color("#EEE5D3"))
 	_status.text = "..."
 	card.add_child(_status)
 	# Filled each frame by _update_hud via Version autoload (resolved at runtime).
@@ -2574,6 +2583,12 @@ func _build_hud() -> void:
 	_prompt.offset_bottom = -32
 	_prompt.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_prompt.add_theme_font_size_override("font_size", 18)
+	# v0.60.0 restyle: fired-clay accent (the prompt IS the accent bar of the
+	# bottom strip — no new nodes allowed, so the clay color carries it) on an
+	# ink outline for contrast over the workshop.
+	_prompt.add_theme_color_override("font_color", Color("#DA623B"))
+	_prompt.add_theme_color_override("font_outline_color", Color(0.125, 0.169, 0.169, 0.9))
+	_prompt.add_theme_constant_override("outline_size", 4)
 	_prompt.text = "Click to play"
 	_hud.add_child(_prompt)
 	# Milestone toast (v0.21.0): top-center, fades after a few seconds.
@@ -2585,7 +2600,7 @@ func _build_hud() -> void:
 	_toast.offset_bottom = 44
 	_toast.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_toast.add_theme_font_size_override("font_size", 19)
-	_toast.add_theme_color_override("font_color", Color("#E8B24A"))
+	_toast.add_theme_color_override("font_color", Color("#F5CE80"))
 	_toast.add_theme_color_override("font_outline_color", Color(0.1, 0.12, 0.12, 0.9))
 	_toast.add_theme_constant_override("outline_size", 6)
 	_toast.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -2656,6 +2671,23 @@ func _build_hud() -> void:
 	_boot_prompt = "Tap Resume to play" if touch_controls.effective_enabled() \
 		else "Click to play"
 	_prompt.text = ""  # suppressed while the main menu is open
+
+## Shared HUD panel style (v0.60.0 restyle, design tokens): one StyleBoxFlat
+## — ink #202B2B ground at ~0.95 opacity, 4 px corners — handed to every HUD
+## panel so they all read as the same card material.
+var _hud_style: StyleBoxFlat
+
+func _hud_panel_style() -> StyleBoxFlat:
+	if _hud_style == null:
+		var sb := StyleBoxFlat.new()
+		sb.bg_color = Color(0.125, 0.169, 0.169, 0.95)  # ink #202B2B @ 0.95
+		sb.set_corner_radius_all(4)
+		sb.content_margin_left = 10.0
+		sb.content_margin_right = 12.0
+		sb.content_margin_top = 6.0
+		sb.content_margin_bottom = 8.0
+		_hud_style = sb
+	return _hud_style
 
 ## --- touch (mobile) state — separate from desktop `captured` pointer lock --
 
@@ -3078,6 +3110,12 @@ func _tick_counter(delta: float) -> void:
 			_counter_disarm()
 	var day := day_cycle.day
 	var frac := day_cycle.t
+	# OPEN sign (v0.60.0): lit inside the walk-in business window — the same
+	# frac source the arrivals read — dim otherwise (and never lit at Low
+	# quality; set_quality gates the emissive look).
+	if _shop_front != null and _shop_front.has_method("set_business_open"):
+		_shop_front.set_business_open(frac >= CounterService.DAY_START_FRAC \
+			and frac <= CounterService.DAY_END_FRAC)
 	# Patience expiry: despawn, then cancel the walk-in's contract through
 	# the SAME teardown calls _on_day_changed's overnight-cancel branch uses
 	# (sim reset, visual reset, part discarded, machine freed, stack cleared)
@@ -3126,6 +3164,9 @@ func _spawn_walkin(day: int, index: int) -> void:
 	actor.set_motion(not calm_motion())
 	add_child(actor)
 	_customer = actor
+	# v0.60.0: the entry door swings for the arrival.
+	if _shop_front != null and _shop_front.has_method("swing"):
+		_shop_front.swing()
 
 ## Despawn the waiting customer and forget the state (serve or expiry).
 func _counter_despawn() -> void:
@@ -3134,6 +3175,9 @@ func _counter_despawn() -> void:
 		_customer.queue_free()
 		_customer = null
 	_counter_disarm()
+	# v0.60.0: the entry door swings again as the customer leaves.
+	if _shop_front != null and _shop_front.has_method("swing"):
+		_shop_front.swing()
 
 func _counter_disarm() -> void:
 	_counter_arm = false
@@ -3447,6 +3491,10 @@ func _apply_calm_motion() -> void:
 	# (v0.51.0 gate, WindowLife pattern).
 	if _customer != null and _customer.has_method("set_motion"):
 		_customer.set_motion(not calm_motion())
+	# v0.60.0: the door swing snaps open/closed instead of animating (its
+	# state machine keeps running so the door still closes behind nobody).
+	if _shop_front != null and _shop_front.has_method("set_motion"):
+		_shop_front.set_motion(not calm_motion())
 
 ## Footsteps (v0.22.0): soft alternating thuds timed to the walk. Idle time
 ## pre-charges the timer to half a step so a resumed walk starts promptly.

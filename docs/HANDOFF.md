@@ -1,4 +1,4 @@
-# Current handoff — Print Shop 3.0 (in progress; v0.59.0 = slice 2)
+# Current handoff — Print Shop 3.0 (in progress; v0.60.0 = slice 3)
 
 ## Print Shop 3.0 overhaul (2026-10-30, in progress)
 
@@ -9,6 +9,37 @@ Sequential ladder runner: `bash tools/ladder.sh --bots` (sim_* suites
 get 420 s; never run two headless Godots at once — BrowserSave race).
 
 Landed:
+- Slice 3 (v0.60.0, atmosphere & presence): ShopFront.gd — entry door
+  (flush honey panel on the front-wall face at hinge (-2.4, 0, 2.88),
+  painted jamb + glass slit, NO wall hole/collision, deterministic
+  open-hold-close 75deg/0.6s/1.2s swing swung from BOTH slice-2
+  spawn/despawn points) + billboarded OPEN Label3D placard (lit HDR
+  gold inside the CounterService business window via the real
+  _tick_counter frac; non-emissive at Low quality) + one warm
+  shadowless OmniLight3D pendant (energy 0.5, the slice's only new
+  light). Node budget: the v020 audit runs at season=humid
+  (v020_test.gd:50, never reset) so its real slice-2 baseline is
+  178/394 — the slice adds exactly 2 visible/2 total MeshInstance3D
+  (door panel + one 8-surface CounterDressing ArrayMesh carrying
+  pendant stem/shade/emissive bulb, under-lip emissive strip, and 4
+  clutter pieces as surfaces); v020 passes at exactly 180/180, with-
+  walk-in audit 172/398. CustomerActor outfit variety: 6-color palette
+  + hashed flat-cap/scarf as extra SURFACES on the same two mesh nodes
+  (walkin_test two-mesh pin intact; nothing above the head top).
+  HUD restyle in _build_hud ONLY — shared _hud_panel_style() ink
+  StyleBoxFlat (0.95, radius 4), paper status text, clay prompt + ink
+  outline (the "accent bar" reading — no new HUD nodes allowed), gold
+  toast; texts/anchors untouched. atmosphere_test.gd 25 checks
+  (seam-driven, no engine-frame timing). The suite caught 2 real
+  ShopFront bugs pre-integration (openness read after the phase flip
+  jumping a mid-closing re-arm; single-phase-per-call _advance).
+  Parent re-verified ladder 76/76, pytest 21/21, both curves
+  byte-identical to the slice-2 reference, CJK clean. Accepted
+  deviations (docs/worker-atmosphere.md): budget-driven node merge
+  (brief's own relief valve), calm mode snaps at the apply site while
+  the swing machine keeps ticking (a gated _advance would freeze the
+  door open), accent-bar-as-prompt-color, door arc transiently sweeps
+  the customer stand spot (actors ignore collision; cosmetic).
 - Slice 2 (v0.59.0, walk-in customers): CounterService.gd (pure
   hash-gated arrivals — max 2 slots/day at 0.25+0.22i+0.03jitter, gate
   6/10, window 0.15-0.80, patience 0.55 day FROM ARRIVAL) +
