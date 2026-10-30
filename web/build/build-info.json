@@ -1,16 +1,22 @@
 {
-  "engine": "godot",
-  "git_sha": "0435ee6",
-  "git_sha_full": "0435ee6ec8997fcd3f1bc53587e4edcc378cf2da",
+  "engine": "/home/rs/tools/godot",
+  "excluded_from_dirty": [
+    "web/build/build-info.json",
+    "web/build/index.html",
+    "web/build/index.pck",
+    "web/build/index.wasm"
+  ],
+  "git_sha": "5832c2d",
+  "git_sha_full": "5832c2dcc69fca89c73fef3b676a6b867464baca",
   "head_found": true,
   "notes": "git_sha_full/source_dirty describe the SOURCE tree at build time (generated output and local logs excluded from dirtiness). stamped_sha is what scripts/Version.gd contained during export.",
   "outputs": {
     "index.html": 3871,
     "index.js": 279815,
-    "index.pck": 307096,
-    "index.wasm": 39513091
+    "index.pck": 336976,
+    "index.wasm": 39509339
   },
   "source_dirty": false,
-  "stamped_sha": "0435ee6ec8997fcd3f1bc53587e4edcc378cf2da",
-  "version": "0.57.0"
+  "stamped_sha": "5832c2dcc69fca89c73fef3b676a6b867464baca",
+  "version": "0.61.0"
 }
