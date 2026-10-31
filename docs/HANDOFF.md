@@ -1493,3 +1493,27 @@ Operational notes: prompts persist until replaced (pre-existing);
 per-step CDP session attaches can fire focus-out and release capture —
 a center click re-captures and unpauses via the deliberate-recapture
 branch.
+
+## Android build on this Linux box (2026-10-30)
+
+The Android export pipeline works here (SDK at ~/Android/Sdk, build-tools
+36.0.0, Android export templates installed, repo debug keystore wired into
+the preset — the preset now signs directly and its version/name was
+refreshed to 0.61.0): `godot --headless --path . --export-release
+"Android"` writes builds/printshop-sim.apk and then exits non-zero with
+the APK complete (adb daemon not running during export); sign manually
+afterwards: zipalign + `apksigner sign --ks android/debug.keystore --ks-
+key-alias androiddebugkey` (build-tools 36.0.0) — verified SIGNED_OK,
+52.5 MB (arm64-v8a + x86_64 for emulator translation).
+
+RUNTIME CAVEAT (pre-existing, NOT a 3.0 regression): on the Pixel7_API36
+(Android 16) emulator the app boots, renders ~34 s, then dies with
+SIGSEGV SEGV_ACCERR in the AudioTrack thread — libgodot_android.so via
+libwilhelm (OpenSL onMoreData). The pre-3.0 baseline (bbc0648, v0.57.0)
+crashes IDENTICALLY on the same emulator, so this is Godot 4.7.1's
+OpenSL driver vs this API-36 emulator image, outside the overhaul's
+scope. -no-audio on the emulator does not help (the guest HAL still
+drives the app's OpenSL client). Next probes for whoever picks mobile
+up: an older-API emulator image (the 2026-09-29 emulator verification
+predates API 36), a real device (README's human-only item), or Godot's
+Android audio-driver option.
