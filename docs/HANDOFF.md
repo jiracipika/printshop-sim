@@ -1460,3 +1460,36 @@ star glyphs render as tofu boxes in that environment's fonts — real
 browsers ship them. Re-run method: any headless Chrome with
 --enable-unsafe-swiftshader + the CDP ready-signal poll
 (document.getElementById("loading") === null) used in this session.
+
+## Live playthrough (2026-10-30, CDP-driven, same harness as the acceptance)
+
+A scripted player session on the live build verified the 3.0 feature set
+as played, not just rendered:
+
+- v0.58 bell: empty-handed E at the counter shows the quiet prompt.
+- v0.60 shopfront: OPEN sign lit HDR-gold inside the business window;
+  pendant + under-lip strip + counter clutter + entry door all render.
+- v0.59 walk-ins: TWO hashed arrivals (Bram day 2, June day 3) — counter
+  HUD line with client/model/patience, two-press slip accept ("Sent to
+  Printer 1 — Bram is waiting"), walk-in contract lands on the first
+  free printer with the board-index-100 id visible in the HUD
+  (G-2-100), and the dedicated waiting prompt counts patience down
+  ("~16s of patience left").
+- Expiry teardown, twice: customer despawns, the held contract cancels
+  through the overnight path, balance and reputation UNCHANGED both
+  times — the bot-safety invariant holds in the wild.
+- Surrounding economy live: daily rent charges, missed board jobs cost
+  reputation overnight, the daily event line rotates, day/night window
+  lighting cycles, board jobs accept at the machine, orientation
+  preview/cycle works, and confirming a 2167 g job on a 1500 g spool is
+  REFUSED with the crate hint ("load a spool ($12.00 at the crate)").
+
+NOT reached: an actual counter-delivery payout — the session got itself
+economically stuck (board job accepted onto the only free printer, $0
+balance, no affordable spool). The counter-delivery path stays verified
+by the bots (sim_playtest exercises it every run); next human-path run
+should keep the only unlocked printer FREE until the slip is accepted.
+Operational notes: prompts persist until replaced (pre-existing);
+per-step CDP session attaches can fire focus-out and release capture —
+a center click re-captures and unpauses via the deliberate-recapture
+branch.
