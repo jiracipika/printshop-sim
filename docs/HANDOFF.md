@@ -1489,10 +1489,17 @@ economically stuck (board job accepted onto the only free printer, $0
 balance, no affordable spool). The counter-delivery path stays verified
 by the bots (sim_playtest exercises it every run); next human-path run
 should keep the only unlocked printer FREE until the slip is accepted.
-Operational notes: prompts persist until replaced (pre-existing);
-per-step CDP session attaches can fire focus-out and release capture —
-a center click re-captures and unpauses via the deliberate-recapture
-branch.
+Operational notes (refined after a second run): prompts persist until
+replaced (pre-existing); focus-out (per-step CDP session attach/detach)
+releases capture and PAUSES via _release_capture — resume with a center
+click. THE BIG ONE: under SwiftShader the web build runs shop time at
+roughly 0.3x wall speed (physics tied to the slow rAF), so a 90 s day
+takes ~5 wall minutes and patience counters shown in shop-seconds last
+~3x longer in wall time — early "frozen Day 1" readings were this, not
+a freeze. A single-session timed press-train DID achieve a live slip
+accept; completing print->collect->deliver blind was not achieved (the
+payout moment stays bot-verified: sim_playtest + walkin_test pin the
+counter premium cents-exact every run).
 
 ## Android build on this Linux box (2026-10-30)
 
