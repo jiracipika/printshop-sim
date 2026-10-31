@@ -1445,3 +1445,18 @@ Everything code-side is implemented and automated-tested.
 - Deploy: vercel --prod from the repo (vercel.json serves web/build). Verify
   the live URL loads the stamped build and plays before calling it released.
 - Never touch automated-newsletter or pitchforge/pitch-therapy.
+
+## Live acceptance (2026-10-30, Print Shop 3.0 v0.61.0 / build 5832c2d)
+
+The deployed build at printshop-sim.vercel.app was accepted in a real
+browser path: headless Chrome for Testing 156 + SwiftShader WebGL2 drove
+the live URL over CDP. Verified: engine boot (shell's #loading removed,
+no printshopLoadError), main menu renders with "Alpha 0.61.0 Git:
+5832c2dcc69f...", the 3D workshop renders behind it, the deliberate
+capture click granted pointerLockElement=true, WASD moved the camera and
+a mouse drag turned the view, and the v0.60 HUD restyle (ink status card,
+clay prompt) is visible in-frame. Headless-font artifact only: the Rep
+star glyphs render as tofu boxes in that environment's fonts — real
+browsers ship them. Re-run method: any headless Chrome with
+--enable-unsafe-swiftshader + the CDP ready-signal poll
+(document.getElementById("loading") === null) used in this session.
