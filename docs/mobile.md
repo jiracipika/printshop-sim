@@ -1,48 +1,57 @@
 # printshop-sim on Android
 
-The `Android` export preset (added as prep work, mirroring Friday
-Evacuation's proven config) produces an **unsigned** APK at
-`builds/printshop-sim.apk`. Godot's internal signer is disabled
-(`package/signed=false`) on purpose — sign afterwards with the
-repo-committed `android/debug.keystore` so every build installs and
-upgrades cleanly. That key is debug-only; never ship it to a store.
+The `Android` export preset produces `builds/printshop-sim.apk`
+(arm64-v8a + x86_64 — x86_64 is required for emulator images, see the
+preset comment). Debug signing is wired INTO the preset since the
+ signing rework: `keystore/debug = res://android/debug.keystore`,
+`package/signed=true` — the repo-committed key is DEBUG-ONLY; never
+ship it to a store (release builds need a separate, non-committed
+release keystore). `version/name` tracks the game version.
 
-## One-time toolchain
+## Linux box toolchain (verified 2026-10-30)
 
-The CampaignGoal mobile toolchain lives on the external SSD. Source it first:
-
-```bash
-source /Volumes/ADATA/Android/env.sh
-```
-
-That gives you `ANDROID_HOME` (`/Volumes/ADATA/Android/sdk`), a JDK 21
-`JAVA_HOME`, `adb`/`emulator`/`apksigner` on PATH, and the `campaign_test`
-AVD. Godot 4.7.1 export templates are already installed at
-`~/Library/Application Support/Godot/export_templates/4.7.1.stable/`.
+- Godot 4.7 binary: `~/tools/godot`; Android export templates at
+  `~/.local/share/godot/export_templates/4.7.stable/`.
+- SDK: `~/Android/Sdk` — platform-tools (`adb`), emulator,
+  build-tools/36.0.0 (`zipalign`, `apksigner`). System Java 17 is fine
+  for apksigner; no gradle build (prebuilt-template export).
 
 ## Build, sign, install
 
 ```bash
-cd /Volumes/HARD/projects/printshop-sim
+cd <repo>
 mkdir -p builds
-# Godot writes the unsigned APK and then exits non-zero (no editor keystore
-# configured) — the APK on disk is complete, like FE's CI does.
-godot --headless --path . --export-release "Android" || true
+# Godot writes the complete APK and then exits non-zero (its post-export
+# adb step cannot connect — no daemon running). The APK on disk is fine.
+~/tools/godot --headless --path . --export-release "Android" || true
 test -f builds/printshop-sim.apk
 
-BT=34.0.0
-zipalign -f 4 builds/printshop-sim.apk /tmp/printshop-aligned.apk
-apksigner sign --ks android/debug.keystore --ks-key-alias androiddebugkey \
+BT=~/Android/Sdk/build-tools/36.0.0
+$BT/zipalign -f 4 builds/printshop-sim.apk /tmp/printshop-aligned.apk
+$BT/apksigner sign --ks android/debug.keystore --ks-key-alias androiddebugkey \
   --ks-pass pass:android --key-pass pass:android \
   --out /tmp/printshop-signed.apk /tmp/printshop-aligned.apk
 mv /tmp/printshop-signed.apk builds/printshop-sim.apk
-apksigner verify builds/printshop-sim.apk
+$BT/apksigner verify builds/printshop-sim.apk
 
-# Install + run on the emulator (see /Volumes/ADATA/mobile-setup/README.md
-# for the full boot/screencap loop)
-adb install -r builds/printshop-sim.apk
-adb shell monkey -p com.jiracipika.printshopsim 1
+A=~/Android/Sdk/platform-tools/adb
+$A devices                      # emulator-5554 once booted
+$A install -r builds/printshop-sim.apk
+$A shell monkey -p com.jiracipika.printshopsim 1
 ```
 
-Package: `com.jiracipika.printshopsim` · versionCode 1 · arm64-v8a
-(gradle build off — prebuilt-template export, same as FE).
+Emulator: `Pixel7_API36` exists (`~/Android/Sdk/emulator/emulator -avd
+Pixel7_API36`); boot takes ~1 min, then `adb devices` shows
+`emulator-5554 device`.
+
+## RUNTIME CAVEAT (pre-existing, not a game bug)
+
+On the API-36 (Android 16) emulator the app boots and renders ~34 s,
+then dies: SIGSEGV SEGV_ACCERR in the AudioTrack thread —
+`libgodot_android.so` via `libwilhelm` (OpenSL `onMoreData`). The
+PRE-3.0 baseline (bbc0648, v0.57.0) crashes IDENTICALLY on the same
+emulator — this is Godot 4.7.1's OpenSL driver vs that image, outside
+game scope. `-no-audio` on the emulator does NOT help (the guest HAL
+still drives the app's OpenSL client). Pick mobile verification up on:
+an older-API emulator image (the 2026-09-29 verification predates API
+36), a real arm64 device, or Godot's Android audio-driver option.
