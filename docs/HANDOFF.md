@@ -1524,3 +1524,73 @@ drives the app's OpenSL client). Next probes for whoever picks mobile
 up: an older-API emulator image (the 2026-09-29 emulator verification
 predates API 36), a real device (README's human-only item), or Godot's
 Android audio-driver option.
+
+## CDP automation deep-dive (2026-11-01): premium witnessed live, harness bugs archived
+
+A long third campaign against the payout moment (headless Chrome 156 +
+SwiftShader, zero-dep CDP over Node's WebSocket, harness at
+~/ps_harness/). NET RESULT: the walk-in premium is now WITNESSED LIVE —
+at the armed slip the prompt reads "Bram — Espresso tamper collar,
+Honey, ~$87.62 at the counter" while the HUD contract line shows the
+same order's board price "pays $79.65" — 79.65 x 1.10 = 87.62, the
+COUNTER_PREMIUM applied and rendered in a real browser, same session.
+Also witnessed live across cycles: walk-in arrival (actor + door swing
++ HUD "Counter:" line with patience countdown), two-press slip arm +
+accept ("Sent to Printer 1 — Bram is waiting", "Contract G-2-100 —
+Espresso tamper collar [PREPARING] pays $79.65 · wants Honey"),
+patience draining, and expiry teardown with the HUD Counter line
+vanishing and zero rep/money movement (bot-safety invariant again).
+What stays bot-verified only: prep-confirm -> print -> collect ->
+counter-deliver -> ledger tick (sim_playtest + walkin_test pin it
+cents-exact).
+
+Why the delivery tail resisted — five harness archaeology findings,
+all verified against Main.gd, worth keeping for any future automation:
+
+1. YAW SNAP ON RECAPTURE: in headless, get_mouse_locked() falls back to
+   the `captured` intent flag, so InputEventMouseMotion.relative keeps
+   steering the camera even when pointer lock is nominally off. A
+   recapture click that sends mouseMoved first yaws the camera by the
+   whole stale-cursor delta (hundreds of px). Fix: press+release only,
+   never a preliminary move, on unpause clicks.
+2. PAUSE PER DETACH: NOTIFICATION_APPLICATION_FOCUS_OUT pauses the game
+   and releases motion inputs; game time advances ONLY while a CDP
+   session is attached (~3-6 s per step). "Dilation drift" across
+   rounds (0.28 -> 0.23 -> 0.19) was pause time, not slower rendering;
+   a held-single-session probe measures a stable ~0.27. Patience
+   budgets are game-time: ~10-14 step windows, not wall seconds.
+3. SAVES SURVIVE CHROME STORAGE CLEARS: Godot web user:// is IDBFS
+   (IndexedDB) and Storage.clearDataForOrigin("all") does NOT remove it
+   (verified twice, including with the page dead on about:blank). The
+   only reliable factory reset is deleting the whole --user-data-dir.
+4. E-CONSUMPTION ORDER: _unhandled_input routes KEY_E through
+   _try_grab_or_place(): held -> place/deliver; else _try_grab() FIRST,
+   and only when the aim ray hits no grabbable does _try_interact() run.
+   At the bench a level aim clips grabbables (grab/place flip-flop) and
+   a raised aim hits the design computer (_open_design_studio eats the
+   press). The prep/collect presses need the ray on the printer body —
+   an aim that must tolerate +/-1 m run-to-run corridor variance, which
+   is what finally made the blind tail uneconomical (see 5).
+5. CORRIDOR VARIANCE: the counter->P1 legs (right ~76 deg, walk ~2 m,
+   right ~56 deg, walk ~3.1 m) reached P1's 3.0 m machine radius every
+   run, but the exact stop point slides +/-1 m with collisions, so a
+   fixed blind aim cannot reliably thread grab-computer-printer. A
+   next attempt should servo on the "Printer 1" Label3D or the "[E]
+   Accept job" line between presses instead of firing blind trains.
+
+Also learned: Page.navigate to the identical URL is a no-op (the
+loading-div ready poll cannot detect it — bust the URL); Page.navigate
+with CDP Mouse/Input enables input only after the game's own recapture
+branch; the F3 debug panel is OS.is_debug_build()-gated and dead in the
+release web export; the deterministic walk-in schedule for days 1-16 is
+preflightable offline via CounterService/Contract/PrepSystem statics
+(days 9-12 have no live slots; day 13 slot 0 is the smallest print).
+
+Harness (~/ps_harness/, durable): ps_watch.mjs (boot, park, E+shot
+every ~15-19 s, auto-arms/accepts any arrival), ps_chain2.mjs (accept
+insurance -> corridor -> aim -> prep -> print window -> collect ->
+S-return -> deliver), ps_step2.mjs (one-shot closed-loop step driver:
+lw/lb/w/s/sa/sd/e1/e2/shot), ps_unstick.mjs, ps_nuke.mjs/ps_fresh2.mjs
+(storage resets), preflight.gd (offline schedule probe via
+godot --headless -s). /tmp/ps_accept is ephemeral — /tmp wiped it once;
+~/ps_harness survives.
