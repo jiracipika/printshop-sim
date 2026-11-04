@@ -1634,3 +1634,34 @@ through the remote shell (pass one string, quote the extra remotely);
 bash `command -v name() {}` is a syntax error (exit 2, script dies
 before line 1 of real work); pkill -f self-matches the caller's own
 compound command — bracket-escape the pattern.
+
+BUG-FIX ROUND v0.62.0 (2026-11-04, commits 37f86c7/2559ceb/65fb902/131b7ab,
+pushed + deployed + live-verified): flash-worker slice (dwfrun-eccbff19)
+fixed three verified bugs — (1) packing-stack visual wiped by unrelated
+deliveries/accepts/expiries: _refresh_stack_visual() (Main.gd:4054)
+recomputes the stack as max parts_packed over LIVE multi-part contracts at
+all 7 teardown sites; pinning suites green unmodified. (2) event prompts
+never aged: _set_prompt arms a 6 s window (PROMPT_TTL_S), cleared only
+when the text is still the armed string — boot/pause direct writes exempt.
+(3) ShopFront/CustomerActor mesh helpers deduped into NEW scripts/MeshKit.gd
+(class_name; the .godot class cache was regenerated via --import — a FRESH
+CLONE needs a --import or the ladder parse-fails on MeshKit). NEW
+tests/bugfix_test.gd 34 checks. Gates: ladder 78/78 + pytest 21/21 (worker
+filtered ladders; parent ran the full gate twice — pre- and post-bump);
+bot curves byte-identical to worker-rank.md references. GLES3 uniform
+overflow follow-up: project.godot light caps (16/4) TRIED AND DISPROVEN —
+even CanvasShaderGLES3 overflows 261 vectors on SwiftShader, so the
+overflow is engine-level (Godot 4.7 Compatibility base shaders); caps
+reverted, docs/mobile.md records the negative result. Deploy: .mimosa/
+added to .gitignore (it dirtied the build stamp), web build stamped
+65fb902 clean, vercel alias moved immediately, live shop renders with
+HUD "Alpha 0.62.0 / 65fb902". PERF NOTE: headless-SwiftShader FPS on the
+live site measured 3 BOTH for v0.62 and (A/B, git archive 5832c2d served
+locally) v0.61 on the same busy day — environment, not a regression; the
+Nov-1 ~16 fps equivalent was on a quieter box. HARNESS GOTCHA (cost an
+hour): localhost:9222 is held by the user's BRAVE browser (launched with
+--remote-debugging-port=9222) — all CDP work must use port 9223 now
+(ps_harness scripts updated); probes hitting Brave's page show NO WEBGL2
+and the game's "Missing browser features" error. Worker finding left
+open: _update_hud does two absolute /root/Version node lookups per
+physics frame (Main.gd:4861-4863) — cacheable at boot, perf candidate.
