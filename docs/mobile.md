@@ -44,14 +44,51 @@ Emulator: `Pixel7_API36` exists (`~/Android/Sdk/emulator/emulator -avd
 Pixel7_API36`); boot takes ~1 min, then `adb devices` shows
 `emulator-5554 device`.
 
-## RUNTIME CAVEAT (pre-existing, not a game bug)
+## RUNTIME VERDICT (2026-11-04): two independent engine-vs-emulator crashes
 
-On the API-36 (Android 16) emulator the app boots and renders ~34 s,
-then dies: SIGSEGV SEGV_ACCERR in the AudioTrack thread —
-`libgodot_android.so` via `libwilhelm` (OpenSL `onMoreData`). The
-PRE-3.0 baseline (bbc0648, v0.57.0) crashes IDENTICALLY on the same
-emulator — this is Godot 4.7.1's OpenSL driver vs that image, outside
-game scope. `-no-audio` on the emulator does NOT help (the guest HAL
-still drives the app's OpenSL client). Pick mobile verification up on:
-an older-API emulator image (the 2026-09-29 verification predates API
-36), a real arm64 device, or Godot's Android audio-driver option.
+Probed live on both AVDs (`Pixel7_API36` Android 16, `Pixel7_API34`
+Android 14, headless + SwiftShader) with the v0.61.0 APK. The PRE-3.0
+baseline (bbc0648, v0.57.0) also crashes identically — none of this is
+game-code scope, but the second crash is a real portability signal.
+
+**Crash 1 — audio (OpenSL), both images.** SIGSEGV SEGV_ACCERR in the
+`AudioTrack` thread ~30–90 s after launch: Android's
+`AudioTrack::processAudioBuffer → onMoreData → wilhelm` calls INTO
+`libgodot_android.so` (Godot's OpenSL data callback) and that faults.
+This Godot 4.7 Android build compiles exactly two audio drivers —
+`AudioDriverOpenSL` and `AudioDriverDummy` (no AAudio/Oboe; upstream
+still has only a draft PR for it). Emulator-side mitigations are all
+neutralized: `emulator -no-audio` doesn't help (verified earlier), and
+engine args via the launch intent are impossible — GodotActivity.kt
+`sanitizeLaunchIntent()` strips the `command_line_params` extra from
+exported activities by design.
+
+**Verified workaround for crash 1:** repack the APK appending
+`--audio-driver Dummy` to `assets/_cl_` (the boot command-line asset:
+`int32 LE argc`, then per-arg `int32 LE length + UTF-8`). Recipe:
+`~/ps_harness/repack_dummy.py` (python zipfile, preserves compress_type)
+→ `zipalign -f 4` → `apksigner sign` (repo debug keystore) → installs
+as `builds/printshop-sim-dummy.apk` (the shipped APK is untouched).
+Live result on BOTH images: GodotActivity logs the Dummy arg, zero
+`libOpenSLES` lines, zero AudioTrack SIGSEGVs.
+
+**Crash 2 — render (GLES3 uniform overflow), both images.** The scene
+shaders fail to link on SwiftShader: `SceneShaderGLES3`/`SkyShaderGLES3
+Program linking failed: Fragment shader active uniforms exceed
+GL_MAX_FRAGMENT_UNIFORM_VECTORS (261)`. On API-34 the GLThread exits
+and GodotActivity force-quits (~10 s, SIG 9, no native crash); on
+API-36 the GLThread itself SIGSEGVs (~40 s — previously masked because
+the audio thread crashed first at ~34 s). Not worked around by the
+audio repack. GLES3 guarantees only 224 fragment uniform vectors, so
+this uniform pressure (heavy scene shader: many lights/material
+features) could also bite real low-end GLES3 devices — reducing scene
+uniform pressure is the game-side fix candidate worth measuring.
+
+**Bottom line:** there is currently NO emulator image that runs this
+Godot 4.7 build for more than ~40 s — mobile verification requires a
+real device (human task). The Dummy APK remains useful for audio-free
+emulator experiments and as the airtight causality proof for crash 1.
+AVD note on this box: avdmanager wrote `Pixel7_API34` into
+`~/.config/.android/avd` (XDG) while `Pixel7_API36` lives in the legacy
+`~/.android/avd`, and emulator 37.2 only searches one of them — set
+`ANDROID_AVD_HOME` to whichever actually holds the AVD.

@@ -1594,3 +1594,43 @@ lw/lb/w/s/sa/sd/e1/e2/shot), ps_unstick.mjs, ps_nuke.mjs/ps_fresh2.mjs
 (storage resets), preflight.gd (offline schedule probe via
 godot --headless -s). /tmp/ps_accept is ephemeral — /tmp wiped it once;
 ~/ps_harness survives.
+
+ANDROID EMULATOR DEEP-DIVE (2026-11-04): P1 closed with a two-crash
+verdict. The audio SIGSEGV is NOT API-36-specific — it reproduced on a
+fresh Pixel7_API34 (Android 14) AVD with the same signature: SIGSEGV
+SEGV_ACCERR in the AudioTrack thread ~30-90 s after launch, backtrace
+AudioTrack::processAudioBuffer -> onMoreData -> wilhelm ->
+libgodot_android.so (Godot 4.7 OpenSL driver callback). This engine
+build has exactly two compiled audio drivers (AudioDriverOpenSL,
+AudioDriverDummy — no AAudio). All emulator-side mitigations are dead:
+-no-audio (guest HAL still drives the client), and intent-extra engine
+args — GodotActivity.kt sanitizeLaunchIntent() strips
+`command_line_params` from exported activities by design (verified in
+Godot source; -e and --esa both arrive as "with parameters []").
+WORKAROUND verified live on both images: repack assets/_cl_ (int32 LE
+argc + length-prefixed UTF-8 args) appending "--audio-driver Dummy" —
+~/ps_harness/repack_dummy.py -> zipalign -> apksigner ->
+builds/printshop-sim-dummy.apk (shipped APK untouched). Result: args
+logged by GodotActivity, zero libOpenSLES lines, zero AudioTrack
+SIGSEGVs. SECOND, independent crash (both images, exposed by the audio
+fix): SceneShaderGLES3/SkyShaderGLES3 link failure — "Fragment shader
+active uniforms exceed GL_MAX_FRAGMENT_UNIFORM_VECTORS (261)" on
+SwiftShader. API-34: GLThread exits -> GodotActivity force-quits
+(SIG 9, ~10 s, no native crash). API-36: the GLThread itself SIGSEGVs
+(~40 s; previously masked by the audio crash winning at ~34 s).
+GLES3 minimum is 224 fragment uniform vectors, so the scene shader's
+uniform pressure could also hit real low-end GLES3 devices — a
+game-side uniform-diet pass (lights/material features) is the follow-up
+candidate. Net: NO emulator image runs this build past ~40 s; mobile
+verification = real device (human task). New harness inventory:
+probe_api34.sh / probe_api34_fix.sh / probe_api34_fix2.sh /
+probe_api34_cl.sh / probe_api36_dummy.sh (boot->install->launch->300 s
+pidof monitor + screencaps + logcat SIGSEGV grep), repack_dummy.py.
+Gotchas hit live: avdmanager writes AVDs to $XDG_CONFIG_HOME/.android/
+avd while emulator 37.2 only searches $ANDROID_AVD_HOME/$HOME/.android/
+avd (Pixel7_API34 = XDG path, Pixel7_API36 = legacy; set
+ANDROID_AVD_HOME per AVD); adb re-splits multi-arg shell commands
+through the remote shell (pass one string, quote the extra remotely);
+bash `command -v name() {}` is a syntax error (exit 2, script dies
+before line 1 of real work); pkill -f self-matches the caller's own
+compound command — bracket-escape the pattern.
