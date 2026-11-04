@@ -18,3 +18,4 @@ tools/run_all_verify.py
 tools/run_one_test.py
 tools/run_probe.py
 builds/
+.mimosa/
