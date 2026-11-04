@@ -285,6 +285,13 @@ var debug_panel: DebugPanel
 var last_pack_grade := ""
 var save_status_line := "no save yet"
 var _boot_prompt := "Click to play"
+# v0.61.x bugfix: event prompts (the only writes through _set_prompt) age out
+# after ~6 s. Direct `_prompt.text` writes (boot capture / pause / resume /
+# prototype hints) never arm the timer, and a pending window only clears text
+# it still owns (the armed string), so those hints never age.
+const PROMPT_TTL_S := 6.0
+var _prompt_t := 0.0
+var _prompt_armed := ""
 
 ## --- menus slice -----------------------------------------------------------
 
@@ -2556,6 +2563,9 @@ func _try_grab_or_place() -> void:
 
 func _set_prompt(t: String) -> void:
 	_prompt.text = t
+	# v0.61.x bugfix: (re)arm the aging window — a fresh prompt restarts it.
+	_prompt_t = PROMPT_TTL_S
+	_prompt_armed = t
 
 func _make_printer(idx: int) -> Node3D:
 	var root: Node3D = load("res://scripts/Printer.gd").new()
@@ -2901,6 +2911,14 @@ func _physics_process(delta: float) -> void:
 			_toast.modulate.a = clampf(_toast_t / 0.8, 0.0, 1.0)
 			if _toast_t <= 0.0:
 				_toast.visible = false
+	# v0.61.x bugfix: event prompts age out. Runs beside the toast fade, above
+	# every early return, so the countdown never stalls; only the prompt label
+	# is cleared (never the HUD lines), and only text the window still owns —
+	# a direct write (boot/pause/resume hint) is timer-exempt.
+	if _prompt_t > 0.0:
+		_prompt_t = maxf(_prompt_t - delta, 0.0)
+		if _prompt_t <= 0.0 and _prompt != null and _prompt.text == _prompt_armed:
+			_prompt.text = ""
 	if _player == null:
 		return
 	var touch_active := touch_controls != null and touch_controls.effective_enabled() and touch_controls.is_motion_enabled()
@@ -3189,7 +3207,10 @@ func _tick_counter(delta: float) -> void:
 						_printers[wvi].set_failed(false)
 				_discard_part_for(wm)
 				wm["contract"] = null
-				packing_station.set_stack_count(0)
+				# v0.61.x bugfix: the expiring walk-in order is single-part and
+				# never contributed to the stack — recompute so an unrelated
+				# mid-completion board order keeps its stacked copies.
+				_refresh_stack_visual()
 		_counter_despawn()
 		stats.lost_walkins += 1
 	# Arrivals: deterministic per (day, slot), skipped entirely while a
@@ -3268,7 +3289,10 @@ func _accept_walkin_on(idx: int) -> void:
 	m["day"] = day_cycle.day
 	c.parts_packed = 0
 	c.copy_grades = []
-	packing_station.set_stack_count(0)
+	# v0.61.x bugfix: accepting ends no stacked order (the fresh walk-in starts
+	# at parts_packed 0) — recompute so an unrelated mid-completion board order
+	# keeps its stacked copies.
+	_refresh_stack_visual()
 	_guide("accepted")
 	m["orient"] = 0
 	m["orient_pending"] = false
@@ -3873,7 +3897,10 @@ func _try_pack_held() -> bool:
 				if g == "F":
 					f_count += 1
 			if f_count >= 2 and _advance(c, Contract.State.FAILED):
-				packing_station.set_stack_count(0)
+				# v0.61.x bugfix: this dead order's own copies must clear
+				# (FAILED no longer counts) while any other live multi-part
+				# order keeps its stacked copies.
+				_refresh_stack_visual()
 				_discard_part_for(m)
 				m["contract"] = null
 				_rep_event(-0.4)
@@ -3904,7 +3931,10 @@ func _try_pack_held() -> bool:
 		_discard_part_for(m)
 		# Partial pack (v0.18.0): the copy joins the stack on the table; the
 		# order stays open until every copy is packed. No payout yet.
-		packing_station.set_stack_count(c.parts_packed)
+		# v0.61.x bugfix: recompute instead of overwriting, so with two live
+		# multi-part orders the table shows the max (this order's parts_packed
+		# was already incremented above; identical to the old set otherwise).
+		_refresh_stack_visual()
 		_log_event("packed", "%s part %d/%d packed (grade %s)" % [
 			c.model_name, c.parts_packed, c.parts_total, eff_grade])
 		_save_game()
@@ -3957,7 +3987,10 @@ func _settle_held_delivery(m: Dictionary, late: bool, via_counter: bool) -> bool
 	if not ledger.pay_once(c.id, payout, "payout %s" % c.id):
 		return true
 	_repay_rent_debt()
-	packing_station.set_stack_count(0)
+	# v0.61.x bugfix: the settled order is DELIVERED (no longer counts), so a
+	# multi-part completion still clears its copies — but an UNRELATED live
+	# multi-part order keeps its stacked copies instead of being wiped.
+	_refresh_stack_visual()
 	m["contract"] = null
 	last_pack_grade = final_grade
 	recent_grades.append(final_grade)
@@ -4008,6 +4041,26 @@ func _settle_held_delivery(m: Dictionary, late: bool, via_counter: bool) -> bool
 		_set_prompt("Delivered %s%s (%s) — $%s%s · rep up" % [c.model_name,
 			multitag, final_grade, _cents_str(payout), loyal_tag])
 	return true
+
+## Recompute the packing-table stack visual from live state (v0.61.x bugfix):
+## the max parts_packed over machines whose contract is a multi-part order
+## mid-completion — copies packed but not all delivered (INSPECTION incl. the
+## carried/packed part, and the reprint flow's PREPARING/PRINTING with copies
+## already on the table). PACKED/DELIVERED/FAILED contracts and detached
+## machines no longer count, so ending THE stacked order still clears the
+## table while unrelated teardowns leave other live orders' copies visible.
+## Walk-in contracts are always single-part (CounterService.make_contract
+## pins parts_total = 1), so is_multi_part() already excludes them.
+func _refresh_stack_visual() -> void:
+	var count := 0
+	for m in machines:
+		var c: Contract = m.get("contract")
+		if c == null or not c.is_multi_part() or c.parts_packed <= 0:
+			continue
+		if c.state in [Contract.State.PACKED, Contract.State.DELIVERED, Contract.State.FAILED]:
+			continue
+		count = maxi(count, c.parts_packed)
+	packing_station.set_stack_count(count)
 
 ## A wrong spool color caps the grade at B (the part still ships).
 func _cap_grade_for_color(grade: String, contract: Contract, m: Dictionary) -> String:
@@ -4224,7 +4277,10 @@ func _accept_on(idx: int) -> void:
 	m["day"] = day_cycle.day
 	job.parts_packed = 0
 	job.copy_grades = []
-	packing_station.set_stack_count(0)
+	# v0.61.x bugfix: accepting ends no stacked order (the fresh job starts at
+	# parts_packed 0) — recompute so an unrelated mid-completion order keeps
+	# its stacked copies.
+	_refresh_stack_visual()
 	_guide("accepted")
 	m["orient"] = 0
 	m["orient_pending"] = false
@@ -4334,7 +4390,10 @@ func _on_day_changed(new_day: int) -> void:
 				_printers[vi].set_failed(false)
 		_discard_part_for(m)
 		m["contract"] = null
-		packing_station.set_stack_count(0)
+		# v0.61.x bugfix: the cancelled order's own copies must clear while any
+		# other live multi-part order keeps its stacked copies (the loop may
+		# cancel several machines in one morning).
+		_refresh_stack_visual()
 		_rep_event(-0.6)
 		stats.cancelled += 1
 		_log_event("cancel", "client cancelled %s — far too late" % c.model_name)

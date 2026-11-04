@@ -289,40 +289,40 @@ func _build_counter_dressing() -> void:
 	# (-0.45, 1.04, 0) and the slip pad at (0.4, 1.04, 0.05), CounterStation).
 	var am := ArrayMesh.new()
 	# 0: pendant stem from the ceiling (world y 3.0) to the shade top (2.06).
-	am.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, _offset_arrays(
-		_box_mesh(Vector3(0.02, 0.96, 0.02)), Vector3(0, 2.52, 0)))
+	am.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, MeshKit.offset_arrays(
+		MeshKit.box_mesh(Vector3(0.02, 0.96, 0.02)), Vector3(0, 2.52, 0)))
 	am.surface_set_material(0, steel)
 	# 1: cone shade (top radius 0) hanging over the counter (center y 1.98).
-	am.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, _offset_arrays(
+	am.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, MeshKit.offset_arrays(
 		_cyl_mesh(0.0, 0.30, 0.16), Vector3(0, 1.98, 0)))
 	am.surface_set_material(1, steel)
 	# 2: emissive bulb tucked under the shade mouth (center y 1.89).
-	am.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, _offset_arrays(
+	am.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, MeshKit.offset_arrays(
 		_sphere_mesh(0.05), Vector3(0, 1.89, 0)))
 	am.surface_set_material(2, bulb)
 	# 3: under-lip light strip at the counter's room-side face
 	# (world z 2.215 = 2.55 - 0.335, y 0.955, just under the 1.0 top).
-	am.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, _offset_arrays(
-		_box_mesh(Vector3(1.2, 0.025, 0.02)), Vector3(0, 0.955, -0.335)))
+	am.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, MeshKit.offset_arrays(
+		MeshKit.box_mesh(Vector3(1.2, 0.025, 0.02)), Vector3(0, 0.955, -0.335)))
 	am.surface_set_material(3, strip)
 	# 4: slip stack of order slips (counter top, world y 1.04 + ...).
-	am.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, _offset_arrays(
-		_box_mesh(Vector3(0.15, 0.04, 0.22)),
+	am.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, MeshKit.offset_arrays(
+		MeshKit.box_mesh(Vector3(0.15, 0.04, 0.22)),
 		Vector3(-0.12, CounterStation.TOP_Y + 0.02, -0.15)))
 	am.surface_set_material(4, paper)
 	# 5: tiny plant pot.
-	am.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, _offset_arrays(
+	am.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, MeshKit.offset_arrays(
 		_cyl_mesh(0.05, 0.04, 0.07),
 		Vector3(0.14, CounterStation.TOP_Y + 0.035, 0.15)))
 	am.surface_set_material(5, terra)
 	# 6: the plant's foliage.
-	am.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, _offset_arrays(
+	am.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, MeshKit.offset_arrays(
 		_sphere_mesh(0.05),
 		Vector3(0.14, CounterStation.TOP_Y + 0.10, 0.15)))
 	am.surface_set_material(6, mint)
 	# 7: card-reader box.
-	am.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, _offset_arrays(
-		_box_mesh(Vector3(0.10, 0.05, 0.14)),
+	am.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, MeshKit.offset_arrays(
+		MeshKit.box_mesh(Vector3(0.10, 0.05, 0.14)),
 		Vector3(0.14, CounterStation.TOP_Y + 0.025, -0.13)))
 	am.surface_set_material(7, ink)
 
@@ -342,24 +342,9 @@ func _build_counter_dressing() -> void:
 
 
 ## --- primitive helpers --------------------------------------------------------
-## Primitive meshes come back centered on the origin; these translate their
-## vertex arrays so several primitives can share one ArrayMesh surface set.
-## Pure translation — normals and tangents carry over unchanged.
-
-func _offset_arrays(src: PrimitiveMesh, offset: Vector3) -> Array:
-	var arrays: Array = src.get_mesh_arrays()
-	var verts := PackedVector3Array(arrays[Mesh.ARRAY_VERTEX])
-	for i in range(verts.size()):
-		verts[i] += offset
-	arrays[Mesh.ARRAY_VERTEX] = verts
-	return arrays
-
-
-func _box_mesh(size: Vector3) -> BoxMesh:
-	var m := BoxMesh.new()
-	m.size = size
-	return m
-
+## Offset/box primitives come from the shared MeshKit (v0.61.x bugfix dedup —
+## the per-file copies ShopFront and CustomerActor carried are gone); the
+## cylinder/sphere helpers below stay ShopFront-only (no other user).
 
 func _cyl_mesh(top_radius: float, bottom_radius: float, height: float) -> CylinderMesh:
 	var m := CylinderMesh.new()

@@ -130,10 +130,10 @@ func _build() -> void:
 		# local: the capsule top sits at +0.31, the neck just above it).
 		var tm := ArrayMesh.new()
 		tm.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES,
-			_offset_arrays(capsule, Vector3.ZERO))
+			MeshKit.offset_arrays(capsule, Vector3.ZERO))
 		tm.surface_set_material(0, outfit)
 		tm.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES,
-			_offset_arrays(_box_mesh(Vector3(0.30, 0.06, 0.30)),
+			MeshKit.offset_arrays(MeshKit.box_mesh(Vector3(0.30, 0.06, 0.30)),
 				Vector3(0, 0.335, 0)))
 		tm.surface_set_material(1, accent)
 		_torso.mesh = tm
@@ -153,14 +153,14 @@ func _build() -> void:
 		# the sphere top (+0.105 local): crown top = +0.075 + 0.025 = 0.100.
 		var hm := ArrayMesh.new()
 		hm.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES,
-			_offset_arrays(sphere, Vector3.ZERO))
+			MeshKit.offset_arrays(sphere, Vector3.ZERO))
 		hm.surface_set_material(0, skin)
 		hm.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES,
-			_offset_arrays(_box_mesh(Vector3(0.26, 0.05, 0.26)),
+			MeshKit.offset_arrays(MeshKit.box_mesh(Vector3(0.26, 0.05, 0.26)),
 				Vector3(0, 0.075, 0)))
 		hm.surface_set_material(1, accent)
 		hm.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES,
-			_offset_arrays(_box_mesh(Vector3(0.24, 0.015, 0.09)),
+			MeshKit.offset_arrays(MeshKit.box_mesh(Vector3(0.24, 0.015, 0.09)),
 				Vector3(0, 0.055, -0.15)))
 		hm.surface_set_material(2, accent)
 		_head.mesh = hm
@@ -179,21 +179,5 @@ func outfit_color_for_instance() -> Color:
 	return OUTFITS[0]
 
 
-## --- primitive helpers --------------------------------------------------------
-## Same translation helper the ShopFront uses: offset a primitive's vertex
-## arrays so several primitives can share one ArrayMesh. Pure translation —
-## normals and tangents carry over unchanged.
-
-static func _offset_arrays(src: PrimitiveMesh, offset: Vector3) -> Array:
-	var arrays: Array = src.get_mesh_arrays()
-	var verts := PackedVector3Array(arrays[Mesh.ARRAY_VERTEX])
-	for i in range(verts.size()):
-		verts[i] += offset
-	arrays[Mesh.ARRAY_VERTEX] = verts
-	return arrays
-
-
-static func _box_mesh(size: Vector3) -> BoxMesh:
-	var m := BoxMesh.new()
-	m.size = size
-	return m
+## Offset/box primitives come from the shared MeshKit (v0.61.x bugfix dedup —
+## the per-file copies ShopFront and CustomerActor carried are gone).
