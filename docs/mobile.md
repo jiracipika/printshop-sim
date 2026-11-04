@@ -79,10 +79,18 @@ GL_MAX_FRAGMENT_UNIFORM_VECTORS (261)`. On API-34 the GLThread exits
 and GodotActivity force-quits (~10 s, SIG 9, no native crash); on
 API-36 the GLThread itself SIGSEGVs (~40 s — previously masked because
 the audio thread crashed first at ~34 s). Not worked around by the
-audio repack. GLES3 guarantees only 224 fragment uniform vectors, so
-this uniform pressure (heavy scene shader: many lights/material
-features) could also bite real low-end GLES3 devices — reducing scene
-uniform pressure is the game-side fix candidate worth measuring.
+audio repack.
+
+*Game-side uniform diet attempted and rejected (2026-11-04):* capping
+`rendering/limits/opengl/max_renderable_lights=16` and
+`max_lights_per_object=4` in project.godot changed nothing — same
+overflow, same death — and later logcat showed `CanvasShaderGLES3`
+(the 2D HUD shader) failing too. The overflow lives in Godot 4.7's
+base Compatibility shaders (scene/sky/canvas), not in game-side light
+counts, so no project setting or scene light diet fixes it. The caps
+were reverted. This is engine-level; it would need an engine-side
+shader-diet (or the Oboe/AAudio-era renderer work) upstream. The web
+build is unaffected — Chrome's WebGL2 exposes a far higher limit.
 
 **Bottom line:** there is currently NO emulator image that runs this
 Godot 4.7 build for more than ~40 s — mobile verification requires a

@@ -1,4 +1,12 @@
-# Print Shop Sim — roadmap (balance pass shipped; next: v0.13 → v0.20)
+# Print Shop Sim — roadmap (HISTORICAL — see status banner)
+
+> **STATUS (2026-11-04):** every slice below shipped, including the v0.13
+> print farm (machines 3+4, farm kits, rear extension — verified in
+> Upgrades.gd / Main.gd) and the roadmap's unchecked-box notes, which are
+> stale rather than open. The Print Shop 3.0 overhaul (v0.58→v0.61:
+> front counter, walk-in customers, atmosphere, shop rank) is complete,
+> pushed, and live. Current state, verified suites and next candidates
+> live in docs/HANDOFF.md — treat THIS file as the historical plan only.
 
 Planning document. Every slice follows the same definition of done (see the
 bottom of this file) — the per-slice checklists below only list what is NEW.
