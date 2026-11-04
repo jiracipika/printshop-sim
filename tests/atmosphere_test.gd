@@ -421,7 +421,7 @@ func _run() -> void:
 	_ok(main._prompt.get_theme_color("font_color") == Color("#DA623B") \
 		and main._toast.get_theme_color("font_color") == Color("#F5CE80") \
 		and texts_kept and hud_kept \
-		and load("res://scripts/Version.gd").VERSION == "0.61.0",
+		and load("res://scripts/Version.gd").VERSION == "0.62.0",
 		"prompt is clay, toast is gold, label texts and version are unchanged")
 
 	# --- I. v020 budget with a walk-in active ----------------------------------------
