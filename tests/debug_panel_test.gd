@@ -81,7 +81,7 @@ func _run() -> void:
 	_ok(str(panel.label_text("save")).contains("save") or str(panel.label_text("save")).contains("Save"),
 		"save status label rendered")
 	# Source checkouts may have no export stamp; the builder injects a SHA.
-	_ok(str(panel.label_text("version")) == "DEBUG — %s" % Version.label(),
+	_ok(str(panel.label_text("version")) == "DEBUG — %s" % root.get_node("/root/Version").label(),
 		"version label shows the current source/export identity")
 	_ok(panel.label_text("pack") != "", "last-pack label exists")
 

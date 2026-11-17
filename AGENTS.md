@@ -4,13 +4,13 @@
 - Start or resume by reading docs/HANDOFF.md and design/implementation-plan.md when present.
 - Check existing worker state before launching replacements. Never duplicate file ownership.
 - Save task results, actual verification evidence, next steps and blockers to docs/worker-<task>.md at every bounded task boundary; update docs/HANDOFF.md before stopping.
-- Background coding workers may complete their assigned slice independently of parent context, but must stop at Astra review boundaries. Never claim automatic indefinite continuation or deployment approval.
+- Background coding workers may complete their assigned slice independently of parent context, but must stop at the allowed reviewer's acceptance boundaries. Never claim automatic indefinite continuation or deployment approval.
 
-## Model ownership
-- Astra (gpt-6-astra via the user's ChatGPT/Codex subscription) owns design, mockups, planning, architecture, review, and acceptance.
-- Once the design and implementation plan are reviewed, use GLM 5.3 Flash (`glm-5.3-flash`, provider `zai`) through the user's Z.AI coding plan for background implementation workers.
-- Verify the coding-plan routing before implementation. Do not silently substitute GLM 5.2, another model, or a pay-as-you-go endpoint. Stop and report authentication/quota failures.
-- Give workers bounded tasks and non-overlapping file ownership. Astra reviews changes and independently runs verification before integration.
+## Model ownership (user override, 2026-11-17)
+- The user explicitly authorized this project's implementation to continue using the current session's coding model instead of the previously required GLM route.
+- Use only GPT-6.1 Terra (`gpt-6.1-terra`) or GPT-6 Luna (`gpt-6-luna`) for evaluation, review, and acceptance. Do not use Astra for review.
+- If GLM 5.3 Flash is explicitly requested again, verify the user's Z.AI coding-plan routing; do not silently switch models, providers, or billing routes after an authentication/quota failure.
+- Give workers bounded tasks and non-overlapping file ownership. An allowed reviewer independently verifies changes before integration. Run Godot tests serially to avoid shared BrowserSave races.
 
 ## Project requirements
 - Godot GDScript, GL Compatibility renderer, browser-first development. Prefer a simple single-threaded Web export initially.
