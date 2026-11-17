@@ -2540,23 +2540,13 @@ func _try_place() -> bool:
 	sfx.play("place")
 	return true
 
-## E / touch Interact: grab when empty-handed, place when holding.
-## Falls through to printer interaction when empty-handed and nothing
-## grabbable is targeted (desktop pointer-lock / touch-active gating lives
-## in _try_interact; the key path is only reachable while unpaused).
+## One dispatcher for E, touch Interact and gamepad A. Held items use the
+## station actions before placement; empty hands retain aimed-grab priority.
 func _try_grab_or_place() -> void:
-	if paused:
+	if paused or (not get_mouse_locked() and not touch_controls.is_motion_enabled()):
 		return
 	if held != null:
-		# Delivering beats placing: a held part at the packing table goes
-		# through the interact path (pack / scrap), never drops on the spot.
-		# The counter (v0.59.0) joins the carve-out: a walk-in's part is
-		# handed over there; board parts fall through _try_interact to the
-		# same place action they had before.
-		if _is_held_part() and (_near_packing_station() or _near_counter()):
-			_try_interact()
-			return
-		_try_place()
+		_try_interact()
 		return
 	if not _try_grab():
 		_try_interact()
@@ -3734,7 +3724,7 @@ func _collect_on(idx: int) -> bool:
 	if c.is_multi_part() and c.needs_parts() and sim.state != PrintSim.State.DONE_OK:
 		return false
 	if is_instance_valid(m.get("part")):
-		_set_prompt("Grab the printed part and take it to the packing table")
+		_set_prompt("Grab the printed part and take it to %s" % _part_destination(c))
 		return true
 	if held != null:
 		# Both machines can finish at once: the second part waits on the bed
@@ -3768,7 +3758,7 @@ func _collect_on(idx: int) -> bool:
 		_set_prompt("Copy %d of %d printed — take it to the packing table" % [
 			c.parts_packed + 1, c.parts_total])
 	else:
-		_set_prompt("%s printed — take it to the packing table" % c.model_name)
+		_set_prompt("%s printed — take it to %s" % [c.model_name, _part_destination(c)])
 	return true
 
 func _collect_print() -> bool:
@@ -3865,8 +3855,8 @@ func _try_finish_held() -> bool:
 		c.model_name, raw, str(res.grade)])
 	_save_game()
 	sfx.play("upgrade")
-	_set_prompt("Vapor-smoothed: grade %s -> %s. Pack it when ready" % [
-		raw, str(res.grade)])
+	_set_prompt("Vapor-smoothed: grade %s -> %s. Take it to %s" % [
+		raw, str(res.grade), _part_destination(c)])
 	return true
 
 ## payout, advance INSPECTION -> PACKED -> DELIVERED, pay exactly once.
@@ -4639,13 +4629,6 @@ func _try_interact() -> void:
 	if _aimed_design_computer():
 		_open_design_studio()
 		return
-	# Near the packing table without the part in hand: nudge, don't act.
-	for m in machines:
-		var c: Contract = m.get("contract")
-		if c != null and c.state == Contract.State.INSPECTION \
-				and is_instance_valid(m.get("part")):
-			_set_prompt("The printed part is by the printer — bring it here")
-			return
 	var printer := _nearest_printer()
 	if printer == null:
 		return
@@ -4684,15 +4667,29 @@ func _try_interact() -> void:
 		return
 	_accept_on(_focus)
 
-## Contextual grab/place HUD line, appended to the status panel.
+func _part_destination(c: Contract) -> String:
+	return "%s at the counter" % c.client if c != null and c.walk_in else "the packing table"
+
+## Held-part hints follow the same station priority as _try_interact.
 func _grab_prompt_line() -> String:
 	if held != null:
 		if _is_held_part():
 			var mi := _machine_for_part(held)
+			var m: Dictionary = _machine(mi) if mi >= 0 else {}
+			var c: Contract = m.get("contract")
+			if _near_finishing():
+				return "[E] Already vapor-smoothed" if bool(m.get("finished")) else "[E] Vapor-smooth part"
+			if _near_shelf():
+				return "[E] Showcase a copy (keep the original)"
+			if c != null and c.walk_in and _near_counter():
+				return "[E] Hand over to %s at the counter" % c.client
 			if _near_packing_station():
-				return "[E] Scrap this part" if (mi >= 0 and bool(_machine(mi).get("scrap"))) \
-					else "[E] Pack & deliver"
-			return "Carry it to the packing table ([E] sets it down)"
+				if bool(m.get("scrap")):
+					return "[E] Scrap this part"
+				if c != null and c.walk_in:
+					return "Take it to %s — counter orders cannot be packed here" % _part_destination(c)
+				return "[E] Pack & deliver"
+			return "Carry it to %s ([E] sets it down)" % _part_destination(c)
 		if _is_held_spool() and _printer_index_near() >= 0:
 			return "[E] Load spool into Printer %d" % (_printer_index_near() + 1)
 		if _is_held_spool():
