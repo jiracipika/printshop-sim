@@ -100,12 +100,12 @@ func _run() -> void:
 
 	# 7. Version sha format on the label (Alpha <ver> Git: <sha>).
 	var sha_re := RegEx.new()
-	sha_re.compile("^Alpha [0-9.]+ Git: [0-9a-f]+$")
+	sha_re.compile("^Alpha [0-9.]+( Git: [0-9a-f]+(-dirty)?)?$")
 	# NOTE: autoloads are not registered in --script mode (known artifact),
 	# so compare the menu label against Version's format logic via the same
 	# regex only — the autoload identity is covered in the running game.
 	_ok(sha_re.search(ver.text) != null,
-		"version label matches 'Alpha x.y Git: sha'")
+		"version label supports source-only and stamped export identities")
 
 	# 8. Quit button hidden when web feature is simulated (menu has a test seam).
 	menu.simulate_web = true

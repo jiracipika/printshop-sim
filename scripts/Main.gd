@@ -2540,23 +2540,20 @@ func _try_place() -> bool:
 	sfx.play("place")
 	return true
 
-## E / touch Interact: grab when empty-handed, place when holding.
-## Falls through to printer interaction when empty-handed and nothing
-## grabbable is targeted (desktop pointer-lock / touch-active gating lives
-## in _try_interact; the key path is only reachable while unpaused).
+## One dispatcher for E, touch Interact and gamepad A. Held items use the
+## station actions before placement; empty hands retain aimed-grab priority.
+func _gameplay_input_active() -> bool:
+	return not paused and (get_mouse_locked() or (touch_controls.effective_enabled()
+		and touch_controls.is_motion_enabled()) or _has_gamepad())
+
+func _has_gamepad() -> bool:
+	return not Input.get_connected_joypads().is_empty()
+
 func _try_grab_or_place() -> void:
-	if paused:
+	if not _gameplay_input_active():
 		return
 	if held != null:
-		# Delivering beats placing: a held part at the packing table goes
-		# through the interact path (pack / scrap), never drops on the spot.
-		# The counter (v0.59.0) joins the carve-out: a walk-in's part is
-		# handed over there; board parts fall through _try_interact to the
-		# same place action they had before.
-		if _is_held_part() and (_near_packing_station() or _near_counter()):
-			_try_interact()
-			return
-		_try_place()
+		_try_interact()
 		return
 	if not _try_grab():
 		_try_interact()
@@ -2689,6 +2686,7 @@ func _build_hud() -> void:
 	# Mobile touch overlay (visibility follows effective_enabled()).
 	touch_controls = TouchControls.new()
 	touch_controls.interact_pressed.connect(_on_touch_interact)
+	touch_controls.rotate_pressed.connect(_cycle_prep)
 	touch_controls.pause_requested.connect(_on_touch_pause)
 	touch_controls.resume_requested.connect(_on_touch_resume)
 	add_child(touch_controls)
@@ -2814,6 +2812,8 @@ func _unhandled_input(event: InputEvent) -> void:
 			_route_escape()
 		elif event.physical_keycode == KEY_E:
 			_try_grab_or_place()
+		elif event.physical_keycode == KEY_R:
+			_cycle_prep()
 		elif event.physical_keycode == KEY_F2:
 			_toggle_photo_mode()
 	elif event is InputEventJoypadButton and event.pressed:
@@ -2823,6 +2823,8 @@ func _unhandled_input(event: InputEvent) -> void:
 		match event.button_index:
 			JOY_BUTTON_A:
 				_try_grab_or_place()
+			JOY_BUTTON_X:
+				_cycle_prep()
 			JOY_BUTTON_B:
 				_route_escape()
 			JOY_BUTTON_Y:
@@ -2840,9 +2842,9 @@ func _unhandled_input(event: InputEvent) -> void:
 		captured = true
 		paused = false
 		_set_reticle(true)
-		_prompt.text = "WASD move   Mouse look   E interact   Esc release mouse"
+		_prompt.text = "WASD move   Mouse look   E interact   R rotate preview   Esc menu"
 		if Input.get_connected_joypads().size() > 0:
-			_prompt.text += "   ·   Gamepad: stick move/look, A interact, Start menu"
+			_prompt.text += "   ·   Gamepad: stick move/look, A interact, X rotate, Start menu"
 	elif event is InputEventMouseMotion and get_mouse_locked():
 		var mm := event as InputEventMouseMotion
 		var sens := _mouse_sens()
@@ -2921,9 +2923,7 @@ func _physics_process(delta: float) -> void:
 			_prompt.text = ""
 	if _player == null:
 		return
-	var touch_active := touch_controls != null and touch_controls.effective_enabled() and touch_controls.is_motion_enabled()
-	var pad_active := Input.get_connected_joypads().size() > 0
-	if paused or (not get_mouse_locked() and not touch_active and not pad_active):
+	if not _gameplay_input_active():
 		# Paused (Esc/focus loss) or browser took pointer lock away: no
 		# movement, no simulation, and latched inputs are dropped.
 		drop_motion_inputs()
@@ -3734,7 +3734,7 @@ func _collect_on(idx: int) -> bool:
 	if c.is_multi_part() and c.needs_parts() and sim.state != PrintSim.State.DONE_OK:
 		return false
 	if is_instance_valid(m.get("part")):
-		_set_prompt("Grab the printed part and take it to the packing table")
+		_set_prompt("Grab the printed part and take it to %s" % _part_destination(c))
 		return true
 	if held != null:
 		# Both machines can finish at once: the second part waits on the bed
@@ -3768,7 +3768,7 @@ func _collect_on(idx: int) -> bool:
 		_set_prompt("Copy %d of %d printed — take it to the packing table" % [
 			c.parts_packed + 1, c.parts_total])
 	else:
-		_set_prompt("%s printed — take it to the packing table" % c.model_name)
+		_set_prompt("%s printed — take it to %s" % [c.model_name, _part_destination(c)])
 	return true
 
 func _collect_print() -> bool:
@@ -3865,8 +3865,8 @@ func _try_finish_held() -> bool:
 		c.model_name, raw, str(res.grade)])
 	_save_game()
 	sfx.play("upgrade")
-	_set_prompt("Vapor-smoothed: grade %s -> %s. Pack it when ready" % [
-		raw, str(res.grade)])
+	_set_prompt("Vapor-smoothed: grade %s -> %s. Take it to %s" % [
+		raw, str(res.grade), _part_destination(c)])
 	return true
 
 ## payout, advance INSPECTION -> PACKED -> DELIVERED, pay exactly once.
@@ -4174,23 +4174,51 @@ func _write_prep_to_sim(eval: Dictionary, idx: int) -> void:
 func _write_prep_to_sim_focus(eval: Dictionary) -> void:
 	_write_prep_to_sim(eval, _focus)
 
-## E while a machine's contract is PREPARING: first press previews an
-## orientation, second press confirms (charges materials, starts the print).
-## An invalid preview (e.g. flat side on a stability part) can't be confirmed —
-## E cycles on instead. Insufficient funds returns the job to the board.
+## Rotate and confirm share an eligible nearby machine, never a stale _focus.
+func _prep_target() -> int:
+	if not _gameplay_input_active() or held != null:
+		return -1
+	if _near_counter() or _near_crate() or _near_radio() \
+			or _current_grabbable() != null or _aimed_design_computer():
+		return -1
+	var idx := _printer_index_near()
+	if idx < 0 or not upgrades.machine_unlocked(idx):
+		return -1
+	var m := _machine(idx)
+	var c: Contract = m.get("contract")
+	return idx if c != null and c.state == Contract.State.PREPARING \
+		and m.get("sim").state == PrintSim.State.IDLE else -1
+
+func _cycle_prep() -> void:
+	var idx := _prep_target()
+	if idx < 0:
+		return
+	var m := _machine(idx)
+	m["orient"] = (int(m.get("orient")) + 1) % PrepSystem.orientations().size()
+	m["orient_pending"] = true
+	_focus = idx
+	_show_prep_preview_for(idx)
+
+func _prep_controls_hint(valid: bool = true) -> String:
+	if touch_controls.effective_enabled():
+		return "Interact confirm · Rotate" if valid else "Rotate to choose another orientation"
+	if _has_gamepad():
+		return "[A] Confirm · [X] Rotate" if valid else "[X] Rotate to choose another orientation"
+	return "[E] Confirm · [R] Rotate" if valid else "[R] Rotate to choose another orientation"
+
+## E previews the current selection (upright on accept), then confirms it.
+## Only Rotate changes orientation; rejected confirmation never changes stock.
 func _prep_on(idx: int) -> void:
 	var m := _machine(idx)
 	var c: Contract = m.get("contract")
 	if c == null or c.state != Contract.State.PREPARING:
 		return
 	if not bool(m.get("orient_pending")):
-		m["orient"] = (int(m.get("orient")) + 1) % PrepSystem.orientations().size()
 		m["orient_pending"] = true
 		_show_prep_preview_for(idx)
 		return
 	var eval := _prep_eval(c, _orientation_name_for(idx))
 	if not eval.get("valid", false):
-		m["orient"] = (int(m.get("orient")) + 1) % PrepSystem.orientations().size()
 		_show_prep_preview_for(idx)
 		return
 	# Filament is the material: the print consumes the prep estimate from the
@@ -4232,11 +4260,11 @@ func _show_prep_preview_for(idx: int) -> void:
 	var orient := _orientation_name_for(idx)
 	var eval := _prep_eval(c, orient)
 	if not eval.get("valid", false):
-		_set_prompt("%s: %s — [E] cycle" % [orient, eval.reason])
+		_set_prompt("%s: %s — %s" % [orient, eval.reason, _prep_controls_hint(false)])
 		return
-	_set_prompt("%s: %d%% supports, ~%dg, risk %s — [E] cycle, [E] again to confirm" % [
+	_set_prompt("%s: %d%% supports, ~%dg, risk %s — %s" % [
 		orient, roundi(float(eval.support_need) * 100.0),
-		int(eval.estimated_material_g), PrepSystem.risk_level(eval)])
+		int(eval.estimated_material_g), PrepSystem.risk_level(eval), _prep_controls_hint()])
 	if debug_panel != null:
 		debug_panel.orientation_in_use = orient
 
@@ -4517,11 +4545,8 @@ func _cents_str(cents: int) -> String:
 	return "%d.%02d" % [cents / 100, absi(cents) % 100]
 
 func _try_interact() -> void:
-	if paused:
-		return
-	# Desktop requires pointer lock; mobile requires touch motion active
-	# (resume state). Either gameplay-active path may interact.
-	if not get_mouse_locked() and not touch_controls.is_motion_enabled():
+	# Match movement's active-input gate, including gamepad-only play.
+	if not _gameplay_input_active():
 		return
 	# Holding a part at the finishing bench (v0.34.0): one vapor-smooth
 	# pass per part, bumping its grade one letter before it is packed.
@@ -4639,13 +4664,6 @@ func _try_interact() -> void:
 	if _aimed_design_computer():
 		_open_design_studio()
 		return
-	# Near the packing table without the part in hand: nudge, don't act.
-	for m in machines:
-		var c: Contract = m.get("contract")
-		if c != null and c.state == Contract.State.INSPECTION \
-				and is_instance_valid(m.get("part")):
-			_set_prompt("The printed part is by the printer — bring it here")
-			return
 	var printer := _nearest_printer()
 	if printer == null:
 		return
@@ -4684,15 +4702,29 @@ func _try_interact() -> void:
 		return
 	_accept_on(_focus)
 
-## Contextual grab/place HUD line, appended to the status panel.
+func _part_destination(c: Contract) -> String:
+	return "%s at the counter" % c.client if c != null and c.walk_in else "the packing table"
+
+## Held-part hints follow the same station priority as _try_interact.
 func _grab_prompt_line() -> String:
 	if held != null:
 		if _is_held_part():
 			var mi := _machine_for_part(held)
+			var m: Dictionary = _machine(mi) if mi >= 0 else {}
+			var c: Contract = m.get("contract")
+			if _near_finishing():
+				return "[E] Already vapor-smoothed" if bool(m.get("finished")) else "[E] Vapor-smooth part"
+			if _near_shelf():
+				return "[E] Showcase a copy (keep the original)"
+			if c != null and c.walk_in and _near_counter():
+				return "[E] Hand over to %s at the counter" % c.client
 			if _near_packing_station():
-				return "[E] Scrap this part" if (mi >= 0 and bool(_machine(mi).get("scrap"))) \
-					else "[E] Pack & deliver"
-			return "Carry it to the packing table ([E] sets it down)"
+				if bool(m.get("scrap")):
+					return "[E] Scrap this part"
+				if c != null and c.walk_in:
+					return "Take it to %s — counter orders cannot be packed here" % _part_destination(c)
+				return "[E] Pack & deliver"
+			return "Carry it to %s ([E] sets it down)" % _part_destination(c)
 		if _is_held_spool() and _printer_index_near() >= 0:
 			return "[E] Load spool into Printer %d" % (_printer_index_near() + 1)
 		if _is_held_spool():
@@ -4857,6 +4889,8 @@ func _check_milestone_toasts() -> void:
 
 func _update_hud() -> void:
 	_set_reticle(paused == false)
+	var prep_idx := _prep_target()
+	touch_controls.set_rotate_available(prep_idx >= 0)
 	var lines: Array[String] = []
 	var version_label: String = "Print Shop Sim"
 	if Engine.has_singleton("Version") or get_node_or_null("/root/Version") != null:
@@ -4903,12 +4937,15 @@ func _update_hud() -> void:
 					lines.append("Prep: %s — %d%% supports · ~%dg · risk %s" % [
 						orient, roundi(float(eval.support_need) * 100.0),
 						int(eval.estimated_material_g), PrepSystem.risk_level(eval)])
-					lines.append("[E] Confirm · [E] cycle")
+					if prep_idx == mi:
+						lines.append(_prep_controls_hint())
 				else:
 					lines.append("Prep: %s — %s" % [orient, eval.reason])
-					lines.append("[E] cycle")
+					if prep_idx == mi:
+						lines.append(_prep_controls_hint(false))
 			else:
-				lines.append("Prep: [E] preview orientation")
+				var key := "Interact" if touch_controls.effective_enabled() else ("[A]" if _has_gamepad() else "[E]")
+				lines.append("Prep: %s preview orientation" % key)
 	# Waiting walk-in (v0.59.0): one counter line, ONLY while someone waits —
 	# nothing when the counter is quiet, so bot runs never render it.
 	if _counter_service != null and _counter_service.waiting():

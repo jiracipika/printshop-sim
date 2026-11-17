@@ -1,0 +1,34 @@
+{
+  "date": "2026-11-17",
+  "source_commit": "d04b767b980e8ca58a2d046c661449fe8181fc27",
+  "baseline_commit": "8e24ffc278dfe2ff2afc72155141222fa248906a",
+  "engine": "4.6.3.stable.official.7d41c59c4",
+  "documented_release_engine": "4.7.1",
+  "independent_reviewer": "gpt-6.1-terra",
+  "new_input_suites": {"interaction_dispatch": 30, "prep_controls": 28, "failed_checks": 0},
+  "normal_full_ladder": {
+    "command": "GODOT=/usr/local/bin/godot bash tools/ladder.sh --bots",
+    "total": 80,
+    "initial_failed": ["debug_panel_test", "menu_test"],
+    "reason": "Old assertions required an export SHA in an unstamped source identity.",
+    "corrected_targeted_rerun": {"total": 2, "failed": 0},
+    "single_fresh_80_suite_pass_claimed": false
+  },
+  "normal_bots": {"early_checks": 8, "late_checks": 16, "failures": 0},
+  "fixed_frame_comparison": {
+    "engine_argument": "--fixed-fps 60",
+    "early_curve_rows": 9,
+    "late_curve_rows": 15,
+    "all_rows_identical_to_baseline": true,
+    "early_day_9": {"balance_cents": 175313, "delivered": 17},
+    "late_day_15": {"balance_cents": 624519, "delivered": 74}
+  },
+  "python_build_pipeline": {"passed": 21, "failed": 0},
+  "final_import": {"exit_code": 0, "script_or_parse_errors": 0},
+  "limitations": [
+    "Native diagnostics use 4.6.3 rather than the documented 4.7.1 release engine.",
+    "Existing exit-time ObjectDB/resource warnings remain in old and new suites.",
+    "Gamepad discovery is substituted in one fixture; physical controller input remains unverified.",
+    "No fresh export, deployment, or live browser/device acceptance was performed."
+  ]
+}

@@ -91,9 +91,10 @@ func _run() -> void:
 		"printer ships with a 1500 g spool, untouched before confirm")
 	main._update_hud()
 	_ok("Prep" in main._status.text, "HUD shows prep prompt while PREPARING")
-	main._try_interact()  # first prep press: preview (index advances to tilted)
-	_ok(main.orientation_pending and "tilted" in str(main._prompt.text),
-		"E previews next orientation with estimate")
+	main._try_interact()  # preview the safe default before explicitly rotating
+	_ok(main.orientation_pending and "upright" in str(main._prompt.text),
+		"E previews upright with estimate")
+	main._cycle_prep() # preserve this fixture's intentional tilted risk/material pins
 	_ok(contract.state == Contract.State.PREPARING and not main.sim.is_running(),
 		"preview does not start the print")
 	main._try_interact()  # second prep press: confirm tilted

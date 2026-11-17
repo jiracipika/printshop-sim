@@ -35,6 +35,7 @@ extends CanvasLayer
 ##                                real user touch (a gesture).
 
 signal interact_pressed
+signal rotate_pressed
 signal pause_requested
 signal resume_requested
 
@@ -68,6 +69,9 @@ var _stick_knob: Panel
 var _interact_panel: Panel
 var _pause_panel: Panel
 var _pause_label: Label
+var _rotate_panel: Panel
+var _rotate_rect := Rect2()
+var _rotate_available := false
 
 func _ready() -> void:
 	layer = 3
@@ -105,6 +109,9 @@ func layout_rects(for_size: Vector2, inset_l: float, inset_t: float,
 	var pause := Rect2(
 		Vector2(for_size.x - inset_r - MARGIN - PAUSE_SIZE.x, inset_t + MARGIN),
 		PAUSE_SIZE)
+	var rotate := Rect2(interact.position - Vector2(0, 60), Vector2(96, 48))
+	if rotate.position.y < pause.end.y + 8:
+		rotate.position = interact.position - Vector2(108, 0)
 	var look := Rect2(
 		Vector2(for_size.x * 0.45, inset_t),
 		Vector2(for_size.x * 0.55, for_size.y))
@@ -113,6 +120,7 @@ func layout_rects(for_size: Vector2, inset_l: float, inset_t: float,
 		"stick_region": stick_region,
 		"interact": interact,
 		"pause": pause,
+		"rotate": rotate,
 		"look": look,
 	}
 
@@ -129,6 +137,7 @@ func _relayout() -> void:
 	_stick_region = r.stick_region
 	_interact_rect = r.interact
 	_pause_rect = r.pause
+	_rotate_rect = r.rotate
 	_look_rect = r.look
 
 	if _stick_base != null:
@@ -138,6 +147,8 @@ func _relayout() -> void:
 		_interact_panel.size = _interact_rect.size
 		_pause_panel.position = _pause_rect.position
 		_pause_panel.size = _pause_rect.size
+		_rotate_panel.position = _rotate_rect.position
+		_rotate_panel.size = _rotate_rect.size
 
 ## --- visuals --------------------------------------------------------------
 
@@ -158,6 +169,16 @@ func _build_visuals() -> void:
 	ilabel.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_interact_panel.add_child(ilabel)
 	add_child(_interact_panel)
+	_rotate_panel = _make_panel(Vector2(96, 48), 12, Color(0.13, 0.17, 0.17, 0.75))
+	var rotate_label := Label.new()
+	rotate_label.text = "Rotate"
+	rotate_label.set_anchors_preset(Control.PRESET_FULL_RECT)
+	rotate_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	rotate_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	rotate_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_rotate_panel.add_child(rotate_label)
+	add_child(_rotate_panel)
+	_rotate_panel.visible = false
 
 	_pause_panel = _make_panel(PAUSE_SIZE, 12, Color(0.13, 0.17, 0.17, 0.55))
 	_pause_label = Label.new()
@@ -186,6 +207,7 @@ func _make_panel(size: Vector2, radius: int, bg: Color) -> Panel:
 ## motion off releases every finger and clears the axis and pending look.
 func set_motion_enabled(on: bool) -> void:
 	_motion_enabled = on
+	set_rotate_available(_rotate_available)
 	if _pause_label != null:
 		_pause_label.text = "Pause" if on else "Resume"
 	if not on:
@@ -242,6 +264,14 @@ func look_rect() -> Rect2:
 func interact_rect() -> Rect2:
 	return _interact_rect
 
+func rotate_rect() -> Rect2:
+	return _rotate_rect
+
+func set_rotate_available(on: bool) -> void:
+	_rotate_available = on
+	if _rotate_panel != null:
+		_rotate_panel.visible = on and _motion_enabled
+
 func pause_rect() -> Rect2:
 	return _pause_rect
 
@@ -278,6 +308,9 @@ func _handle_touch(index: int, pos: Vector2, pressed: bool, canceled: bool) -> v
 			_look_finger = -1
 		return
 	# Press: buttons win first so UI touches never start look or motion.
+	if _rotate_available and _motion_enabled and _rotate_rect.has_point(pos):
+		rotate_pressed.emit()
+		return
 	if _interact_rect.has_point(pos):
 		interact_pressed.emit()
 		return
