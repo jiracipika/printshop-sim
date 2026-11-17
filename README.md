@@ -10,6 +10,14 @@ The deployed version may lag local development. Check the in-game version/build 
 
 ## Current Milestone
 
+Source update in PR #4: **v0.63.0 playability repair** (not yet deployed).
+Held spools load through E/touch/gamepad; showcase/finishing actions work through
+normal input; dropped parts no longer block other machines; walk-in guidance
+points to the counter. Preparation previews upright first, with R / gamepad X /
+touch Rotate selecting orientation separately from confirmation. Gamepad-only
+interaction no longer requires mouse capture. See docs/worker-prep-controls.md
+and docs/worker-interaction-dispatch.md for verification and remaining gates.
+
 **Print Shop 3.0 — The Front Counter (v0.61.0)**. The shop has a street
 presence now: a front counter you can actually work, walk-in customers,
 a living shopfront, and a career ladder that pays.
@@ -82,12 +90,16 @@ Pending (human-only):
 ## Controls
 
 Desktop: click to play/capture, WASD to move, mouse to look, E to interact
-(accept job / cycle+confirm orientation / collect part / pack & deliver at the
+(accept job / preview+confirm orientation / collect part / pack & deliver at the
 packing table / grab & place props), Escape for the menu (Contracts, Upgrades,
 Settings), F3 dev panel in debug builds.
 
-Mobile: tap Resume, left stick to move, drag right side to look, Interact for
-everything above, Pause for the menu. Simultaneous movement/look is supported.
+R changes the pending orientation without starting a print (gamepad: X rotates,
+A confirms). Walk-in parts return to the front counter; board jobs go to packing.
+
+Mobile: tap Resume, use the left stick to move and drag the right side to look.
+Rotate changes orientation during preparation; Interact confirms or performs the
+station action; Pause opens the menu. Simultaneous movement/look is supported.
 
 ## Run from scratch
 

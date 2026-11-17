@@ -858,15 +858,15 @@ func _build_howto_panel() -> void:
 	body.name = "Body"
 	body.text = "\nTHE LOOP\n" \
 		+ "1.  Walk to a printer and press E to accept a job from the board.\n" \
-		+ "2.  E previews an orientation (supports, material, risk). E again confirms and starts the print.\n" \
+		+ "2.  E previews upright (supports, material, risk). R rotates the preview; E confirms and prints.\n" \
 		+ "3.  Risky orientations can fail mid-print — clear the bed with E and try a calmer angle.\n" \
 		+ "4.  When the print finishes, E collects the part.\n" \
-		+ "5.  Carry it to the PACKING table and press E to deliver. Grade A pays best; F pays nothing.\n" \
+		+ "5.  Board jobs go to PACKING; walk-in orders go back to the customer at the COUNTER. E delivers.\n" \
 		+ "×2/×3 orders: the payout is per copy — pack each part, then E at the printer prints the next.\n" \
 		+ "\nINPUTS\n" \
-		+ "Mouse + keyboard: WASD move, mouse look, E interact, Esc menu, F2 photo mode.\n" \
-		+ "Touch: left stick to move, right side to look, on-screen interact/pause.\n" \
-		+ "Gamepad: stick/d-pad move, right stick look, A interact, START menu, Y photo.\n" \
+		+ "Mouse + keyboard: WASD move, mouse look, E interact, R rotate preview, Esc menu, F2 photo.\n" \
+		+ "Touch: left stick move, right side look, Interact confirms, Rotate changes orientation, Pause.\n" \
+		+ "Gamepad: stick/d-pad move, right stick look, A interact/confirm, X rotate preview, START menu, Y photo.\n" \
 		+ "\nWATCH THE CLOCK\n" \
 		+ "Days pass (~90 s each). Rent is due every morning — unpaid rent becomes debt.\n" \
 		+ "Deliver late and the client pays half. Two days too late, the job is cancelled.\n" \
@@ -884,7 +884,8 @@ func _build_howto_panel() -> void:
 
 	var controls := Label.new()
 	controls.name = "Controls"
-	controls.text = "Desktop: WASD move · mouse look · E interact · Esc menu        Touch: stick move · drag look · Interact · Pause"
+	controls.text = "Desktop: WASD move · mouse look · E interact · R rotate · Esc menu        Touch: stick move · drag look · Interact · Rotate · Pause"
+	controls.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	controls.add_theme_color_override("font_color", COLOR_MINT)
 	controls.add_theme_font_size_override("font_size", 13)
 	sv.add_child(controls)
