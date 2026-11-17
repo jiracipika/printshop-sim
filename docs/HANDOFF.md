@@ -1,4 +1,34 @@
-# Current handoff — Print Shop 3.0 (in progress; v0.61.0 = slice 4)
+# Current handoff — v0.62.0 baseline; playability repair proposed
+
+## Playability audit (2026-11-17; no gameplay changes)
+
+User requested substantial fixes and features. Audited main commit
+`a74f0ae7ef685cbef356552f796f93cbdecff43f`. The bounded first repair and
+follow-up priorities are in `docs/worker-playability-review.md`.
+
+Verified by source tracing: real E/touch/gamepad input routes held spools
+to placement before the loading branch; finishing/showcase have the same
+dispatch gap outside packing/counter radius overlaps; carry prompts omit
+station-specific actions and misdirect walk-in parts; the dropped-part
+packing nudge is missing its station guard and can block other printers.
+These are proposed fixes, not implemented changes.
+
+Independent diagnostic verification: headless import exited 0; six serial
+suites (grab, input_pause, spool, v034_station, v037, walkin) passed with
+no SCRIPT ERROR/Parse Error. Installed engine is 4.6.3; the documented
+release engine is 4.7.1, so this is diagnostic evidence only. Existing
+station/spool suites bypass real input dispatch in relevant scenarios.
+Live https://printshop-sim.vercel.app/ could not start in this Cloud browser:
+its loader reported missing WebGL2. No browser gameplay, new export, or
+deployment was verified in this session.
+
+Implementation blocker: AGENTS.md requires GLM 5.3 Flash through the user's
+Z.AI coding plan; no matching connected tool or installed coding client is
+available here. Astra completed the design/review. Next action: restore
+that route or obtain an explicit user override before implementation;
+then execute the bounded interaction repair and test actual input entry.
+
+## Previous overhaul handoff (historical)
 
 ## Print Shop 3.0 overhaul (2026-10-30, in progress)
 
