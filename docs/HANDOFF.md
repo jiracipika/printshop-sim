@@ -1,4 +1,52 @@
-# Current handoff — v0.62.0 baseline; playability repair proposed
+# Current handoff — v0.63.0 source repair, not deployed
+
+## Implemented and verified (2026-11-17)
+
+Follow-up PR: https://github.com/jiracipika/printshop-sim/pull/4 . The earlier
+docs-only audit PR #3 was already merged; implementation is on the new
+`fix/printshop-playability` branch. Tested source commit:
+`d04b767b980e8ca58a2d046c661449fe8181fc27`.
+
+User explicitly authorized the session coding model instead of the old GLM
+requirement and then restricted evaluation to GPT-6.1 Terra / GPT-6 Luna.
+AGENTS.md now preserves that preference. GPT-6.1 Terra reviewed both repairs
+and independently ran the new suites (interaction 30/30, preparation 28/28).
+
+Implemented: held spools load through normal E/A/touch input; finishing and
+showcase actions run before placement; a dropped part cannot block another
+printer; walk-in prompts point to the counter. Preparation previews upright
+first, with R / gamepad X / touch Rotate separate from confirmation. Invalid
+previews retain selection, rotation never spends resources, and gamepad-only
+interaction shares movement's active-input gate. Help and source version are
+updated. Source-only GIT_SHA is blank until the export pipeline stamps it.
+
+Verification on available Godot 4.6.3:
+
+- Full normal-pacing ladder including bots: 80 total, 78 passed; only old
+  Git-SHA-required assertions in debug_panel/menu failed. The assertions were
+  corrected for the supported source-only identity; targeted rerun passed 2/2
+  (32 debug checks, 25 menu checks). All 80 unique suite outcomes are covered
+  by that full run plus those reruns; no single fresh 80/80 run is claimed.
+- Both normal-pacing economic bots passed (early 8/8, late 16/16 checks).
+- Additional baseline/current comparison at `--fixed-fps 60`: identical
+  complete day-by-day curves (9 early rows, 15 late rows). Early day 9:
+  $1,753.13 / 17 deliveries; late day 15: $6,245.19 / 74 deliveries.
+- Python build-pipeline tests: 21/21. Final editor import: exit 0, no
+  SCRIPT ERROR/Parse Error. Exit-time ObjectDB/resource warnings also occur
+  in the unchanged economy suite; they remain documented, not resolved.
+
+Details: docs/worker-interaction-dispatch.md, docs/worker-prep-controls.md,
+docs/verification-playability.json. The documented engine/templates are 4.7.1,
+not installed here; all native results above are diagnostics under 4.6.3.
+No export or deployment was attempted. Previous browser startup failed with
+missing WebGL2; live verification was not rerun for a fresh build.
+
+Next: matching-engine export and real browser keyboard/touch/controller
+acceptance before release. Then implement the reviewed first-sale feasibility,
+pre-print cancel/recovery, and shared station targeting slices from the audit.
+No additional permission is needed for the already authorized source work.
+
+## Historical audit — before implementation
 
 ## Playability audit (2026-11-17; no gameplay changes)
 
