@@ -128,11 +128,18 @@ func _run() -> void:
 	_ok(main.get_viewport().gui_get_focus_owner() == null,
 		"closing the menu releases focus")
 
-	# START reopens the menu from play, focusing Play again.
+	# START reopens the menu from play, focusing Play again. The pad START
+	# edge is polled from _physics_process; on 4.7.1 headless, spinning
+	# process frames yields no physics ticks, so this wait must tick physics
+	# frames or the game's poll never runs inside the window.
 	_pad_button(JOY_BUTTON_START, true)
-	var reopened := await _wait_until(func() -> bool:
+	var reopened := false
+	for i in range(8):
 		var f: Control = main.get_viewport().gui_get_focus_owner()
-		return f != null and f.name == "Play", 8)
+		reopened = f != null and f.name == "Play"
+		if reopened:
+			break
+		await physics_frame
 	_pad_button(JOY_BUTTON_START, false)
 	await physics_frame
 	_ok(reopened, "reopened menu focuses Play")
