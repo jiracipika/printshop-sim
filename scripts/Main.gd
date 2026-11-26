@@ -299,6 +299,9 @@ func _on_menu_play() -> void:
 	# Gamepad players resume straight away — no pointer lock involved.
 	main_menu.close_menu()
 	_flush_settings_if_dirty()
+	if touch_controls.effective_enabled():
+		_on_touch_resume()
+		return
 	if Input.get_connected_joypads().size() > 0:
 		paused = false
 		_set_reticle(true)
@@ -2774,6 +2777,8 @@ func _build_hud() -> void:
 	# Menus slice: main menu at boot; gameplay prompt suppressed while open.
 	main_menu = MainMenu.new()
 	add_child(main_menu)
+	main_menu.visibility_changed.connect(_sync_menu_overlays)
+	_sync_menu_overlays()
 	main_menu.play_pressed.connect(_on_menu_play)
 	main_menu.contracts_pressed.connect(_on_menu_contracts)
 	main_menu.reserve_pressed.connect(_on_menu_reserve)
@@ -2810,6 +2815,14 @@ func _build_hud() -> void:
 	_boot_prompt = "Tap Resume to play" if touch_controls.effective_enabled() \
 		else "Click to play"
 	_prompt.text = ""  # suppressed while the main menu is open
+
+func _sync_menu_overlays() -> void:
+	var menu_visible := main_menu.visible
+	touch_controls.menu_open = menu_visible
+	_status.get_parent().visible = not menu_visible
+	_prompt.visible = not menu_visible
+	if menu_visible:
+		_set_reticle(false)
 
 ## Shared HUD panel style (v0.60.0 restyle, design tokens): one StyleBoxFlat
 ## — ink #202B2B ground at ~0.95 opacity, 4 px corners — handed to every HUD
@@ -4986,8 +4999,7 @@ func _update_hud() -> void:
 	touch_controls.set_rotate_available(prep_idx >= 0)
 	var lines: Array[String] = [
 		"Day %d · Balance: $%s" % [day_cycle.day, _cents_str(ledger.balance())],
-		"Rep %s%s %.1f · Today: %s" % ["★".repeat(roundi(reputation)),
-			"☆".repeat(5 - roundi(reputation)), reputation, today_event.name],
+		"Rep %.1f/5 · Today: %s" % [reputation, today_event.name],
 	]
 	if str(season.name) != "":
 		lines.append("This week: %s %s" % [_season_icon(str(season.id)), season.name])
@@ -4995,7 +5007,7 @@ func _update_hud() -> void:
 	if expiring > 0:
 		lines.append("%d expire overnight" % expiring)
 	if not guide_done:
-		lines.append("▸ Objective: %s" % _guide_current())
+		lines.append("Objective: %s" % _guide_current())
 	if rent_debt_cents > 0:
 		lines.append("Unpaid rent: $%s" % _cents_str(rent_debt_cents))
 	for m in machines:

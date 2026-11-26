@@ -42,7 +42,7 @@ func _test_guide_chain() -> void:
 
 	# Boot: nothing done, HUD shows the first objective.
 	main._update_hud()
-	_ok("▸ Objective: Accept a job at a printer" in main._status.text,
+	_ok("Objective: Accept a job at a printer" in main._status.text,
 		"first objective shows at boot")
 
 	# Real loop walk-through advances the chain.
@@ -100,7 +100,7 @@ func _test_guide_chain() -> void:
 	await physics_frame
 	_ok(main2.guide_done, "fresh Main restores the retired guide")
 	main2._update_hud()
-	_ok("▸ Objective" not in main2._status.text, "no objective line after the guide retires")
+	_ok("Objective:" not in main2._status.text, "no objective line after the guide retires")
 	main2.queue_free()
 	await physics_frame
 
