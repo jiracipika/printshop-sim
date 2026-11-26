@@ -2012,7 +2012,7 @@ func _build_props() -> void:
 		ShopArt.poster(Color("#EEE5D3"), Color("#DA623A"), [[0.08, 0.08, 0.92, 0.22]]),
 		Vector3(-ROOM_W / 2.0 + 0.11, 1.7, -0.4), Vector3(0, 90, 0), "MAKE / REPAIR")
 	_add_poster(ShopArt.poster(Color("#EEE5D3"), Color("#738771"), [[0.3, 0.35, 0.7, 0.75]]),
-		Vector3(-0.6, 1.8, -ROOM_D / 2.0 + 0.11), Vector3(0, 0, 0), "PRINT SHOP")
+		Vector3(ROOM_W / 2.0 - 0.11, 1.9, -1.3), Vector3(0, -90, 0), "PRINT SHOP")
 
 	# Wall clock (real system time, ticking minute hand).
 	var clock: Node3D = load("res://scripts/Clock.gd").new()
@@ -2656,12 +2656,7 @@ func _make_printer(idx: int) -> Node3D:
 	root.add_child(visual)
 	_print_visuals.append(visual)
 
-	var label := Label3D.new()
-	label.text = "Printer %d" % (idx + 1)
-	label.position = Vector3(0, 0.85, 0)
-	label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
-	label.modulate = Color(1, 0.85, 0.4)
-	root.add_child(label)
+	root.set_display_name("Printer %d" % (idx + 1))
 	return root
 
 func _build_player() -> void:
@@ -2773,6 +2768,7 @@ func _build_hud() -> void:
 	touch_controls.pause_requested.connect(_on_touch_pause)
 	touch_controls.resume_requested.connect(_on_touch_resume)
 	add_child(touch_controls)
+	_apply_hud_layout()
 
 	# Menus slice: main menu at boot; gameplay prompt suppressed while open.
 	main_menu = MainMenu.new()
@@ -4951,13 +4947,16 @@ func _apply_hud_layout() -> void:
 		return
 	var width := _hud.get_viewport().get_visible_rect().size.x
 	var narrow := width < 500.0
+	var portrait_touch := narrow and touch_controls != null and touch_controls.effective_enabled()
+	_prompt.offset_top = -232.0 if portrait_touch else -64.0
+	_prompt.offset_bottom = -180.0 if portrait_touch else -32.0
 	_status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART if narrow \
 		else TextServer.AUTOWRAP_OFF
 	if narrow:
 		card.set_anchors_preset(Control.PRESET_TOP_WIDE)
 		card.offset_left = 10.0
 		card.offset_right = -10.0
-		card.offset_top = 10.0
+		card.offset_top = 80.0 if portrait_touch else 10.0
 	else:
 		card.set_anchors_preset(Control.PRESET_TOP_LEFT)
 		card.offset_left = 10.0
