@@ -266,6 +266,7 @@ func available_summaries() -> Array[Dictionary]:
 			"client": c.client,
 			"model_name": c.model_name,
 			"payout_cents": c.payout_cents,
+			"material_cost_cents": c.material_cost_cents,
 			"difficulty": c.difficulty,
 			"risk_flags": c.risk_flags,
 			"rush": c.rush,

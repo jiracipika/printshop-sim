@@ -1,4 +1,11 @@
-# Current handoff — v0.63.0 source repair, not deployed
+# Current handoff — v0.64.0 workshop production
+
+See [workshop production](worker-workshop-production.md) for the source changes.
+The previous v0.63.0 source repair and its verification are retained below.
+
+---
+
+# Historical handoff — v0.63.0 source repair
 
 ## Implemented and verified (2026-11-17)
 

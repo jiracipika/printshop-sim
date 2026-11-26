@@ -416,13 +416,13 @@ func _run() -> void:
 	var hud_kept: bool = str(main._status.text).contains("Balance: $") \
 		and str(main._status.text).contains("Day ")
 	_ok(sb is StyleBoxFlat and sb.bg_color == Color(0.125, 0.169, 0.169, 0.95) \
-		and sb.corner_radius_top_left == 4 and sb == main._hud_panel_style(),
-		"the status card wears the shared ink StyleBoxFlat (0.95 opacity, radius 4)")
-	_ok(main._prompt.get_theme_color("font_color") == Color("#DA623B") \
+		and sb.corner_radius_top_left == 12 and sb == main._hud_panel_style(),
+		"the status card wears the shared ink StyleBoxFlat (0.95 opacity, radius 12)")
+	_ok(main._prompt.get_theme_color("font_color") == Color("#FFE0A1") \
 		and main._toast.get_theme_color("font_color") == Color("#F5CE80") \
 		and texts_kept and hud_kept \
-		and load("res://scripts/Version.gd").VERSION == "0.63.0",
-		"prompt is clay, toast is gold, label texts and version are unchanged")
+		and load("res://scripts/Version.gd").VERSION == "0.64.0",
+		"prompt and toast use the workshop accents and the build version is current")
 
 	# --- I. v020 budget with a walk-in active ----------------------------------------
 	var acc_day := -1

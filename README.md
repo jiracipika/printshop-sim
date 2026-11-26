@@ -10,13 +10,11 @@ The deployed version may lag local development. Check the in-game version/build 
 
 ## Current Milestone
 
-Source update in PR #4: **v0.63.0 playability repair** (not yet deployed).
-Held spools load through E/touch/gamepad; showcase/finishing actions work through
-normal input; dropped parts no longer block other machines; walk-in guidance
-points to the counter. Preparation previews upright first, with R / gamepad X /
-touch Rotate selecting orientation separately from confirmation. Gamepad-only
-interaction no longer requires mouse capture. See docs/worker-prep-controls.md
-and docs/worker-interaction-dispatch.md for verification and remaining gates.
+**Workshop production (v0.64.0).** Open Production from the pause menu to see
+printer progress, filament, deadlines, and the shop forecast. You can release an
+unstarted board order for a 0.1 reputation cost. Contract cards show material
+charges per part, and print preparation explains stock and cash shortfalls.
+The workshop palette, title menu, and browser layout have also been refreshed.
 
 **Print Shop 3.0 — The Front Counter (v0.61.0)**. The shop has a street
 presence now: a front counter you can actually work, walk-in customers,

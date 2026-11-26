@@ -29,7 +29,6 @@ static func rent_for_day(day: int) -> int:
 ## the prep estimate, failed clears salvage half back. New spools come from
 ## the crate by the shelf.
 const SPOOL_G := 1500
-const SPOOL_PRICE_CENTS := 1200
 const CRATE_POS := Vector3(-3.0, 0.0, 1.4)  # supplies corner, clear of the printers
 ## The shop radio sits on the lower spool shelf (v0.16.0). Hardcoded
 ## (-ROOM_W / 2 + 0.2) because consts can't forward-reference ROOM_W here.
@@ -405,6 +404,16 @@ func _on_menu_stats() -> void:
 ## tomorrow's forecast -- the strategic morning read.
 func _on_menu_today() -> void:
 	var lines: Array[String] = []
+	var releasable: Array[Dictionary] = []
+	for m in machines:
+		var idx := int(m.idx)
+		if not upgrades.machine_unlocked(idx):
+			continue
+		lines.append(_production_line(m))
+		var c: Contract = m.get("contract")
+		if c != null and _can_release_order(m):
+			releasable.append({"idx": idx, "model": c.model_name})
+	lines.append("")
 	if daily_earned.is_empty():
 		lines.append("Yesterday: the shop just opened.")
 	else:
@@ -430,6 +439,9 @@ func _on_menu_today() -> void:
 				lines.append("Log: " + ", ".join(bits))
 	lines.append("")
 	lines.append("TODAY -- Day %d" % day_cycle.day)
+	lines.append("Rent $%s · Spools $%s" % [
+		_cents_str(rent_for_day(day_cycle.day) + int(season.extra_rent_cents)),
+		_cents_str(int(today_event.spool_price_cents))])
 	lines.append(str(today_event.name))
 	if float(today_event.failure_delta) != 0.0:
 		lines.append("  risk %+.2f on every print" % float(today_event.failure_delta))
@@ -444,7 +456,64 @@ func _on_menu_today() -> void:
 	if int((day_cycle.day - 1) / 7.0) != int(day_cycle.day / 7.0):
 		var wk := int(day_cycle.day / 7.0) + 1
 		lines.append("  A new week begins: %s" % str(Events.season_for_week(wk).name))
-	main_menu.show_today(lines)
+	main_menu.show_today(lines, releasable)
+
+func _can_release_order(m: Dictionary) -> bool:
+	var c: Contract = m.get("contract")
+	var sim: PrintSim = m.get("sim")
+	return c != null and not c.walk_in and c.state == Contract.State.PREPARING \
+		and c.parts_packed == 0 and int(m.get("last_est_g", 0)) == 0 \
+		and sim.state == PrintSim.State.IDLE
+
+func _on_menu_release_order(idx: int) -> void:
+	if not main_menu.production_visible() or idx < 0 or idx >= machines.size():
+		return
+	var m := _machine(idx)
+	if not _can_release_order(m):
+		return
+	var c: Contract = m.contract
+	if not _advance(c, Contract.State.FAILED):
+		return
+	m["contract"] = null
+	m["orient_pending"] = false
+	m["orient"] = 0
+	stats.cancelled += 1
+	_rep_event(-0.1)
+	_log_event("cancel", "%s released before printing on Printer %d" % [c.model_name, idx + 1])
+	_save_game()
+	_on_menu_today()
+
+func _production_line(m: Dictionary) -> String:
+	var sim: PrintSim = m.get("sim")
+	var c: Contract = m.get("contract")
+	var title := "Printer %d" % (int(m.idx) + 1)
+	var stock := "%dg %s" % [int(m.filament_g), str(m.color)]
+	var wear := int(m.get("wear", 0))
+	if wear >= 50:
+		stock += " · %d%% wear" % wear
+	var state := "Ready"
+	match sim.state:
+		PrintSim.State.RUNNING:
+			state = "%s · %s %d%%" % [sim.model_name,
+				Contract.state_name(c.state) if c != null else "Printing", roundi(sim.progress() * 100.0)]
+		PrintSim.State.DONE_OK:
+			state = "%s · [E] collect the part" % sim.model_name
+		PrintSim.State.DONE_FAIL:
+			state = "FAILED · clear the bed"
+		_:
+			if c != null:
+				state = "%s · %s" % [c.model_name, Contract.state_name(c.state)]
+			elif float(m.get("clean_left_s", 0.0)) > 0.0:
+				state = "Cleaning"
+	var due := ""
+	if c != null:
+		var days := _days_remaining_for(m)
+		due = " · late (half pay)" if days < 0 else " · due %s" % ("today" if days == 0 else "in %dd" % days)
+		if c.color != "":
+			due += " · wants %s" % c.color
+		if c.is_multi_part():
+			due += " · parts %d/%d packed" % [c.parts_packed, c.parts_total]
+	return "%s  %s · Filament %s%s" % [title, state, stock.strip_edges(), due]
 
 ## Workshop log panel (v0.15.0): the ring buffer, oldest first.
 func _on_menu_log() -> void:
@@ -1102,10 +1171,10 @@ func _build_world() -> void:
 	# Palette materials (sage / honey / dark steel / terracotta), dressed with
 	# runtime-procedural textures (task 12 art pass). Albedo goes white so the
 	# texture carries the palette color exactly once.
-	var sage_col := Color("#738771")
-	var honey_col := Color("#C3A076")
-	var steel_col := Color("#202B2B")
-	var terra_col := Color("#AD5F3D")  # floor: slightly deeper than the accent
+	var sage_col := Color("#829F96")
+	var honey_col := Color("#D6AB75")
+	var steel_col := Color("#223A39")
+	var floor_tile_color := Color("#58625D")
 
 	var sage := StandardMaterial3D.new()
 	sage.albedo_color = Color.WHITE
@@ -1121,18 +1190,18 @@ func _build_world() -> void:
 	steel.roughness = 0.45
 	steel.metallic = 0.4
 	var terracotta := StandardMaterial3D.new()
-	terracotta.albedo_color = Color("#DA623A")  # painted accent, untextured
+	terracotta.albedo_color = Color("#9A4B29")  # painted accent, untextured
 	terracotta.roughness = 0.55
 	var floor_mat := StandardMaterial3D.new()
 	floor_mat.albedo_color = Color.WHITE
-	floor_mat.albedo_texture = ShopArt.floor_tiles(terra_col, 4, 512)
+	floor_mat.albedo_texture = ShopArt.floor_tiles(floor_tile_color, 4, 512)
 	floor_mat.roughness = 0.9
 	world = {"sage": sage, "honey": honey, "steel": steel, "terracotta": terracotta,
 		"floor": floor_mat}
 
 	_build_environment()
 
-	# Floor: terracotta tile slab 7x6 m.
+	# Charcoal stone tile floor.
 	var floor_mesh := MeshInstance3D.new()
 	var floor_box := BoxMesh.new()
 	floor_box.size = Vector3(ROOM_W, 0.2, ROOM_D)
@@ -1226,6 +1295,14 @@ func _build_world() -> void:
 	bench_body.position = Vector3(0, 0.5, 0)
 	bench.add_child(bench_body)
 	add_child(bench)
+	var bench_sign := Label3D.new()
+	bench_sign.text = "P R O D U C T I O N"
+	bench_sign.font_size = 44
+	bench_sign.pixel_size = 0.002
+	bench_sign.outline_size = 0
+	bench_sign.modulate = Color("#FFE3AF")
+	bench_sign.position = Vector3(0, 0.79, 0.48)
+	bench.add_child(bench_sign)
 
 	# Lights: warm sun + ceiling omnis over the work lanes.
 	var sun := DirectionalLight3D.new()
@@ -2639,11 +2716,14 @@ func _build_hud() -> void:
 	_prompt.offset_top = -64
 	_prompt.offset_bottom = -32
 	_prompt.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_prompt.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_prompt.offset_left = 16
+	_prompt.offset_right = -16
 	_prompt.add_theme_font_size_override("font_size", 18)
 	# v0.60.0 restyle: fired-clay accent (the prompt IS the accent bar of the
 	# bottom strip — no new nodes allowed, so the clay color carries it) on an
 	# ink outline for contrast over the workshop.
-	_prompt.add_theme_color_override("font_color", Color("#DA623B"))
+	_prompt.add_theme_color_override("font_color", Color("#FFE0A1"))
 	_prompt.add_theme_color_override("font_outline_color", Color(0.125, 0.169, 0.169, 0.9))
 	_prompt.add_theme_constant_override("outline_size", 4)
 	_prompt.text = "Click to play"
@@ -2707,6 +2787,7 @@ func _build_hud() -> void:
 	main_menu.stats_pressed.connect(_on_menu_stats)
 	main_menu.log_pressed.connect(_on_menu_log)
 	main_menu.today_pressed.connect(_on_menu_today)
+	main_menu.release_order_pressed.connect(_on_menu_release_order)
 	main_menu.reset_requested.connect(request_reset_shop)
 	main_menu.reset_disarmed.connect(func() -> void:
 		_reset_armed = false
@@ -2739,7 +2820,9 @@ func _hud_panel_style() -> StyleBoxFlat:
 	if _hud_style == null:
 		var sb := StyleBoxFlat.new()
 		sb.bg_color = Color(0.125, 0.169, 0.169, 0.95)  # ink #202B2B @ 0.95
-		sb.set_corner_radius_all(4)
+		sb.set_corner_radius_all(12)
+		sb.border_color = Color("#54716C")
+		sb.set_border_width_all(1)
 		sb.content_margin_left = 10.0
 		sb.content_margin_right = 12.0
 		sb.content_margin_top = 6.0
@@ -4227,7 +4310,7 @@ func _prep_on(idx: int) -> void:
 	if int(m.get("filament_g")) < est_g:
 		m["orient_pending"] = true
 		_set_prompt("Printer %d needs %dg of filament — load a spool ($%s at the crate)" % [
-			idx + 1, est_g, _cents_str(SPOOL_PRICE_CENTS)])
+			idx + 1, est_g, _cents_str(int(today_event.spool_price_cents))])
 		return
 	if not ledger.can_afford(c.material_cost_cents):
 		m["orient_pending"] = true
@@ -4262,9 +4345,18 @@ func _show_prep_preview_for(idx: int) -> void:
 	if not eval.get("valid", false):
 		_set_prompt("%s: %s — %s" % [orient, eval.reason, _prep_controls_hint(false)])
 		return
+	var cost := c.material_cost_cents
+	var grams := int(eval.estimated_material_g)
+	var stock := int(m.get("filament_g"))
+	var action := _prep_controls_hint()
+	if stock < grams:
+		action = "Load %dg more · crate spools $%s" % [
+			grams - stock, _cents_str(int(today_event.spool_price_cents))]
+	elif not ledger.can_afford(cost):
+		action = "Materials cost $%s · balance $%s" % [_cents_str(cost), _cents_str(ledger.balance())]
 	_set_prompt("%s: %d%% supports, ~%dg, risk %s — %s" % [
 		orient, roundi(float(eval.support_need) * 100.0),
-		int(eval.estimated_material_g), PrepSystem.risk_level(eval), _prep_controls_hint()])
+		grams, PrepSystem.risk_level(eval), action])
 	if debug_panel != null:
 		debug_panel.orientation_in_use = orient
 
@@ -4302,6 +4394,7 @@ func _accept_on(idx: int) -> void:
 		job_board.put_back(job)
 		return
 	m["contract"] = job
+	m["last_est_g"] = 0
 	m["day"] = day_cycle.day
 	job.parts_packed = 0
 	job.copy_grades = []
@@ -4796,7 +4889,7 @@ func _on_design_test_print(design: Dictionary) -> void:
 	var m: Dictionary = _machine(idx)
 	if int(m.get("filament_g")) < grams:
 		design_studio.show_feedback("Printer %d needs %dg of filament — load a spool ($%s at the crate), then try again." % [
-			idx + 1, grams, _cents_str(SPOOL_PRICE_CENTS)])
+			idx + 1, grams, _cents_str(int(today_event.spool_price_cents))])
 		return
 	m.prototype = d.duplicate(true)
 	m.filament_g = int(m.get("filament_g")) - grams
@@ -4891,121 +4984,63 @@ func _update_hud() -> void:
 	_set_reticle(paused == false)
 	var prep_idx := _prep_target()
 	touch_controls.set_rotate_available(prep_idx >= 0)
-	var lines: Array[String] = []
-	var version_label: String = "Print Shop Sim"
-	if Engine.has_singleton("Version") or get_node_or_null("/root/Version") != null:
-		version_label = get_node("/root/Version").label()
-	lines.append(version_label)
-	if ledger != null:
-		lines.append("Balance: $%s" % _cents_str(ledger.balance()))
-	var today_rent := rent_for_day(day_cycle.day) + int(season.extra_rent_cents)
-	lines.append("Day %d — rent $%s/day" % [day_cycle.day, _cents_str(today_rent)])
-	lines.append("Today: %s" % today_event.name)
+	var lines: Array[String] = [
+		"Day %d · Balance: $%s" % [day_cycle.day, _cents_str(ledger.balance())],
+		"Rep %s%s %.1f · Today: %s" % ["★".repeat(roundi(reputation)),
+			"☆".repeat(5 - roundi(reputation)), reputation, today_event.name],
+	]
 	if str(season.name) != "":
-		lines.append("This week: %s %s" % [_season_icon(str(season.get("id", "calm"))), season.name])
+		lines.append("This week: %s %s" % [_season_icon(str(season.id)), season.name])
+	var expiring := int(job_board.expiring_count(day_cycle.day + 1))
+	if expiring > 0:
+		lines.append("%d expire overnight" % expiring)
 	if not guide_done:
 		lines.append("▸ Objective: %s" % _guide_current())
 	if rent_debt_cents > 0:
 		lines.append("Unpaid rent: $%s" % _cents_str(rent_debt_cents))
-	var stars := ""
-	for i in range(5):
-		stars += "★" if i < roundi(reputation) else "☆"
-	lines.append("Rep %s %.1f  (payout x%.2f)" % [stars, reputation, reputation_multiplier()])
-	# One contract/prep block per machine (v0.3.0: both can hold jobs).
 	for m in machines:
-		var c: Contract = m.get("contract")
-		if c == null:
-			continue
-		var mi := int(m.get("idx"))
-		var tag := "" if mi == 0 else " · Printer %d" % (mi + 1)
-		var due := _days_remaining_for(m)
-		var due_text := "due in %dd" % due if due >= 0 else "LATE — half pay"
-		var want: String = c.color
-		var parts_txt := " · parts %d/%d" % [c.parts_packed, c.parts_total] \
-			if c.is_multi_part() else ""
-		lines.append("Contract %s — %s [%s] pays $%s · %s%s%s%s" % [
-			c.id, c.model_name, Contract.state_name(c.state),
-			_cents_str(c.payout_cents), due_text, tag,
-			parts_txt,
-			"" if want == "" else " · wants %s" % want,
-		])
-		if c.state == Contract.State.PREPARING:
-			var orient := _orientation_name_for(mi)
-			if bool(m.get("orient_pending")):
-				var eval := _prep_eval(c, orient)
-				if eval.get("valid", false):
-					lines.append("Prep: %s — %d%% supports · ~%dg · risk %s" % [
-						orient, roundi(float(eval.support_need) * 100.0),
-						int(eval.estimated_material_g), PrepSystem.risk_level(eval)])
-					if prep_idx == mi:
-						lines.append(_prep_controls_hint())
-				else:
-					lines.append("Prep: %s — %s" % [orient, eval.reason])
-					if prep_idx == mi:
-						lines.append(_prep_controls_hint(false))
+		if upgrades.machine_unlocked(int(m.idx)):
+			lines.append(_production_line(m))
+	if paused or prep_idx < 0:
+		var focused: Contract = _machine(_focus).get("contract")
+		if focused != null and focused.state == Contract.State.PREPARING:
+			lines.append("Prep · choose an orientation at Printer %d" % (_focus + 1))
+	else:
+		var prep_machine := _machine(prep_idx)
+		var orient := _orientation_name_for(prep_idx)
+		if bool(prep_machine.get("orient_pending")):
+			var print_plan := _prep_eval(prep_machine.contract, orient)
+			if print_plan.valid:
+				lines.append("Prep · %s · %dg · %d%% supports · %s risk" % [
+					orient.capitalize(), int(print_plan.estimated_material_g),
+					roundi(float(print_plan.support_need) * 100.0), PrepSystem.risk_level(print_plan)])
+				lines.append(_prep_controls_hint())
 			else:
-				var key := "Interact" if touch_controls.effective_enabled() else ("[A]" if _has_gamepad() else "[E]")
-				lines.append("Prep: %s preview orientation" % key)
-	# Waiting walk-in (v0.59.0): one counter line, ONLY while someone waits —
-	# nothing when the counter is quiet, so bot runs never render it.
+				lines.append("%s · %s" % [orient.capitalize(), print_plan.reason])
+				lines.append(_prep_controls_hint(false))
+		else:
+			lines.append("Prep · preview an orientation")
 	if _counter_service != null and _counter_service.waiting():
-		var wu: Dictionary = _counter_service.state
-		var wuc: Contract = wu.get("contract")
-		if wuc != null:
-			var wsecs := ceili(CounterService.patience_left_s(wu, day_cycle.day,
-				day_cycle.t, day_cycle.day_length_s))
-			lines.append("Counter: %s — %s (%ds)" % [
-				str(wu.get("client", "")), wuc.model_name, wsecs])
-	var expiring: int = job_board.expiring_count(day_cycle.day + 1)
-	lines.append("Jobs waiting: %d%s" % [job_board.get_available_count(),
-		"" if expiring == 0 else "  · %d expire overnight" % expiring])
-	var fil_bits: Array[String] = []
-	for m in machines:
-		var fg := int(m.get("filament_g"))
-		var col: String = str(m.get("color", ""))
-		var wear := int(float(m.get("wear", 0.0)))
-		fil_bits.append("P%d %dg %s%s" % [int(m.get("idx")) + 1, fg,
-			col if col != "" else "—", " ⚠%d%%" % wear if wear >= 50 else ""])
-	lines.append("Filament — " + " · ".join(fil_bits))
-	# Focused machine's action line, then per-machine print progress.
-	var fm := _machine(_focus)
-	var fs: PrintSim = fm.get("sim")
-	var fc: Contract = fm.get("contract")
-	var fclean := float(fm.get("clean_left_s", 0.0))
-	if fclean > 0.0:
-		lines.append("Cleaning Printer %d — %ds left" % [_focus + 1, ceili(fclean)])
-	elif fs.state == PrintSim.State.IDLE and fc == null \
-			and float(fm.get("wear", 0.0)) >= 50.0:
-		lines.append("[E] Clean printer (%d%% wear)" % int(float(fm.get("wear", 0.0))))
-	if fs.state == PrintSim.State.IDLE and (fc == null or fc.state != Contract.State.PREPARING):
-		var p := _nearest_printer()
-		if p != null and job_board.has_available():
-			if fc == null:
-				lines.append("[E] Accept job")
-			else:
-				lines.append("[E] Start print job")
-	for m in machines:
-		var s: PrintSim = m.get("sim")
-		var mi := int(m.get("idx"))
-		var prefix := "" if mi == 0 else "Printer %d — " % (mi + 1)
-		match s.state:
-			PrintSim.State.RUNNING:
-				lines.append("%sPrinting %s — layer %d/%d  %.0f%%" % [
-					prefix, s.model_name, s.layers_done, s.layers_total, s.progress() * 100.0])
-				lines.append("Material: %d g   Risks: %s" % [s.material_used_g(), str(s.current_risks())])
-			PrintSim.State.DONE_OK:
-				var c2: Contract = m.get("contract")
-				if c2 != null and c2.state == Contract.State.INSPECTION:
-					lines.append("%sPrint complete — [E] collect the part" % prefix)
-				elif not m.get("prototype", {}).is_empty():
-					lines.append("%sPrototype complete — [E] collect it" % prefix)
-				elif mi != 0:
-					lines.append("%sPrint complete!" % prefix)
-			PrintSim.State.DONE_FAIL:
-				lines.append("%sPrint FAILED — [E] clear the bed, then take a new job" % prefix)
+		var walk_in: Dictionary = _counter_service.state
+		var seconds := ceili(CounterService.patience_left_s(walk_in, day_cycle.day,
+			day_cycle.t, day_cycle.day_length_s))
+		var ticket: Contract = walk_in.get("contract")
+		if ticket != null:
+			lines.append("Counter: %s · %s (%ds)" % [ticket.client, ticket.model_name, seconds])
 	var grab_line := _grab_prompt_line()
 	if grab_line != "":
 		lines.append(grab_line)
+	elif prep_idx < 0 and held == null and not _near_counter() and not _near_radio() \
+			and not _near_crate() and not _aimed_design_computer():
+		var nearest := _printer_index_near()
+		if nearest >= 0 and upgrades.machine_unlocked(nearest):
+			var m := _machine(nearest)
+			var sim: PrintSim = m.sim
+			if sim.state == PrintSim.State.IDLE and m.contract == null:
+				var action := "Clean printer" if float(m.wear) >= 50.0 else "Accept job"
+				var key := "Interact" if touch_controls.effective_enabled() else ("[A]" if _has_gamepad() else "[E]")
+				if float(m.clean_left_s) <= 0.0:
+					lines.append("%s %s" % [key, action])
 	_status.text = "\n".join(lines)
 	_check_milestone_toasts()
 	_update_chalkboard()

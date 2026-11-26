@@ -37,7 +37,7 @@ func _run() -> void:
 	main._on_menu_today()
 	await physics_frame
 	_ok(main.main_menu._today_panel.visible, "Today panel opens")
-	var body: Label = main.main_menu._today_panel.get_node("Sheet/SheetBox/Body")
+	var body: Label = main.main_menu._today_panel.get_node("Sheet/SheetBox/Scroll/List/Body")
 	var text := body.text
 
 	# Day 1: no yesterday, today's event, tomorrow's forecast.
@@ -59,7 +59,7 @@ func _run() -> void:
 		main._on_menu_today()
 		await physics_frame
 		var t: String = main.main_menu._today_panel.get_node(
-			"Sheet/SheetBox/Body").text
+			"Sheet/SheetBox/Scroll/List/Body").text
 		if not t.contains(str(Events.for_day(day + 1).name)):
 			forecast_ok = false
 	_ok(forecast_ok, "forecast tracks Events.for_day(day+1) across days")
@@ -70,7 +70,7 @@ func _run() -> void:
 	main._on_menu_today()
 	await physics_frame
 	var wk_text: String = main.main_menu._today_panel.get_node(
-		"Sheet/SheetBox/Body").text
+		"Sheet/SheetBox/Scroll/List/Body").text
 	_ok(wk_text.contains("A new week begins")
 		and wk_text.contains(str(Events.season_for_week(2).name)),
 		"week roll announces the incoming season")
@@ -85,7 +85,7 @@ func _run() -> void:
 	main._on_menu_today()
 	await physics_frame
 	var recap: String = main.main_menu._today_panel.get_node(
-		"Sheet/SheetBox/Body").text
+		"Sheet/SheetBox/Scroll/List/Body").text
 	_ok(recap.contains("$32.10 earned"), "yesterday's take shown")
 	_ok(recap.contains("1 delivered") and recap.contains("1 expired"),
 		"yesterday's log kinds counted")
@@ -98,6 +98,42 @@ func _run() -> void:
 		and today_btn.focus_neighbor_right == quit_btn.get_path()
 		and today_btn.focus_neighbor_left == log_btn.get_path(),
 		"Today sits in the focus chain between Log and Quit")
+
+	# Production shows only unlocked printers and protects an active print.
+	_ok("Printer 1" in recap and "Printer 2" not in recap, "production lists unlocked printers")
+	var machine: Dictionary = main._machine(0)
+	machine["last_est_g"] = 90
+	main._accept_on(0)
+	var job: Contract = machine.contract
+	main._on_menu_today()
+	var release: Button = main.main_menu._today_panel.find_child("Release0", true, false)
+	var balance: int = main.ledger.balance()
+	var stock: int = machine.filament_g
+	var rating: float = main.reputation
+	_ok(release != null and job.model_name in body.text, "unstarted order offers release")
+	release.pressed.emit()
+	_ok(machine.contract == job and "Confirm" in release.text, "release requires confirmation")
+	release.pressed.emit()
+	_ok(machine.contract == null and main.ledger.balance() == balance and machine.filament_g == stock,
+		"confirmed release frees the printer without consuming materials")
+	_ok(is_equal_approx(main.reputation, rating - 0.1), "confirmed release records the disclosed reputation cost")
+
+	main._accept_on(0)
+	var printing_job: Contract = machine.contract
+	var orientations := PrepSystem.orientations()
+	for index in range(orientations.size()):
+		var estimate: Dictionary = main._prep_eval(printing_job, orientations[index])
+		if estimate.valid:
+			machine.orient = index
+			machine.filament_g = int(estimate.estimated_material_g)
+			break
+	main.ledger.credit(printing_job.material_cost_cents, "test setup")
+	main._prep_on(0)
+	main._prep_on(0)
+	main._on_menu_today()
+	var sim: PrintSim = machine.sim
+	_ok(sim.state == PrintSim.State.RUNNING and not main._can_release_order(machine),
+		"a running order cannot be released")
 
 	main.queue_free()
 	await physics_frame

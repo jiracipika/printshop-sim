@@ -21,6 +21,7 @@ signal upgrade_buy_pressed(id: String)
 signal settings_pressed
 signal stats_pressed
 signal log_pressed
+signal release_order_pressed(idx: int)
 signal today_pressed
 signal reset_requested
 signal slot_switch_requested(slot: int)
@@ -56,12 +57,12 @@ var _stats_open := false
 var _log_open := false
 var _today_open := false
 
-const COLOR_STEEL := Color("#202B2B")
+const COLOR_STEEL := Color("#11201F")
 const COLOR_PAPER := Color("#EEE5D3")
 const COLOR_MUTED := Color("#C2CCBA")
 const COLOR_HONEY := Color("#C3A076")
-const COLOR_TERRA := Color("#DA623A")
-const COLOR_MINT := Color("#A8C8AC")
+const COLOR_TERRA := Color("#F5B766")
+const COLOR_MINT := Color("#A6D7CA")
 
 func _ready() -> void:
 	layer = 20
@@ -87,7 +88,6 @@ func open_menu() -> void:
 	_stats_open = false
 	_log_open = false
 	_today_open = false
-	_today_open = false
 	is_open()
 
 func close_menu() -> void:
@@ -105,7 +105,6 @@ func close_menu() -> void:
 	_stats_open = false
 	_log_open = false
 	_today_open = false
-	_today_open = false
 	is_open()
 
 ## True while any subpanel is showing — Esc should step back to the main
@@ -113,6 +112,9 @@ func close_menu() -> void:
 func subpanel_open() -> bool:
 	return visible and (_contracts_open or _upgrades_open or _settings_open \
 		or _howto_open or _stats_open or _log_open or _today_open)
+
+func production_visible() -> bool:
+	return visible and _today_open and _today_panel.visible
 
 func contracts_visible() -> bool:
 	return visible and _contracts_open
@@ -144,7 +146,18 @@ func _build() -> void:
 
 	var dim := ColorRect.new()
 	dim.name = "Dim"
-	dim.color = Color(COLOR_STEEL, 0.92)
+	dim.color = Color(COLOR_STEEL, 0.88)
+	var backdrop := Shader.new()
+	backdrop.code = """
+shader_type canvas_item;
+void fragment() {
+	float shade = smoothstep(0.15, 0.85, UV.x);
+	COLOR = vec4(mix(vec3(0.045, 0.09, 0.085), vec3(0.09, 0.17, 0.15), shade),
+		mix(0.99, 0.20, shade));
+}"""
+	var backdrop_material := ShaderMaterial.new()
+	backdrop_material.shader = backdrop
+	dim.material = backdrop_material
 	dim.set_anchors_preset(Control.PRESET_FULL_RECT)
 	dim.mouse_filter = Control.MOUSE_FILTER_STOP
 	_root.add_child(dim)
@@ -152,16 +165,16 @@ func _build() -> void:
 	var layout := VBoxContainer.new()
 	layout.name = "Layout"
 	layout.set_anchors_preset(Control.PRESET_FULL_RECT)
-	layout.offset_left = 56.0
-	layout.offset_top = 48.0
-	layout.offset_right = -400.0
-	layout.offset_bottom = -48.0
+	layout.offset_left = 24.0
+	layout.offset_top = 24.0
+	layout.offset_right = -24.0
+	layout.offset_bottom = -38.0
 	layout.add_theme_constant_override("separation", 12)
 	_root.add_child(layout)
 
 	var tag := Label.new()
 	tag.name = "Tag"
-	tag.text = "PRINT SHOP SIM / MAIN MENU"
+	tag.text = "3D PRINTING WORKSHOP"
 	tag.add_theme_color_override("font_color", COLOR_MINT)
 	tag.add_theme_font_size_override("font_size", 12)
 	layout.add_child(tag)
@@ -170,7 +183,7 @@ func _build() -> void:
 	title.name = "Title"
 	title.text = "PRINT SHOP SIM"
 	title.add_theme_color_override("font_color", COLOR_PAPER)
-	title.add_theme_font_size_override("font_size", 64)
+	title.add_theme_font_size_override("font_size", 52)
 	layout.add_child(title)
 
 	var underline := ColorRect.new()
@@ -184,9 +197,11 @@ func _build() -> void:
 	spacer.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	layout.add_child(spacer)
 
-	var buttons := VBoxContainer.new()
+	var buttons := GridContainer.new()
+	buttons.columns = 2
 	buttons.name = "Buttons"
-	buttons.add_theme_constant_override("separation", 10)
+	buttons.add_theme_constant_override("h_separation", 8)
+	buttons.add_theme_constant_override("v_separation", 8)
 	buttons.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
 	layout.add_child(buttons)
 
@@ -195,13 +210,20 @@ func _build() -> void:
 	play.add_theme_color_override("font_color", COLOR_STEEL)
 	var play_sb := StyleBoxFlat.new()
 	play_sb.bg_color = COLOR_TERRA
+	play_sb.set_corner_radius_all(8)
 	play_sb.content_margin_left = 22.0
 	play_sb.content_margin_right = 22.0
 	play_sb.content_margin_top = 14.0
 	play_sb.content_margin_bottom = 14.0
 	play.add_theme_stylebox_override("normal", play_sb)
-	play.add_theme_stylebox_override("hover", play_sb)
-	play.add_theme_stylebox_override("pressed", play_sb)
+	var play_hover := play_sb.duplicate() as StyleBoxFlat
+	play_hover.bg_color = COLOR_TERRA.lightened(0.18)
+	play.add_theme_stylebox_override("hover", play_hover)
+	var play_pressed_style := play_sb.duplicate() as StyleBoxFlat
+	play_pressed_style.bg_color = COLOR_TERRA.darkened(0.14)
+	play.add_theme_stylebox_override("pressed", play_pressed_style)
+	for state in ["hover", "pressed", "focus"]:
+		play.add_theme_color_override("font_%s_color" % state, COLOR_STEEL)
 	play.pressed.connect(func() -> void: play_pressed.emit())
 	buttons.add_child(play)
 
@@ -229,7 +251,7 @@ func _build() -> void:
 	log_btn.pressed.connect(func() -> void: log_pressed.emit())
 	buttons.add_child(log_btn)
 
-	var today_btn := _make_button("Today", "Today")
+	var today_btn := _make_button("Production", "Today")
 	today_btn.pressed.connect(func() -> void: today_pressed.emit())
 	buttons.add_child(today_btn)
 
@@ -245,8 +267,8 @@ func _build() -> void:
 	for i in range(row.size()):
 		row[i].focus_neighbor_left = row[(i - 1 + row.size()) % row.size()].get_path()
 		row[i].focus_neighbor_right = row[(i + 1) % row.size()].get_path()
-		row[i].focus_neighbor_top = row[0].get_path()
-		row[i].focus_neighbor_bottom = row[0].get_path()
+		row[i].focus_neighbor_top = row[posmod(i - 2, row.size())].get_path()
+		row[i].focus_neighbor_bottom = row[(i + 2) % row.size()].get_path()
 
 	# Couch menus (v0.36.0): a soft tick whenever menu focus moves.
 	_focus_sfx = AudioStreamPlayer.new()
@@ -276,6 +298,21 @@ func _build() -> void:
 	_build_stats_panel()
 	_build_log_panel()
 	_build_today_panel()
+	var resize := func() -> void:
+		var compact := get_viewport().get_visible_rect().size.x < 620.0
+		var inset := 16.0 if compact else 56.0
+		layout.offset_left = inset
+		layout.offset_right = -inset
+		title.add_theme_font_size_override("font_size", 32 if compact else 64)
+		for panel in [_contracts_panel, _upgrades_panel, _settings_panel, _howto_panel,
+				_stats_panel, _log_panel, _today_panel]:
+			var sheet: PanelContainer = panel.get_node("Sheet")
+			sheet.offset_left = inset
+			sheet.offset_right = -inset
+			sheet.offset_top = 16.0 if compact else 36.0
+			sheet.offset_bottom = -16.0 if compact else -36.0
+	get_viewport().size_changed.connect(resize)
+	resize.call()
 
 func _apply_quit_visibility() -> void:
 	if _root == null:
@@ -291,7 +328,21 @@ func _make_button(label: String, btn_name: String) -> Button:
 	b.focus_mode = Control.FOCUS_ALL
 	b.add_theme_color_override("font_color", COLOR_PAPER)
 	b.add_theme_font_size_override("font_size", 17)
-	b.custom_minimum_size = Vector2(240, 44)
+	b.custom_minimum_size = Vector2(132, 46)
+	var normal := StyleBoxFlat.new()
+	normal.bg_color = Color("#263D39")
+	normal.border_color = Color("#66857D")
+	normal.set_border_width_all(1)
+	normal.set_corner_radius_all(8)
+	normal.content_margin_left = 12
+	normal.content_margin_right = 12
+	b.add_theme_stylebox_override("normal", normal)
+	var hover := normal.duplicate() as StyleBoxFlat
+	hover.bg_color = Color("#36564F")
+	b.add_theme_stylebox_override("hover", hover)
+	var pressed := normal.duplicate() as StyleBoxFlat
+	pressed.bg_color = Color("#192F2B")
+	b.add_theme_stylebox_override("pressed", pressed)
 	b.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
 	return b
 
@@ -317,7 +368,8 @@ func _build_contracts_panel() -> void:
 	sheet.offset_right = -64.0
 	sheet.offset_bottom = -48.0
 	var sb := StyleBoxFlat.new()
-	sb.bg_color = Color("#2B3934")
+	sb.bg_color = Color("#1C302D")
+	sb.set_corner_radius_all(12)
 	sb.border_color = COLOR_MINT
 	sb.set_border_width_all(1)
 	sb.content_margin_left = 24.0
@@ -331,7 +383,7 @@ func _build_contracts_panel() -> void:
 	sv.name = "SheetBox"
 	sheet.add_child(sv)
 
-	var head := HBoxContainer.new()
+	var head := VBoxContainer.new()
 	sv.add_child(head)
 	var h1 := Label.new()
 	h1.text = "CONTRACT BOARD"
@@ -339,7 +391,8 @@ func _build_contracts_panel() -> void:
 	h1.add_theme_font_size_override("font_size", 28)
 	head.add_child(h1)
 	var sub := Label.new()
-	sub.text = "  first come, first served — Reserve pins a job for your next printer accept"
+	sub.text = "Reserve a job to accept it at a printer."
+	sub.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	sub.add_theme_color_override("font_color", COLOR_MINT)
 	sub.add_theme_font_size_override("font_size", 12)
 	head.add_child(sub)
@@ -351,7 +404,10 @@ func _build_contracts_panel() -> void:
 
 	var list := VBoxContainer.new()
 	list.name = "List"
+	list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	list.add_theme_constant_override("separation", 10)
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	scroll.follow_focus = true
 	scroll.add_child(list)
 
 	var back := Button.new()
@@ -946,12 +1002,29 @@ func _build_stats_panel() -> void:
 		is_open()))
 
 ## lines: preformatted stat strings from Main.
-func show_today(lines: Array[String]) -> void:
-	var body: Label = _today_panel.get_node("Sheet/SheetBox/Body")
+func show_today(lines: Array[String], releasable: Array[Dictionary] = []) -> void:
+	var list := _today_panel.get_node("Sheet/SheetBox/Scroll/List")
+	var scroll: ScrollContainer = list.get_parent()
+	scroll.focus_mode = Control.FOCUS_NONE
+	var body: Label = list.get_node("Body")
 	body.text = "\n".join(lines)
+	for child in list.get_children():
+		if child != body:
+			list.remove_child(child)
+			child.queue_free()
+	for order in releasable:
+		var idx := int(order.idx)
+		var button := _make_button("Release P%d · %s" % [idx + 1, order.model], "Release%d" % idx)
+		button.pressed.connect(func() -> void:
+			if button.has_meta("armed"):
+				release_order_pressed.emit(idx)
+			else:
+				button.set_meta("armed", true)
+				button.text = "Confirm release (−0.1 rep)")
+		list.add_child(button)
 	_show_panel(_today_panel)
-	_today_open = true
 	is_open()
+	_focus_first_button(_today_panel)
 
 func show_stats(lines: Array[String]) -> void:
 	var body: Label = _stats_panel.get_node("Sheet/SheetBox/Body")
@@ -993,22 +1066,32 @@ func _build_today_panel() -> void:
 
 	var h1 := Label.new()
 	h1.name = "Title"
-	h1.text = "TODAY"
+	h1.text = "PRODUCTION"
 	h1.add_theme_color_override("font_color", COLOR_PAPER)
 	h1.add_theme_font_size_override("font_size", 28)
 	sv.add_child(h1)
 
+	var scroll := ScrollContainer.new()
+	scroll.name = "Scroll"
+	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	scroll.follow_focus = true
+	sv.add_child(scroll)
+	var list := VBoxContainer.new()
+	list.name = "List"
+	list.add_theme_constant_override("separation", 8)
+	list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	scroll.add_child(list)
+
 	var body := Label.new()
 	body.name = "Body"
-	body.text = ""
+	body.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	body.add_theme_color_override("font_color", COLOR_PAPER)
 	body.add_theme_font_size_override("font_size", 17)
-	sv.add_child(body)
+	list.add_child(body)
 
-	sv.add_child(_make_back_button(func() -> void:
-		_today_panel.visible = false
-		_stats_open = false
-		is_open()))
+	var back := _make_back_button(func() -> void: open_menu())
+	sv.add_child(back)
 
 ## lines: preformatted stat strings from Main.
 
@@ -1095,7 +1178,8 @@ func show_log(lines: Array[String]) -> void:
 
 func _sheet_style() -> StyleBoxFlat:
 	var sb := StyleBoxFlat.new()
-	sb.bg_color = Color("#2B3934")
+	sb.bg_color = Color("#1C302D")
+	sb.set_corner_radius_all(12)
 	sb.border_color = COLOR_MINT
 	sb.set_border_width_all(1)
 	sb.content_margin_left = 24.0
@@ -1211,6 +1295,7 @@ func _make_card(s: Dictionary) -> PanelContainer:
 	who.add_theme_color_override("font_color", COLOR_PAPER)
 	who.add_theme_font_size_override("font_size", 18)
 	who.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	who.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	row.add_child(who)
 	var payout := Label.new()
 	var cents := int(s.get("payout_cents", 0))
@@ -1239,7 +1324,13 @@ func _make_card(s: Dictionary) -> PanelContainer:
 		btn.pressed.connect(func() -> void: reserve_pressed.emit(str(s.get("id", ""))))
 	row.add_child(btn)
 
-	var meta := HBoxContainer.new()
+	var terms := Label.new()
+	var cost := int(s.get("material_cost_cents", 0))
+	terms.text = "Materials $%d.%02d per part" % [cost / 100, cost % 100]
+	terms.add_theme_color_override("font_color", COLOR_MUTED)
+	v.add_child(terms)
+
+	var meta := HFlowContainer.new()
 	v.add_child(meta)
 	var dots := Label.new()
 	var diff := int(s.get("difficulty", 1))
@@ -1269,7 +1360,7 @@ func _make_card(s: Dictionary) -> PanelContainer:
 		var feat := Label.new()
 		feat.name = "FeaturedTag"
 		feat.text = "  [FEATURED +15%]"
-		feat.add_theme_color_override("font_color", COLOR_STEEL)
+		feat.add_theme_color_override("font_color", COLOR_MINT)
 		feat.add_theme_font_size_override("font_size", 12)
 		meta.add_child(feat)
 	# Customer voice (v0.30.0): the client's handwritten note, if any.
