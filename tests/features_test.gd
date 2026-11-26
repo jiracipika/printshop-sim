@@ -51,7 +51,7 @@ func _test_reputation_and_stats() -> void:
 	_ok(absf(main.reputation_multiplier() - 1.04) < 0.0001,
 		"rep 3.0 scales payouts by x1.04")
 	main._update_hud()
-	_ok("Rep ★★★☆☆ 3.0" in main._status.text, "HUD shows the reputation stars")
+	_ok("Rep 3.0/5" in main._status.text, "HUD shows the reputation rating")
 
 	# On-time delivery: +0.2 rep, delivered+1, earned_cents includes the payout.
 	main._player.global_position = Vector3(-1.8, 0.3, -1.0)
@@ -77,7 +77,7 @@ func _test_reputation_and_stats() -> void:
 	_ok(ledger.balance() == bal0 - c.material_cost_cents + expected,
 		"balance reflects materials + rep-scaled grade-A payout")
 	main._update_hud()
-	_ok("Rep ★★★☆☆ 3.2" in main._status.text, "HUD rep text updates (still 3 stars)")
+	_ok("Rep 3.2/5" in main._status.text, "HUD rating updates after delivery")
 
 	# Late delivery: half pay, rep -0.2, late counter.
 	main._machine(0)["filament_g"] = 5000  # test setup: plenty of filament

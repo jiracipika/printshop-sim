@@ -76,12 +76,12 @@ func _run() -> void:
 	_ok(tc is CanvasLayer and tc.get_parent() == main, "TouchControls is CanvasLayer child of Main")
 	_ok(not tc.visible, "controls hidden on desktop (no touchscreen, no override)")
 
-	# Visibility must reflect effective_enabled() at ready and whenever the
-	# override changes — an invisible overlay can never be seen on real touch
-	# devices, and a visible one would leak desktop-only visuals.
+	# Touch controls stay hidden behind the menu, even on a touch device.
 	tc.force_enabled = true
-	_ok(tc.visible == true, "forced-touch override makes overlay visible")
-	_ok(tc.pause_label_text() == "Resume", "mobile pause label starts as Resume (boot paused)")
+	_ok(not tc.visible, "touch controls hidden behind the menu")
+	_resume_via_tap(tc, main)
+	_ok(tc.visible and not main.paused, "Play starts touch gameplay directly")
+	_ok(tc.pause_label_text() == "Pause", "playing displays the Pause control")
 	tc.force_enabled = false
 	_ok(tc.visible == false, "clearing the override hides the overlay again")
 	tc.force_enabled = true
@@ -103,8 +103,9 @@ func _run() -> void:
 	_ok(portrait.look.size.x > 390.0 * 0.55 - 0.01 and portrait.look.size.x < 390.0 * 0.55 + 0.01,
 		"portrait look region sized")
 
-	# Paused at boot: stick touch must not engage motion (no input while paused).
-	_ok(main.paused == true, "boot paused")
+	# After focus loss the menu is closed and the overlay offers Resume.
+	main.notification(Node.NOTIFICATION_APPLICATION_FOCUS_OUT)
+	_ok(main.paused and tc.pause_label_text() == "Resume", "focus loss pauses gameplay")
 	_feed_touch(tc, 0, stick, true)
 	_ok(tc.active_fingers() == 0 and main.get_touch_move_axis() == Vector2.ZERO,
 		"stick touch while paused owns no motion finger, axis zero")
@@ -249,7 +250,10 @@ func _on_pause_tap(tc, main) -> void:
 	_feed_touch(tc, 9, tc.pause_rect().get_center(), true)
 
 func _resume_via_tap(tc, main) -> void:
-	_feed_touch(tc, 9, tc.pause_rect().get_center(), true)
+	if main.main_menu.is_open():
+		main.main_menu.get_node("Root/Layout/Buttons/Play").pressed.emit()
+	else:
+		_feed_touch(tc, 9, tc.pause_rect().get_center(), true)
 
 func _teleport_near_printer_a(main) -> void:
 	for p in get_nodes_in_group("printers"):

@@ -1,23 +1,16 @@
 {
-  "engine": "/Users/rs/tools/godot",
-  "excluded_from_dirty": [
-    "web/build/build-info.json",
-    "web/build/index.html",
-    "web/build/index.js",
-    "web/build/index.pck",
-    "web/build/index.wasm"
-  ],
-  "git_sha": "53fbf1e",
-  "git_sha_full": "53fbf1e564c3815aed91d0559aa5f1678bf749dc",
+  "engine": "/tmp/printshop-godot471/Godot_v4.7.1-stable_linux.x86_64",
+  "git_sha": "c53dbc5",
+  "git_sha_full": "c53dbc5f561d58d92491cccb76f5d20a6772b9c2",
   "head_found": true,
   "notes": "git_sha_full/source_dirty describe the SOURCE tree at build time (generated output and local logs excluded from dirtiness). stamped_sha is what scripts/Version.gd contained during export.",
   "outputs": {
-    "index.html": 3871,
+    "index.html": 3454,
     "index.js": 279815,
-    "index.pck": 340268,
+    "index.pck": 344860,
     "index.wasm": 39513091
   },
   "source_dirty": false,
-  "stamped_sha": "53fbf1e564c3815aed91d0559aa5f1678bf749dc",
-  "version": "0.63.0"
+  "stamped_sha": "c53dbc5f561d58d92491cccb76f5d20a6772b9c2",
+  "version": "0.64.0"
 }

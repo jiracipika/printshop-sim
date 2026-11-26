@@ -46,10 +46,17 @@ const INTERACT_SIZE := Vector2(96, 96)
 const PAUSE_SIZE := Vector2(72, 48)
 
 ## Test-only override: force the overlay on even without a touchscreen.
-## Visibility always reflects effective_enabled() — updated here and at ready.
+## The overlay also hides while the shop menu is open.
 var force_enabled := false:
 	set(value):
 		force_enabled = value
+		_apply_visibility()
+
+var menu_open := false:
+	set(value):
+		menu_open = value
+		if value:
+			set_motion_enabled(false)
 		_apply_visibility()
 
 var _motion_enabled := false
@@ -84,7 +91,7 @@ func _ready() -> void:
 	_apply_visibility()
 
 func _apply_visibility() -> void:
-	visible = effective_enabled()
+	visible = effective_enabled() and not menu_open
 
 func effective_enabled() -> bool:
 	if force_enabled:
@@ -278,7 +285,7 @@ func pause_rect() -> Rect2:
 ## --- input ----------------------------------------------------------------
 
 func _unhandled_input(event: InputEvent) -> void:
-	if not effective_enabled():
+	if not visible:
 		return
 	if event is InputEventScreenTouch:
 		var t := event as InputEventScreenTouch
